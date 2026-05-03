@@ -11,19 +11,11 @@
     label { display: block; margin: 20px 0 8px; font-weight: bold; font-size: 16px; }
     input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
     button, .back-btn { 
-      background: #1a3c6e; 
-      color: white; 
-      padding: 12px 24px; 
-      font-size: 16px; 
-      border: none; 
-      border-radius: 6px; 
-      cursor: pointer; 
-      text-decoration: none;
-      display: inline-block;
+      background: #1a3c6e; color: white; padding: 12px 24px; font-size: 16px; 
+      border: none; border-radius: 6px; cursor: pointer; text-decoration: none; 
     }
     button:hover, .back-btn:hover { background: #0f2a4f; }
-    .header-actions { text-align: left; margin-bottom: 20px; }
-    .section { margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; }
+    .header-actions { margin-bottom: 20px; }
   </style>
 </head>
 <body>
@@ -34,8 +26,8 @@
 
     <h1>Umpire Rules & Expectations Acknowledgment</h1>
 
-    <div style="background:#f9f9f9; padding:25px; margin:25px 0; border-left:5px solid #1a3c6e; line-height:1.6;">
-      <strong>Paste the full rules text from your document here...</strong>
+    <div style="background:#f9f9f9; padding:25px; margin:25px 0; border-left:5px solid #1a3c6e;">
+      Paste the full rules text here...
     </div>
 
     <form id="umpireForm">
@@ -51,13 +43,13 @@
       <label>Electronic Signature (Type Full Name) *</label>
       <input type="text" id="signature" required>
 
-      <div class="section">
-        <h2>Parent / Guardian Information (if applicable)</h2>
-        <label>Parent/Guardian Name</label>
+      <div style="margin-top:30px; padding-top:20px; border-top:2px solid #eee;">
+        <h2>Parent / Guardian (if applicable)</h2>
+        <label>Parent Name</label>
         <input type="text" id="parent_name">
-        <label>Parent/Guardian Email</label>
+        <label>Parent Email</label>
         <input type="email" id="parent_email">
-        <label>Parent/Guardian Phone</label>
+        <label>Parent Phone</label>
         <input type="tel" id="parent_phone">
       </div>
 
@@ -67,10 +59,11 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script>
-    // Placeholders — will be replaced by GitHub Actions
-    emailjs.init("YOUR_PUBLIC_KEY_HERE");
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyr_qxc0aMTHu6au-AdS0480OpHkVVCNRzbC219aDN9V_uZv5cMvh-8dbtE1XwnfJdt/exec";
 
-    document.getElementById('umpireForm').addEventListener('submit', function(e) {
+    emailjs.init("H9Z9Qz-HB-PehAQjp");
+
+    document.getElementById('umpireForm').addEventListener('submit', async function(e) {
       e.preventDefault();
 
       const formData = {
@@ -85,15 +78,22 @@
         slack_link: "https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA"
       };
 
-      emailjs.send("YOUR_SERVICE_ID_HERE", "YOUR_TEMPLATE_ID_HERE", formData)
-        .then(() => {
-          alert(`Thank you, ${formData.name}! Your acknowledgment has been recorded.`);
-          e.target.reset();
-        })
-        .catch(err => {
-          console.error(err);
-          alert("Submission recorded, but email failed. Please contact Jeff.");
+      // Send emails
+      emailjs.send("service_vljauqe", "template_om0629c", formData);
+
+      // Save to Google Sheet
+      try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify(formData),
+          headers: { "Content-Type": "application/json" }
         });
+      } catch (err) {
+        console.error("Sheet save failed", err);
+      }
+
+      alert(`Thank you, ${formData.name}! Your acknowledgment has been recorded.`);
+      e.target.reset();
     });
   </script>
 </body>
