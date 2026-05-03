@@ -10,13 +10,28 @@
     h1 { text-align: center; color: #1a3c6e; }
     label { display: block; margin: 20px 0 8px; font-weight: bold; font-size: 16px; }
     input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
-    button { background: #1a3c6e; color: white; padding: 14px 40px; font-size: 18px; border: none; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 30px; }
-    button:hover { background: #0f2a4f; }
+    button, .back-btn { 
+      background: #1a3c6e; 
+      color: white; 
+      padding: 12px 24px; 
+      font-size: 16px; 
+      border: none; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      text-decoration: none;
+      display: inline-block;
+    }
+    button:hover, .back-btn:hover { background: #0f2a4f; }
+    .header-actions { text-align: left; margin-bottom: 20px; }
     .section { margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; }
   </style>
 </head>
 <body>
   <div class="form-container">
+    <div class="header-actions">
+      <a href="index.html" class="back-btn">← Back to Home</a>
+    </div>
+
     <h1>Umpire Rules & Expectations Acknowledgment</h1>
 
     <div style="background:#f9f9f9; padding:25px; margin:25px 0; border-left:5px solid #1a3c6e; line-height:1.6;">
@@ -52,7 +67,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script>
-    // These will be replaced automatically by GitHub Actions
+    // Placeholders — will be replaced by GitHub Actions
     emailjs.init("YOUR_PUBLIC_KEY_HERE");
 
     document.getElementById('umpireForm').addEventListener('submit', function(e) {
