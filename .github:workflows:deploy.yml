@@ -1,0 +1,26 @@
+name: Deploy Umpire Form with Secrets
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Replace secrets in form.html
+        run: |
+          sed -i 's|YOUR_PUBLIC_KEY_HERE|${{ secrets.EMAILJS_PUBLIC_KEY }}|g' form.html
+          sed -i 's|YOUR_SERVICE_ID_HERE|${{ secrets.EMAILJS_SERVICE_ID }}|g' form.html
+          sed -i 's|YOUR_TEMPLATE_ID_HERE|${{ secrets.EMAILJS_TEMPLATE_ID }}|g' form.html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
