@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tri-Valley / Sioux Falls Umpire Acknowledgment</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }
+    .form-container { max-width: 700px; margin: 0 auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+    h1 { text-align: center; color: #1a3c6e; }
+    label { display: block; margin: 20px 0 8px; font-weight: bold; font-size: 16px; }
+    input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+    button { background: #1a3c6e; color: white; padding: 14px 40px; font-size: 18px; border: none; border-radius: 6px; cursor: pointer; margin-top: 30px; width: 100%; }
+    button:hover { background: #0f2a4f; }
+    .section { margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; }
+  </style>
+</head>
+<body>
+  <div class="form-container">
+    <h1>Umpire Rules & Expectations Acknowledgment</h1>
+    
+    <div style="background:#f9f9f9; padding:25px; margin:25px 0; border-left:5px solid #1a3c6e; line-height:1.6;">
+      <strong>Paste the complete rules acknowledgment text from your document here...</strong>
+    </div>
+
+    <form id="umpireForm">
+      <label>Umpire Full Name *</label>
+      <input type="text" id="name" required>
+
+      <label>Umpire Email Address *</label>
+      <input type="email" id="email" required>
+
+      <label>Umpire Phone Number *</label>
+      <input type="tel" id="phone" required>
+
+      <label>Electronic Signature (Type Full Name) *</label>
+      <input type="text" id="signature" required>
+
+      <div class="section">
+        <h2 style="color:#1a3c6e;">Parent / Guardian Information (if applicable)</h2>
+        <label>Parent/Guardian Full Name</label>
+        <input type="text" id="parent_name">
+
+        <label>Parent/Guardian Email</label>
+        <input type="email" id="parent_email">
+
+        <label>Parent/Guardian Phone Number</label>
+        <input type="tel" id="parent_phone">
+      </div>
+
+      <button type="submit">Submit Acknowledgment</button>
+    </form>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script>
+    emailjs.init("H9Z9Qz-HB-PehAQjp");
+
+    document.getElementById('umpireForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const formData = {
+        name: document.getElementById('name').value,
+        email: document.getElementById('email').value,
+        phone: document.getElementById('phone').value,
+        signature: document.getElementById('signature').value,
+        parent_name: document.getElementById('parent_name').value || "Not provided",
+        parent_email: document.getElementById('parent_email').value || "Not provided",
+        parent_phone: document.getElementById('parent_phone').value || "Not provided",
+        datetime: new Date().toLocaleString('en-US', {timeZone: 'America/Chicago'}),
+        slack_link: "https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA"
+      };
+
+      // Send to umpire/parent
+      emailjs.send("service_vljauqe", "template_om0629c", formData)
+        .then(() => console.log("✅ Confirmation sent"))
+        .catch(err => console.error("Email error:", err));
+
+      // Send copy to Jeff
+      emailjs.send("service_vljauqe", "template_om0629c", formData)
+        .then(() => console.log("✅ Copy sent to Jeff"))
+        .catch(err => console.error("Admin email error:", err));
+
+      alert(`Thank you, ${formData.name}! Your acknowledgment has been recorded.\n\nConfirmation email sent.`);
+      e.target.reset();
+    });
+  </script>
+</body>
+</html>
