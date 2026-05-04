@@ -3,31 +3,84 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Umpire Rules Acknowledgment</title>
+  <title>Umpire Acknowledgment - Tri-Valley Baseball</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }
-    .form-container { max-width: 700px; margin: 0 auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-    h1 { text-align: center; color: #1a3c6e; }
-    label { display: block; margin: 20px 0 8px; font-weight: bold; font-size: 16px; }
-    input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
-    button, .back-btn { 
-      background: #1a3c6e; color: white; padding: 12px 24px; font-size: 16px; 
-      border: none; border-radius: 6px; cursor: pointer; text-decoration: none; 
+    body { font-family: Arial, sans-serif; background: #f8f9fa; margin: 0; padding: 20px; }
+    .header { background: #002b5c; color: white; padding: 20px; text-align: center; }
+    .logo { max-height: 70px; }
+    .form-container { max-width: 900px; margin: 20px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    h1 { text-align: center; color: #002b5c; }
+    .rules-box { 
+      background: #f9f9f9; 
+      padding: 25px; 
+      margin: 25px 0; 
+      border-left: 6px solid #002b5c; 
+      max-height: 420px; 
+      overflow-y: auto; 
+      line-height: 1.65; 
+      font-size: 15px;
     }
-    button:hover, .back-btn:hover { background: #0f2a4f; }
-    .header-actions { margin-bottom: 20px; }
+    label { display: block; margin: 20px 0 8px; font-weight: bold; }
+    input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+    button, .print-btn, .back-btn { background: #c8102e; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; margin: 8px; }
+    button:hover, .print-btn:hover, .back-btn:hover { background: #a00d24; }
+    .back-btn { background: #002b5c; }
   </style>
 </head>
 <body>
+  <div class="header">
+    <img src="https://www.trivalleyball.com/Portals/28848/logo637834746748581970.png" alt="Tri-Valley Baseball" class="logo">
+    <h1>Umpire Acknowledgment Contract</h1>
+  </div>
+
   <div class="form-container">
-    <div class="header-actions">
-      <a href="index.html" class="back-btn">← Back to Home</a>
-    </div>
+    <a href="index.html" class="back-btn">← Back to Home</a>
 
     <h1>Umpire Rules & Expectations Acknowledgment</h1>
 
-    <div style="background:#f9f9f9; padding:25px; margin:25px 0; border-left:5px solid #1a3c6e;">
-      Paste the full rules text here...
+    <div class="rules-box">
+      <strong>Tri-Valley Baseball Association Youth Baseball Umpire Expectation Contract</strong><br><br>
+
+      <strong>Introduction</strong><br>
+      This contract outlines the expectations and responsibilities of umpires serving in the Tri-Valley Baseball Association. 
+      As an umpire, you play a critical role in ensuring fair play, safety, and a positive experience for players, coaches, and spectators. 
+      By agreeing to this contract, you commit to upholding the standards of professionalism, integrity, and respect that our association values.<br><br>
+
+      <strong>Expectations and Responsibilities</strong><br><br>
+      1. Knowledge of Rules — https://www.minndak.org/rules/<br><br>
+
+      2. Game Preparation<br>
+      • Arrive at the field at least 15 minutes before scheduled start.<br>
+      • Bring and return all equipment properly.<br>
+      • Wear appropriate apparel (no alcohol, drugs, tobacco, or vulgar language). Closed-toe shoes required.<br>
+      • Inspect field for safety.<br><br>
+
+      3. Professional Conduct<br>
+      • Maintain calm, impartial, respectful demeanor.<br>
+      • Avoid arguing or confrontational behavior.<br><br>
+
+      4. Game Management and Focus<br>
+      • Enforce rules fairly.<br>
+      • Conduct pregame meeting with both teams.<br>
+      • Keep game on schedule and stay fully focused.<br><br>
+
+      5. Safety<br>
+      • Prioritize participant safety and stop play if needed.<br><br>
+
+      6. Interaction with Participants<br>
+      • Treat everyone with respect.<br>
+      • Report incidents promptly.<br><br>
+
+      7. Cell Phone Policy<br>
+      • No non-emergency use during games.<br><br>
+
+      8. Availability & Commitment<br>
+      • Honor schedule and find substitutes if necessary.<br><br>
+
+      9. Compensation<br>
+      • $40 per plate game (regular season).<br><br>
+
+      <em>By submitting this form you acknowledge that you have read, understood, and agree to all the above expectations.</em>
     </div>
 
     <form id="umpireForm">
@@ -53,17 +106,16 @@
         <input type="tel" id="parent_phone">
       </div>
 
-      <button type="submit">Submit Acknowledgment</button>
+      <button type="submit">Submit Official Acknowledgment</button>
+      <button type="button" class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
     </form>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script>
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyr_qxc0aMTHu6au-AdS0480OpHkVVCNRzbC219aDN9V_uZv5cMvh-8dbtE1XwnfJdt/exec";
-
     emailjs.init("H9Z9Qz-HB-PehAQjp");
 
-    document.getElementById('umpireForm').addEventListener('submit', async function(e) {
+    document.getElementById('umpireForm').addEventListener('submit', function(e) {
       e.preventDefault();
 
       const formData = {
@@ -72,25 +124,15 @@
         phone: document.getElementById('phone').value,
         signature: document.getElementById('signature').value,
         parent_name: document.getElementById('parent_name').value || "Not provided",
-        parent_email: document.getElementById('parent_email').value || "Not provided",
-        parent_phone: document.getElementById('parent_phone').value || "Not provided",
+        parent_email: document.getElementById('parent_email').value || "",
+        parent_phone: document.getElementById('parent_phone').value || "",
         datetime: new Date().toLocaleString('en-US', {timeZone: 'America/Chicago'}),
+        main_page_link: "https://althoffj.github.io/tri-valley-umpires/",
         slack_link: "https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA"
       };
 
-      // Send emails
       emailjs.send("service_vljauqe", "template_om0629c", formData);
-
-      // Save to Google Sheet
-      try {
-        await fetch(GOOGLE_SCRIPT_URL, {
-          method: "POST",
-          body: JSON.stringify(formData),
-          headers: { "Content-Type": "application/json" }
-        });
-      } catch (err) {
-        console.error("Sheet save failed", err);
-      }
+      if (formData.parent_email) emailjs.send("service_vljauqe", "template_n8kehkc", formData);
 
       alert(`Thank you, ${formData.name}! Your acknowledgment has been recorded.`);
       e.target.reset();
