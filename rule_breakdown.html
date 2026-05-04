@@ -4,27 +4,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rule Breakdown - Tri-Valley Baseball</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #1a1a1a; color: #ddd; margin: 0; padding: 20px; }
-    .header { background: #000; color: white; padding: 20px; text-align: center; border-bottom: 4px solid #601929; }
-    .logo { max-height: 70px; }
-    .container { max-width: 1100px; margin: 20px auto; background: #222; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); }
-    h1 { color: white; text-align: center; }
-    h2 { color: #601929; -webkit-text-stroke: 1px #bbbbbb; border-bottom: 3px solid #601929; padding-bottom: 12px; }
-    .back-btn { background: #601929; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; }
-    table { width: 100%; border-collapse: collapse; margin: 25px 0; }
-    th, td { border: 1px solid #555; padding: 12px; text-align: left; }
-    th { background: #601929; color: white; }
-  </style>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="header">
-    <img src="https://www.trivalleyball.com/Portals/28848/logo637834746748581970.png" alt="Tri-Valley Baseball" class="logo">
+    <img src="https://www.trivalleyball.com/Portals/28848/logo637834746748581970.png" alt="Tri-Valley Baseball" class="logo" />
     <h1>10U vs 12U Rule Comparison</h1>
   </div>
 
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="expectations.html">Expectations</a>
+    <a href="principles_of_umpiring.html">Principles</a>
+    <a href="rule_breakdown.html">Rules</a>
+    <a href="schedule.html">Schedule</a>
+    <a href="form.html">Acknowledgment</a>
+  </nav>
+
   <div class="container">
-    <a href="index.html" class="back-btn">← Back to Home</a>
+    <a href="index.html" class="btn">← Back</a>
+    <a href="rule_breakdown.pdf" target="_blank" class="btn">📄 Download PDF</a>
+    <button onclick="window.print()" class="btn">🖨️ Print</button>
 
     <h2>MinnDak 10U vs 12U Rule Comparison</h2>
 
@@ -141,5 +141,4 @@
     <p><em>Rev May 3, 2026</em></p>
   </div>
 </body>
-<a href="rule_breakdown.pdf" target="_blank" class="pdf-link">📄 Download Full PDF Version</a>
 </html>
