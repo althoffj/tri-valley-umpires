@@ -1,10 +1,13 @@
 /* styles.css - Tri-Valley Baseball Umpires 2026 */
 :root {
   --accent: #601929;
+  --accent-hover: #8b0000;
   --dark: #1a1a1a;
   --container: #222;
   --text: #ddd;
   --light-text: silver;
+  --border: #444;
+  --field: #333;
 }
 
 body {
@@ -28,6 +31,28 @@ body {
   max-height: 75px;
 }
 
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 20px auto 0;
+  max-width: 1100px;
+}
+
+nav a {
+  color: white;
+  text-decoration: none;
+  background: #2b2b2b;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+
+nav a:hover {
+  background: var(--accent);
+}
+
 .container, .form-container {
   max-width: 1100px;
   margin: 30px auto;
@@ -48,18 +73,128 @@ h2 {
   margin-top: 35px;
 }
 
-/* Form Specific */
-.rules-box {
+.document-note {
   background: #1f1f1f;
-  border: 1px solid #444;
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--accent);
   padding: 25px;
   margin: 25px 0;
   border-radius: 8px;
-  max-height: 460px;
-  overflow-y: auto;
   font-size: 0.98rem;
 }
 
+.document-note p:first-child {
+  margin-top: 0;
+}
+
+.document-note p:last-child {
+  margin-bottom: 0;
+}
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.centered-action {
+  margin-top: 30px;
+  text-align: center;
+}
+
+.pdf-viewer {
+  width: 100%;
+  height: 78vh;
+  min-height: 640px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #111;
+}
+
+.schedule-embed {
+  width: 100%;
+  height: 650px;
+  border: 0;
+  border-radius: 8px;
+}
+
+.schedule-source {
+  color: var(--light-text);
+  margin-top: -8px;
+}
+
+.schedule-section {
+  margin-top: 36px;
+  overflow-x: auto;
+}
+
+.status-needs {
+  background: #4a2c00;
+  color: #ffcc80;
+  font-weight: bold;
+}
+
+.status-pending {
+  background: #283747;
+  color: #b9d7ff;
+  font-weight: bold;
+}
+
+.status-filled {
+  background: #17351f;
+  color: #b8f2c4;
+  font-weight: bold;
+}
+
+.signup-form {
+  background: #1f1f1f;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 30px 0;
+  padding: 25px;
+}
+
+.signup-message {
+  min-height: 1.5em;
+  font-weight: bold;
+}
+
+.signup-message.info {
+  color: var(--light-text);
+}
+
+.signup-message.success {
+  color: #b8f2c4;
+}
+
+.signup-message.warning {
+  color: #ffcc80;
+}
+
+.signup-message.error {
+  color: #ffb4b4;
+}
+
+.locked-btn,
+.locked-btn:hover,
+.locked-btn:disabled {
+  background: #444;
+  color: var(--light-text);
+  cursor: not-allowed;
+}
+
+.footer {
+  color: var(--light-text);
+  text-align: center;
+  margin: 30px auto;
+}
+
+a {
+  color: #f0b6c3;
+}
+
+/* Form Specific */
 label {
   display: block;
   margin: 22px 0 8px;
@@ -72,10 +207,11 @@ input {
   padding: 14px;
   border: 1px solid #555;
   border-radius: 6px;
-  background: #333;
+  background: var(--field);
   color: #eee;
   font-size: 16px;
   transition: all 0.2s;
+  box-sizing: border-box;
 }
 
 input:focus {
@@ -105,7 +241,7 @@ input:focus {
 }
 
 .btn:hover, .back-btn:hover {
-  background: #8b0000;
+  background: var(--accent-hover);
 }
 
 .print-btn {
@@ -142,7 +278,7 @@ th {
 }
 
 @media print {
-  .header, .back-btn, .no-print { display: none !important; }
+  .header, nav, .back-btn, .page-actions, .no-print { display: none !important; }
   .container, .form-container { box-shadow: none; margin: 0; padding: 20px; max-width: 100%; }
-  .rules-box { max-height: none; overflow: visible; }
+  .pdf-viewer { display: none; }
 }
