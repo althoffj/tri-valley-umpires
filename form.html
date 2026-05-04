@@ -5,26 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Umpire Acknowledgment - Tri-Valley Baseball</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #f8f9fa; margin: 0; padding: 20px; }
-    .header { background: #002b5c; color: white; padding: 20px; text-align: center; }
+    body { font-family: Arial, sans-serif; background: #1a1a1a; color: #ddd; margin: 0; padding: 20px; }
+    .header { background: #000; color: white; padding: 20px; text-align: center; border-bottom: 4px solid #601929; }
     .logo { max-height: 70px; }
-    .form-container { max-width: 900px; margin: 20px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-    h1 { text-align: center; color: #002b5c; }
-    .rules-box { 
-      background: #f9f9f9; 
-      padding: 25px; 
-      margin: 25px 0; 
-      border-left: 6px solid #002b5c; 
-      max-height: 420px; 
-      overflow-y: auto; 
-      line-height: 1.65; 
-      font-size: 15px;
-    }
+    .form-container { max-width: 850px; margin: 20px auto; background: #222; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); }
+    h1 { text-align: center; color: #601929; -webkit-text-stroke: 1px #bbbbbb; }
     label { display: block; margin: 20px 0 8px; font-weight: bold; }
-    input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
-    button, .print-btn, .back-btn { background: #c8102e; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; margin: 8px; }
-    button:hover, .print-btn:hover, .back-btn:hover { background: #a00d24; }
-    .back-btn { background: #002b5c; }
+    input { width: 100%; padding: 12px; border: 1px solid #555; border-radius: 6px; font-size: 16px; background: #333; color: #ddd; }
+    button, .print-btn, .back-btn { background: #601929; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; margin: 8px; }
+    button:hover, .print-btn:hover, .back-btn:hover { background: #8b0000; }
   </style>
 </head>
 <body>
@@ -88,7 +77,7 @@
       <input type="text" id="name" required>
 
       <label>Umpire Address</label>
-      <input type="text" id="address" placeholder="Street address, City, State, ZIP">
+      <input type="text" id="address" placeholder="Street, City, State, ZIP">
 
       <label>Umpire Email *</label>
       <input type="email" id="email" required>
@@ -99,7 +88,7 @@
       <label>Electronic Signature (Type Full Name) *</label>
       <input type="text" id="signature" required>
 
-      <div style="margin-top:30px; padding-top:20px; border-top:2px solid #eee;">
+      <div style="margin-top:30px; padding-top:20px; border-top:2px solid #444;">
         <h2>Parent / Guardian (if applicable)</h2>
         <label>Parent Name</label>
         <input type="text" id="parent_name">
