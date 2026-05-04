@@ -1,56 +1,40 @@
-/* styles.css - Tri-Valley Baseball Umpires */
+/* styles.css - Tri-Valley Baseball Umpires 2026 */
 :root {
   --accent: #601929;
   --dark: #1a1a1a;
   --container: #222;
-  --text: silver;
+  --text: #ddd;
+  --light-text: silver;
 }
 
 body {
-  font-family: Arial, sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
   background: var(--dark);
   color: var(--text);
   margin: 0;
+  padding: 20px;
   line-height: 1.6;
 }
 
 .header {
   background: #000;
   color: white;
-  padding: 25px 20px;
+  padding: 20px;
   text-align: center;
   border-bottom: 4px solid var(--accent);
 }
 
 .logo {
-  max-height: 85px;
+  max-height: 75px;
 }
 
-nav {
-  background: #111;
-  padding: 15px;
-  text-align: center;
-  border-bottom: 1px solid #333;
-}
-
-nav a {
-  color: silver;
-  margin: 0 15px;
-  text-decoration: none;
-  font-weight: bold;
-}
-
-nav a:hover {
-  color: var(--accent);
-}
-
-.container {
+.container, .form-container {
   max-width: 1100px;
   margin: 30px auto;
   background: var(--container);
   padding: 40px;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.7);
 }
 
 h1, h2 {
@@ -61,35 +45,89 @@ h2 {
   color: var(--accent);
   border-bottom: 3px solid var(--accent);
   padding-bottom: 10px;
+  margin-top: 35px;
 }
 
-.btn {
+/* Form Specific */
+.rules-box {
+  background: #1f1f1f;
+  border: 1px solid #444;
+  padding: 25px;
+  margin: 25px 0;
+  border-radius: 8px;
+  max-height: 460px;
+  overflow-y: auto;
+  font-size: 0.98rem;
+}
+
+label {
+  display: block;
+  margin: 22px 0 8px;
+  font-weight: bold;
+  color: #ccc;
+}
+
+input {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #555;
+  border-radius: 6px;
+  background: #333;
+  color: #eee;
+  font-size: 16px;
+  transition: all 0.2s;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(96, 25, 41, 0.3);
+}
+
+.parent-section {
+  margin-top: 40px;
+  padding-top: 30px;
+  border-top: 2px solid #444;
+}
+
+.btn, .back-btn {
   background: var(--accent);
   color: white;
   padding: 14px 28px;
   border-radius: 6px;
   text-decoration: none;
   display: inline-block;
-  margin: 8px;
+  margin: 8px 8px 8px 0;
   font-weight: bold;
   cursor: pointer;
   border: none;
+  transition: background 0.2s;
 }
 
-.btn:hover {
+.btn:hover, .back-btn:hover {
   background: #8b0000;
 }
 
+.print-btn {
+  background: #444;
+}
+
+.print-btn:hover {
+  background: #666;
+}
+
+/* Table Styles */
 table {
   width: 100%;
   border-collapse: collapse;
-  margin: 20px 0;
+  margin: 25px 0;
 }
 
 th, td {
   border: 1px solid #555;
   padding: 12px;
   text-align: left;
+  vertical-align: top;
 }
 
 th {
@@ -97,14 +135,14 @@ th {
   color: white;
 }
 
-.footer {
-  text-align: center;
-  padding: 30px;
-  color: #777;
-  font-size: 0.95em;
+/* Utility */
+.back-btn {
+  display: inline-block;
+  margin-bottom: 20px;
 }
 
 @media print {
-  .header, nav, .no-print { display: none !important; }
-  .container { box-shadow: none; margin: 0; padding: 20px; max-width: 100%; }
+  .header, .back-btn, .no-print { display: none !important; }
+  .container, .form-container { box-shadow: none; margin: 0; padding: 20px; max-width: 100%; }
+  .rules-box { max-height: none; overflow: visible; }
 }

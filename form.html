@@ -18,58 +18,46 @@
       <h1>Umpire Rules & Expectations Acknowledgment</h1>
 
       <div class="rules-box">
-        <strong
-          >Tri-Valley Baseball Association Youth Baseball Umpire Expectation
-          Contract</strong
-        ><br /><br />
+      <strong>Tri-Valley Baseball Association Youth Baseball Umpire Expectation Contract</strong><br><br>
 
-        <strong>Introduction</strong><br />
-        This contract outlines the expectations and responsibilities of umpires
-        serving in the Tri-Valley Baseball Association. As an umpire, you play a
-        critical role in ensuring fair play, safety, and a positive experience
-        for players, coaches, and spectators. By agreeing to this contract, you
-        commit to upholding the standards of professionalism, integrity, and
-        respect that our association values.<br /><br />
+      <strong>Introduction</strong><br>
+      This contract outlines the expectations and responsibilities of umpires serving in the Tri-Valley Baseball Association. As an umpire, you play a critical role in ensuring fair play, safety, and a positive experience for players, coaches, and spectators. By agreeing to this contract, you commit to upholding the standards of professionalism, integrity, and respect that our association values.<br><br>
 
-        <strong>Expectations and Responsibilities</strong><br /><br />
-        1. Knowledge of Rules — https://www.minndak.org/rules/<br /><br />
+      <strong>Expectations and Responsibilities</strong><br><br>
+      1. Knowledge of Rules — <a href="https://www.minndak.org/rules/" target="_blank">https://www.minndak.org/rules/</a><br><br>
 
-        2. Game Preparation<br />
-        • Arrive at the field at least 15 minutes before scheduled start.<br />
-        • Bring and return all equipment properly.<br />
-        • Wear appropriate apparel (no alcohol, drugs, tobacco, or vulgar
-        language). Closed-toe shoes required.<br />
-        • Inspect field for safety.<br /><br />
+      2. Game Preparation<br>
+      • Arrive at the field at least 15 minutes before scheduled start.<br>
+      • Bring and return all equipment properly.<br>
+      • Wear appropriate apparel (no alcohol, drugs, tobacco, or vulgar language). Closed-toe shoes required.<br>
+      • Inspect field for safety.<br><br>
 
-        3. Professional Conduct<br />
-        • Maintain calm, impartial, respectful demeanor.<br />
-        • Avoid arguing or confrontational behavior.<br /><br />
+      3. Professional Conduct<br>
+      • Maintain calm, impartial, respectful demeanor.<br>
+      • Avoid arguing or confrontational behavior.<br><br>
 
-        4. Game Management and Focus<br />
-        • Enforce rules fairly.<br />
-        • Conduct pregame meeting with both teams.<br />
-        • Keep game on schedule and stay fully focused.<br /><br />
+      4. Game Management and Focus<br>
+      • Enforce rules fairly.<br>
+      • Conduct pregame meeting with both teams.<br>
+      • Keep game on schedule and stay fully focused.<br><br>
 
-        5. Safety<br />
-        • Prioritize participant safety and stop play if needed.<br /><br />
+      5. Safety<br>
+      • Prioritize participant safety and stop play if needed.<br><br>
 
-        6. Interaction with Participants<br />
-        • Treat everyone with respect.<br />
-        • Report incidents promptly.<br /><br />
+      6. Interaction with Participants<br>
+      • Treat everyone with respect.<br>
+      • Report incidents promptly.<br><br>
 
-        7. Cell Phone Policy<br />
-        • No non-emergency use during games.<br /><br />
+      7. Cell Phone Policy<br>
+      • No non-emergency use during games.<br><br>
 
-        8. Availability & Commitment<br />
-        • Honor schedule and find substitutes if necessary.<br /><br />
+      8. Availability & Commitment<br>
+      • Honor schedule and find substitutes if necessary.<br><br>
 
-        9. Compensation<br />
-        • $40 per plate game (regular season).<br /><br />
+      9. Compensation<br>
+      • $40 per plate game (regular season).<br><br>
 
-        <em
-          >By submitting this form you acknowledge that you have read,
-          understood, and agree to all the above expectations.</em
-        >
+      <em>By submitting this form you acknowledge that you have read, understood, and agree to all the above expectations.</em>
       </div>
 
       <form id="umpireForm">
@@ -77,11 +65,7 @@
         <input type="text" id="name" required />
 
         <label>Umpire Address</label>
-        <input
-          type="text"
-          id="address"
-          placeholder="Street, City, State, ZIP"
-        />
+      <input type="text" id="address" placeholder="Street, City, State, ZIP" />
 
         <label>Umpire Email *</label>
         <input type="email" id="email" required />
@@ -92,18 +76,20 @@
         <label>Electronic Signature (Type Full Name) *</label>
         <input type="text" id="signature" required />
 
-      <div style="margin-top:30px; padding-top:20px; border-top:2px solid #444;">
+      <div class="parent-section">
         <h2>Parent / Guardian (if under 18)</h2>
           <label>Parent Name</label>
           <input type="text" id="parent_name" />
+
           <label>Parent Email</label>
           <input type="email" id="parent_email" />
+
           <label>Parent Phone</label>
           <input type="tel" id="parent_phone" />
         </div>
 
       <button type="submit" class="btn">Submit Official Acknowledgment</button>
-      <button type="button" class="btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+      <button type="button" class="btn print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
       </form>
     </div>
 
@@ -122,12 +108,9 @@
         parent_name: document.getElementById("parent_name").value || "Not provided",
             parent_email: document.getElementById("parent_email").value || "",
             parent_phone: document.getElementById("parent_phone").value || "",
-            datetime: new Date().toLocaleString("en-US", {
-              timeZone: "America/Chicago",
-            }),
+        datetime: new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }),
             main_page_link: "https://althoffj.github.io/tri-valley-umpires/",
-            slack_link:
-              "https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA",
+        slack_link: "https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA"
           };
 
           emailjs.send("service_vljauqe", "template_om0629c", formData);
