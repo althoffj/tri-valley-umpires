@@ -33,14 +33,14 @@
     <div class="document-note">
       <p>
         <strong>How signups work:</strong> Games listed below as "Needs umpire"
-        are open for claiming. Click <strong>Sign up</strong> next to a game and
-        enter your name and email. You will only be verified and assigned if your
-        name and email match what was submitted on your
-        <a href="form.html">acknowledgment form</a>.
+        are open for claiming. You must be logged in to sign up &mdash; if you
+        don't have an account yet, complete the
+        <a href="form.html">acknowledgment form</a> first to register.
       </p>
       <p>
-        If you haven't completed the acknowledgment form yet, do that first. Once
-        you do, your name and email will be saved and pre-filled here automatically.
+        Once logged in, click <strong>Sign up</strong> next to an open game and
+        enter the name and email you used on your acknowledgment form. You will
+        only be verified and assigned if they match.
       </p>
       <p style="margin-bottom: 0;">
         <strong>Note:</strong> Additional 10U and 12U games are expected to be
@@ -139,6 +139,9 @@
       | <a href="https://www.minndak.com/" target="_blank">Minndak Sports</a>
     </p>
   </div>
+
+  <!-- auth.js must load before schedule.js so isLoggedIn() is available -->
+  <script src="auth.js"></script>
   <script src="schedule.js"></script>
 </body>
 </html>

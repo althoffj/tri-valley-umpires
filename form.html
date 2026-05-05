@@ -22,7 +22,7 @@
       <a href="principles_of_umpiring.html">Principles</a>
       <a href="rule_breakdown.html">Rules</a>
       <a href="pregame-meeting.html">Plate Meeting</a>
-      <a href="schedule.html">Schedule</a>
+      <a href="schedule.html">Schedule & Signups</a>
       <a href="form.html">Acknowledgment</a>
     </nav>
 
@@ -188,16 +188,22 @@
           errors.push("Roster submission failed: " + err.message);
         }
 
-        // Cache name + email for schedule signup convenience
-        localStorage.setItem("umpireName", formData.name);
-        localStorage.setItem("umpireEmail", formData.email);
+        // FIX: Always reset Turnstile regardless of outcome so the user
+        // can re-submit without reloading the page. Previously this only
+        // ran in the success branch, leaving the CAPTCHA in a broken state
+        // after a partial failure.
+        if (window.turnstile) turnstile.reset();
 
         if (emailSuccess || sheetSuccess) {
-          alert("Thank you, " + formData.name + "! Your acknowledgment has been recorded. You can now log in on the home page to view contact info and sign up for games.");
-          this.reset();
+          // FIX: localStorage is only written on success. Previously these
+          // two calls also ran unconditionally before this block, meaning
+          // they would fire even on a complete failure, potentially caching
+          // stale or incorrect data.
           localStorage.setItem("umpireName", formData.name);
           localStorage.setItem("umpireEmail", formData.email);
-          if (window.turnstile) turnstile.reset();
+
+          alert("Thank you, " + formData.name + "! Your acknowledgment has been recorded. You can now log in on the home page to view contact info and sign up for games.");
+          this.reset();
         } else {
           alert("We encountered an issue saving your acknowledgment.\n\n" + errors.join("\n") + "\n\nPlease try again or contact the league.");
         }

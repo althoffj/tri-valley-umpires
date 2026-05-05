@@ -1,5 +1,12 @@
 const SIGNUP_API_URL = "https://script.google.com/macros/s/AKfycbxilIe2j1MscC8fE77siFCDwZHPU3z1WLqQV-SdvHgQlWQo1rcn6RiSJtYsQfCUAKMc/exec";
 
+// NOTE: The !SIGNUP_API_URL branches below are development-only fallbacks.
+// In production this constant is always set, so those code paths are inactive.
+// They exist to make local testing without a live Apps Script easier.
+
+// JSONP requests time out after 10 seconds
+const JSONP_TIMEOUT_MS = 10000;
+
 let games = [];
 let assignments = {};
 let activeFilter = "all";
@@ -13,6 +20,7 @@ function jsonp(action, params = {}) {
     const callbackName = "umpireSignup_" + Date.now() + "_" + Math.random().toString(36).slice(2);
     const script = document.createElement("script");
     const url = new URL(SIGNUP_API_URL);
+    let settled = false;
 
     url.searchParams.set("action", action);
     url.searchParams.set("callback", callbackName);
@@ -21,7 +29,19 @@ function jsonp(action, params = {}) {
       url.searchParams.set(key, value);
     });
 
+    // Timeout: reject and clean up if Apps Script doesn't respond in time
+    const timer = setTimeout(function() {
+      if (settled) return;
+      settled = true;
+      delete window[callbackName];
+      script.remove();
+      reject(new Error("Request timed out. Please check your connection and try again."));
+    }, JSONP_TIMEOUT_MS);
+
     window[callbackName] = function(payload) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       delete window[callbackName];
       script.remove();
       if (payload && payload.ok) {
@@ -32,6 +52,9 @@ function jsonp(action, params = {}) {
     };
 
     script.onerror = function() {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       delete window[callbackName];
       script.remove();
       reject(new Error("Unable to reach the signup service."));
@@ -62,7 +85,22 @@ function applyFilter(game) {
   return activeFilter === "filled" ? assigned : !assigned;
 }
 
+// Returns true if the user is logged in (reads from auth.js session)
+function userIsLoggedIn() {
+  if (typeof isLoggedIn === "function") {
+    return isLoggedIn();
+  }
+  // Fallback: check raw localStorage key in case auth.js isn't loaded
+  try {
+    return !!localStorage.getItem("umpireSession");
+  } catch (e) {
+    return false;
+  }
+}
+
 function renderGameRows() {
+  var loggedIn = userIsLoggedIn();
+
   document.querySelectorAll("[data-game-list]").forEach(function(tbody) {
     var city = tbody.dataset.city;
     var rows = games
@@ -72,11 +110,21 @@ function renderGameRows() {
         var assignedName = assignment && assignment.assignedName;
         var statusClass = assignedName ? "status-filled" : "status-needs";
         var statusText = assignedName ? "Filled by " + escapeHtml(assignedName) : "Needs umpire";
-        var action = !SIGNUP_API_URL
-          ? '<button type="button" class="btn locked-btn" disabled>Signup unavailable</button>'
-          : assignedName
-          ? '<button type="button" class="btn locked-btn" disabled>Locked</button>'
-          : '<button type="button" class="btn signup-btn" data-game-id="' + game.id + '">Sign up</button>';
+
+        var action;
+        if (!SIGNUP_API_URL) {
+          // Dev-only: no backend connected
+          action = '<button type="button" class="btn locked-btn" disabled>Signup unavailable</button>';
+        } else if (assignedName) {
+          // Game already claimed
+          action = '<button type="button" class="btn locked-btn" disabled>Locked</button>';
+        } else if (!loggedIn) {
+          // Not logged in — prompt to log in instead of showing the form
+          action = '<a href="index.html" class="btn print-btn">Log in to sign up</a>';
+        } else {
+          // Logged in and game is open
+          action = '<button type="button" class="btn signup-btn" data-game-id="' + game.id + '">Sign up</button>';
+        }
 
         return [
           '<tr>',
@@ -169,7 +217,11 @@ async function loadAssignments() {
     games = payload.games || [];
     assignments = payload.assignments || {};
     renderGameRows();
-    setMessage("Open games can be claimed by approved umpires only.", "info");
+    if (userIsLoggedIn()) {
+      setMessage("Open games can be claimed by approved umpires only.", "info");
+    } else {
+      setMessage("Log in on the home page to sign up for open games.", "info");
+    }
   } catch (error) {
     clearGames();
     setMessage(error.message, "error");
@@ -182,6 +234,11 @@ document.addEventListener("click", function(event) {
   // Game signup button
   var signupBtn = event.target.closest("[data-game-id]");
   if (signupBtn) {
+    // Double-check auth at click time in case session expired mid-page
+    if (!userIsLoggedIn()) {
+      setMessage("You must be logged in to sign up for a game. Please log in on the home page.", "warning");
+      return;
+    }
     openSignupForm(signupBtn.dataset.gameId);
     return;
   }
@@ -210,6 +267,13 @@ document.getElementById("cancelSignup").addEventListener("click", function() {
 
 document.getElementById("signupForm").addEventListener("submit", async function(event) {
   event.preventDefault();
+
+  // Guard: re-verify login state at submit time
+  if (!userIsLoggedIn()) {
+    setMessage("Your session has expired. Please log in again on the home page.", "error");
+    this.hidden = true;
+    return;
+  }
 
   var submitButton = document.getElementById("submitSignup");
   var params = {

@@ -396,7 +396,7 @@ th {
 }
 
 @media print {
-  .header, nav, .back-btn, .page-actions, .no-print { display: none !important; }
+  .header, nav, .back-btn, .page-actions, .footer, .no-print { display: none !important; }
   .container, .form-container { box-shadow: none; margin: 0; padding: 20px; max-width: 100%; }
   .pdf-viewer { display: none; }
 }
