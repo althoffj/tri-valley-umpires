@@ -22,7 +22,8 @@ const ACKNOWLEDGMENT_COLUMNS = [
   "Signature",
   "ParentName",
   "ParentEmail",
-  "ParentPhone"
+  "ParentPhone",
+  "Password"
 ];
 
 const INITIAL_GAMES = [
@@ -49,7 +50,8 @@ function doPost(event) {
       clean(data.signature),
       clean(data.parent_name),
       clean(data.parent_email),
-      clean(data.parent_phone)
+      clean(data.parent_phone),
+      clean(data.password)
     ]);
 
     return ContentService.createTextOutput("Success")
@@ -65,27 +67,82 @@ function doGet(event) {
   const callback = params.callback || "callback";
 
   try {
-    const action = params.action || "list";
-    const payload = action === "assign" ? assignGame(params) : listGames();
+    var payload;
+    var action = params.action || "list";
+
+    if (action === "assign") {
+      payload = assignGame(params);
+    } else if (action === "login") {
+      payload = login(params);
+    } else {
+      payload = listGames();
+    }
+
     return jsonp(callback, payload);
   } catch (error) {
     return jsonp(callback, { ok: false, message: error.message });
   }
 }
 
+function login(params) {
+  var name = clean(params.name);
+  var email = clean(params.email).toLowerCase();
+  var password = clean(params.password);
+
+  if (!name || !email || !password) {
+    return { ok: false, message: "Name, email, and password are required." };
+  }
+
+  var sheet = getOrCreateSheet(UMPIRES_SHEET_NAME, ACKNOWLEDGMENT_COLUMNS);
+  var values = sheet.getDataRange().getValues();
+
+  if (values.length < 2) {
+    return { ok: false, message: "No umpire records found." };
+  }
+
+  var headers = values[0].map(function(h) { return normalizeHeader(h); });
+  var nameIdx = findHeaderIndex(headers, ["name", "umpire name", "umpire full name", "full name"]);
+  var emailIdx = findHeaderIndex(headers, ["email", "email address", "umpire email", "umpire email address"]);
+  var passwordIdx = findHeaderIndex(headers, ["password", "umpire password"]);
+
+  if (nameIdx === -1 || emailIdx === -1 || passwordIdx === -1) {
+    return { ok: false, message: "Unable to find credential columns in the sheet." };
+  }
+
+  var requestedName = normalize(name);
+  var requestedEmail = email.toLowerCase();
+
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    var rowName = normalize(clean(row[nameIdx]));
+    var rowEmail = clean(row[emailIdx]).toLowerCase();
+    var rowPassword = clean(row[passwordIdx]);
+
+    if (rowName === requestedName && rowEmail === requestedEmail && rowPassword === password) {
+      return { ok: true };
+    }
+  }
+
+  return { ok: false, message: "Name, email, or password do not match. Did you complete the acknowledgment form?" };
+}
+
 function listGames() {
   const sheet = getGamesSheet();
   const values = sheet.getDataRange().getValues();
+  const games = [];
   const assignments = {};
 
   values.slice(1).forEach((row) => {
     const game = rowToGame(row);
-    if (game.assignedName) {
-      assignments[game.id] = game;
+    if (game.id) {
+      games.push(game);
+      if (game.assignedName) {
+        assignments[game.id] = game;
+      }
     }
   });
 
-  return { ok: true, assignments };
+  return { ok: true, games, assignments };
 }
 
 function assignGame(params) {

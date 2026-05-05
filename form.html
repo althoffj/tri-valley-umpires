@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Umpire Acknowledgment - Tri-Valley Baseball</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=2" />
   </head>
   <body>
     <div class="header">
@@ -21,6 +21,7 @@
       <a href="expectations.html">Expectations</a>
       <a href="principles_of_umpiring.html">Principles</a>
       <a href="rule_breakdown.html">Rules</a>
+      <a href="pregame-meeting.html">Plate Meeting</a>
       <a href="schedule.html">Schedule</a>
       <a href="form.html">Acknowledgment</a>
     </nav>
@@ -36,7 +37,7 @@
         >
       </div>
 
-      <h1>Umpire Rules &amp; Expectations Acknowledgment</h1>
+      <h1>Umpire Rules & Expectations Acknowledgment</h1>
 
       <div class="document-note">
         <p>
@@ -44,6 +45,23 @@
           PDF is the source of truth for the rules and expectations you are
           acknowledging.
         </p>
+      </div>
+
+      <div class="document-note" style="border-left-color: #b8f2c4;">
+        <p>
+          <strong>What happens after you submit:</strong>
+        </p>
+        <ol style="margin: 8px 0 0; padding-left: 20px; color: var(--text);">
+          <li>Your acknowledgment is recorded and a confirmation email is sent.</li>
+          <li>
+            You are added to the approved umpire roster, making you eligible to
+            sign up for games.
+          </li>
+          <li>
+            You can then log in on the home page to view contact information and
+            the Slack link for crew communication.
+          </li>
+        </ol>
       </div>
 
       <form id="umpireForm">
@@ -58,6 +76,10 @@
 
         <label>Umpire Phone *</label>
         <input type="tel" id="phone" required />
+
+        <label>Create a Password *</label>
+        <input type="password" id="password" required minlength="6"
+          placeholder="At least 6 characters — used to log in later" />
 
         <label>Electronic Signature (Type Full Name) *</label>
         <input type="text" id="signature" required />
@@ -74,6 +96,13 @@
           <input type="tel" id="parent_phone" />
         </div>
 
+        <div
+          class="cf-turnstile"
+          data-sitekey="0x4AAAAAAAQpMRek5XIP7Qzg"
+          data-theme="dark"
+          style="margin: 25px 0"
+        ></div>
+
         <button type="submit" class="btn">Submit Official Acknowledgment</button>
         <button type="button" class="btn print-btn" onclick="window.print()">
           Print / Save Form
@@ -81,37 +110,110 @@
       </form>
     </div>
 
+    <!-- Turnstile CAPTCHA -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <script>
+      var APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxilIe2j1MscC8fE77siFCDwZHPU3z1WLqQV-SdvHgQlWQo1rcn6RiSJtYsQfCUAKMc/exec";
+
       emailjs.init("H9Z9Qz-HB-PehAQjp");
 
-      document.getElementById("umpireForm").addEventListener("submit", function(e) {
+      document.getElementById("umpireForm").addEventListener("submit", async function(e) {
         e.preventDefault();
-        const formData = {
+
+        var submitBtn = this.querySelector('button[type="submit"]');
+        var turnstileResponse = document.querySelector('[name="cf-turnstile-response"]')?.value;
+
+        if (!turnstileResponse) {
+          alert("Please complete the security check before submitting.");
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Submitting...";
+
+        var formData = {
           name: document.getElementById("name").value,
           address: document.getElementById("address").value || "Not provided",
           email: document.getElementById("email").value,
           phone: document.getElementById("phone").value,
           signature: document.getElementById("signature").value,
+          password: document.getElementById("password").value,
           parent_name: document.getElementById("parent_name").value || "Not provided",
           parent_email: document.getElementById("parent_email").value || "",
           parent_phone: document.getElementById("parent_phone").value || "",
           datetime: new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }),
-          main_page_link: "https://althoffj.github.io/tri-valley-umpires/",
-          expectations_pdf_link:
-            "https://althoffj.github.io/tri-valley-umpires/umpire_responsibility.pdf",
-          slack_link:
-            "https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA"
+          main_page_link: "https://althoffj.github.io/tri-valley-umpires/"
         };
 
-        emailjs.send("service_vljauqe", "template_om0629c", formData);
-        if (formData.parent_email) {
-          emailjs.send("service_vljauqe", "template_n8kehkc", formData);
+        var emailSuccess = false;
+        var sheetSuccess = false;
+        var errors = [];
+
+        try {
+          await emailjs.send("service_vljauqe", "template_om0629c", formData);
+          emailSuccess = true;
+        } catch (err) {
+          errors.push("Email notification failed: " + err.message);
         }
 
-        alert(`Thank you, ${formData.name}! Your acknowledgment has been recorded.`);
-        e.target.reset();
+        if (formData.parent_email) {
+          try {
+            await emailjs.send("service_vljauqe", "template_n8kehkc", formData);
+          } catch (err) {
+            errors.push("Parent email notification failed: " + err.message);
+          }
+        }
+
+        // POST to Google Apps Script for the umpire roster (includes password)
+        try {
+          await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: formData.name,
+              email: formData.email,
+              phone: formData.phone,
+              signature: formData.signature,
+              password: formData.password,
+              parent_name: formData.parent_name,
+              parent_email: formData.parent_email,
+              parent_phone: formData.parent_phone
+            })
+          });
+          sheetSuccess = true;
+        } catch (err) {
+          errors.push("Roster submission failed: " + err.message);
+        }
+
+        // Cache name + email for schedule signup convenience
+        localStorage.setItem("umpireName", formData.name);
+        localStorage.setItem("umpireEmail", formData.email);
+
+        if (emailSuccess || sheetSuccess) {
+          alert("Thank you, " + formData.name + "! Your acknowledgment has been recorded. You can now log in on the home page to view contact info and sign up for games.");
+          this.reset();
+          localStorage.setItem("umpireName", formData.name);
+          localStorage.setItem("umpireEmail", formData.email);
+          if (window.turnstile) turnstile.reset();
+        } else {
+          alert("We encountered an issue saving your acknowledgment.\n\n" + errors.join("\n") + "\n\nPlease try again or contact the league.");
+        }
+
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit Official Acknowledgment";
       });
     </script>
+
+    <div class="footer">
+      <p>
+        <a href="https://www.trivalleyball.com" target="_blank">Tri-Valley Baseball Association</a>
+        | <a href="https://sdvfwbaseball.org/" target="_blank">SD VFW Baseball</a>
+        | <a href="https://www.minndak.com/" target="_blank">Minndak Sports</a>
+        | Official Umpire Portal
+      </p>
+    </div>
   </body>
 </html>

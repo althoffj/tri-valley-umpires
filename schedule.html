@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Game Schedule &amp; Umpire Signups - Tri-Valley Baseball</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>Game Schedule & Umpire Signups - Tri-Valley Baseball</title>
+  <link rel="stylesheet" href="styles.css?v=2" />
 </head>
 <body>
   <div class="header">
     <img src="https://www.trivalleyball.com/Portals/28848/logo637834746748581970.png" alt="Tri-Valley Baseball" class="logo" />
-    <h1>2026 Umpire Schedule &amp; Signups</h1>
+    <h1>2026 Umpire Schedule & Signups</h1>
   </div>
 
   <nav>
@@ -17,25 +17,44 @@
     <a href="expectations.html">Expectations</a>
     <a href="principles_of_umpiring.html">Principles</a>
     <a href="rule_breakdown.html">Rules</a>
-    <a href="schedule.html">Schedule &amp; Signups</a>
+    <a href="pregame-meeting.html">Plate Meeting</a>
+    <a href="schedule.html">Schedule & Signups</a>
     <a href="form.html">Acknowledgment</a>
   </nav>
 
   <div class="container">
-    <h2>10U &amp; 12U Home Games Needing Umpires</h2>
+    <h2>10U & 12U Home Games Needing Umpires</h2>
     <p class="schedule-source">
       Source: City of Crooks and City of Colton home game schedule from Heather
       Bunde.
     </p>
 
+    <!-- How signups work -->
     <div class="document-note">
       <p>
-        This page lists only the 10U and 12U home games that need umpire
-        coverage. Additional 10U and 12U games are expected to be added at the
-        end of May once the schedule is completed. Umpires must already be
-        listed in the approved Google Sheet before they can claim a game.
+        <strong>How signups work:</strong> Games listed below as "Needs umpire"
+        are open for claiming. Click <strong>Sign up</strong> next to a game and
+        enter your name and email. You will only be verified and assigned if your
+        name and email match what was submitted on your
+        <a href="form.html">acknowledgment form</a>.
+      </p>
+      <p>
+        If you haven't completed the acknowledgment form yet, do that first. Once
+        you do, your name and email will be saved and pre-filled here automatically.
+      </p>
+      <p style="margin-bottom: 0;">
+        <strong>Note:</strong> Additional 10U and 12U games are expected to be
+        added once the schedule is completed. Check back for new dates.
       </p>
     </div>
+
+    <div class="page-actions" id="filterBar">
+      <button type="button" class="btn filter-btn" data-filter="all" style="background:var(--accent)">All Games</button>
+      <button type="button" class="btn print-btn filter-btn" data-filter="needs">Needs Umpire</button>
+      <button type="button" class="btn print-btn filter-btn" data-filter="filled">Filled</button>
+    </div>
+
+    <p id="signupCount" class="schedule-source" style="margin-top:0;"></p>
 
     <form id="signupForm" class="signup-form" hidden>
       <h2>Claim This Game</h2>
@@ -112,7 +131,13 @@
   </div>
 
   <div class="footer">
-    <p>Questions? Jeff Althoff | 605-380-0229</p>
+    <p>
+      Questions? Post in
+      <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229 (urgent only)
+      | <a href="https://sdvfwbaseball.org/" target="_blank">SD VFW Baseball</a>
+      | <a href="https://www.minndak.com/" target="_blank">Minndak Sports</a>
+    </p>
   </div>
   <script src="schedule.js"></script>
 </body>

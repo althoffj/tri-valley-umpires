@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tri-Valley Baseball Umpires - 2026</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=2" />
   </head>
   <body>
     <div class="header">
@@ -20,67 +20,196 @@
       <a href="index.html">Home</a>
       <a href="expectations.html">Expectations</a>
       <a href="principles_of_umpiring.html">Principles</a>
-      <a href="rule_breakdown.html">Rules (10U/12U)</a>
-      <a href="schedule.html">Schedule &amp; Signups</a>
-      <a href="form.html">Acknowledgment Form</a>
+      <a href="rule_breakdown.html">Rules</a>
+      <a href="pregame-meeting.html">Plate Meeting</a>
+      <a href="schedule.html">Schedule & Signups</a>
+      <a href="form.html">Acknowledgment</a>
     </nav>
 
     <div class="container">
       <h2>Welcome Umpires!</h2>
       <p>
-        Thank you for being part of the Tri-Valley Baseball Association crew.
+        Thank you for being part of the Tri-Valley Baseball Association crew for
+        the 2026 season. This portal is your central hub for everything
+        umpire-related &mdash; from reviewing expectations to claiming your games.
       </p>
 
-      <a href="form.html" class="btn">Complete Rules Acknowledgment Form</a>
-      <a href="schedule.html" class="btn">View Schedule &amp; Sign Up for Games</a>
+      <!-- Guest section: visible when not logged in -->
+      <div data-auth-guest>
+        <div class="document-note" style="border-left-color: #b8f2c4;">
+          <p>
+            <strong>New umpire?</strong> Complete the
+            <a href="form.html">acknowledgment form</a> to register. You'll create
+            a password during registration, then log in below to access contact
+            information and sign up for games.
+          </p>
+        </div>
 
-      <h2>Resources &amp; Documents</h2>
+        <h2>Log In</h2>
+        <form id="loginForm" class="signup-form">
+          <label for="loginName">Your Full Name</label>
+          <input type="text" id="loginName" required autocomplete="name" />
+
+          <label for="loginEmail">Your Email</label>
+          <input type="email" id="loginEmail" required autocomplete="email" />
+
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" required />
+
+          <div class="page-actions">
+            <button type="submit" id="loginBtn" class="btn">Log In</button>
+          </div>
+          <p id="loginMessage" class="signup-message" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <!-- Authenticated section: visible when logged in -->
+      <div data-auth-required>
+        <div class="document-note" style="border-left-color: #b8f2c4;">
+          <p>
+            Logged in as <strong data-auth-name></strong>.
+            <button type="button" id="logoutBtn" class="btn print-btn" style="display:inline;padding:6px 14px;margin:0 0 0 10px;font-size:0.85rem;">Log Out</button>
+          </p>
+        </div>
+
+        <h2>Getting Started</h2>
+        <p>
+          If you're new this season, follow these three steps:
+        </p>
+        <ol>
+          <li>
+            <strong>Review the resources</strong> &mdash; Read through the
+            umpire expectations, core principles, rule breakdowns, and the
+            pre-game plate meeting guide linked below.
+          </li>
+          <li>
+            <strong>Complete the acknowledgment form</strong> &mdash; Confirm
+            you've read and understand the expectations.
+          </li>
+          <li>
+            <strong>Claim your games</strong> &mdash; Browse the schedule and sign
+            up for open games.
+          </li>
+        </ol>
+
+        <div class="centered-action">
+          <a href="form.html" class="btn">Complete Acknowledgment Form</a>
+          <a href="schedule.html" class="btn">View Schedule & Sign Up</a>
+        </div>
+
+        <h2>Contact & Communication</h2>
+        <ul>
+          <li>
+            <strong>Slack (recommended for general questions)</strong><br />
+            <a
+              href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA"
+              target="_blank"
+            >Join Umpire Slack Group</a
+            >
+            &mdash; Use Slack for scheduling questions, rule clarifications, and
+            general discussion with the rest of the crew.
+          </li>
+          <li>
+            <strong>Phone (for urgent, time-sensitive issues)</strong><br />
+            Jeff Althoff: <strong>605-380-0229</strong>
+            &mdash; Call or text for last-minute cancellations or emergencies.
+          </li>
+          <li>
+            <strong>Email</strong><br />
+            <a href="mailto:althoff.jeff@gmail.com">althoff.jeff@gmail.com</a>
+            &mdash; For documentation, formal requests, or non-urgent matters.
+          </li>
+        </ul>
+      </div>
+
+      <h2>Resources & Documents</h2>
+      <p>
+        These resources are available to everyone. Review them before submitting
+        your acknowledgment.
+      </p>
       <ul>
         <li>
-          <a href="expectations.html"
-            >Umpire Responsibilities &amp; Expectations</a
-          >
-          <a href="umpire_responsibility.pdf" target="_blank" download
-            >(Download PDF)</a
-          >
+          <a href="expectations.html">Umpire Responsibilities & Expectations</a>
+          <a href="umpire_responsibility.pdf" target="_blank" download>(Download PDF)</a>
         </li>
         <li>
-          <a href="principles_of_umpiring.html"
-            >Core Principles of Umpiring</a
-          >
-          <a href="principles_of_umpiring.pdf" target="_blank" download
-            >(Download PDF)</a
-          >
+          <a href="principles_of_umpiring.html">Core Principles of Umpiring</a>
+          <a href="principles_of_umpiring.pdf" target="_blank" download>(Download PDF)</a>
         </li>
         <li>
           <a href="rule_breakdown.html">Rule Breakdown (10U vs 12U)</a>
-          <a href="rule_breakdown.pdf" target="_blank" download
-            >(Download PDF)</a
-          >
+          <a href="rule_breakdown.pdf" target="_blank" download>(Download PDF)</a>
+        </li>
+        <li>
+          <a href="pregame-meeting.html">Pre-Game Plate Meeting Guide</a>
+        </li>
+        <li>
+          <a href="https://sdvfwbaseball.org/" target="_blank">SD VFW Baseball</a>
+          &mdash; Official VFW baseball program site for South Dakota
+        </li>
+        <li>
+          <a href="https://sdvfwbaseball.org/playing-rules/" target="_blank">VFW Baseball Rulebook</a>
+          &mdash; Official playing rules for VFW baseball
+        </li>
+        <li>
+          <a href="https://www.minndak.com/" target="_blank">Minndak Sports</a>
+          &mdash; League and tournament information
         </li>
       </ul>
 
-      <h2>Contact</h2>
-      <ul>
-        <li>
-          <a
-            href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA"
-            target="_blank"
-            >Join Umpire Slack Group</a
-          >
-        </li>
-        <li>Jeff Althoff - althoff.jeff@gmail.com</li>
-        <li>Phone: <strong>605-380-0229</strong></li>
-      </ul>
+      <h2>Site Status</h2>
+      <p>
+        <a href="https://github.com/althoffj/tri-valley-umpires/actions" target="_blank">
+          <img
+            src="https://img.shields.io/github/actions/workflow/status/althoffj/tri-valley-umpires/deploy.yml?label=deploy&logo=github&style=flat"
+            alt="Deploy status"
+          />
+        </a>
+      </p>
     </div>
 
     <div class="footer">
       <p>
-        <a href="https://www.trivalleyball.com" target="_blank"
-          >Tri-Valley Baseball Association</a
-        >
+        <a href="https://www.trivalleyball.com" target="_blank">Tri-Valley Baseball Association</a>
+        | <a href="https://sdvfwbaseball.org/" target="_blank">SD VFW Baseball</a>
+        | <a href="https://www.minndak.com/" target="_blank">Minndak Sports</a>
         | Official Umpire Portal
       </p>
     </div>
+
+    <script src="auth.js"></script>
+    <script>
+      document.getElementById("loginForm").addEventListener("submit", async function(e) {
+        e.preventDefault();
+
+        var name = document.getElementById("loginName").value.trim();
+        var email = document.getElementById("loginEmail").value.trim();
+        var password = document.getElementById("loginPassword").value;
+        var messageEl = document.getElementById("loginMessage");
+        var btn = document.getElementById("loginBtn");
+
+        btn.disabled = true;
+        messageEl.textContent = "Logging in...";
+        messageEl.className = "signup-message info";
+
+        try {
+          await login(name, email, password);
+          messageEl.textContent = "Login successful!";
+          messageEl.className = "signup-message success";
+          applyAuthGate();
+          this.reset();
+        } catch (err) {
+          messageEl.textContent = err.message;
+          messageEl.className = "signup-message error";
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      document.getElementById("logoutBtn").addEventListener("click", function() {
+        logout();
+        applyAuthGate();
+      });
+    </script>
   </body>
 </html>

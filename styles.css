@@ -271,10 +271,128 @@ th {
   color: white;
 }
 
+/* PDF Card (replaces inline object embed) */
+.pdf-card {
+  background: #1f1f1f;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+  margin: 25px 0;
+}
+
+.pdf-card-icon {
+  font-size: 4rem;
+  margin-bottom: 15px;
+  color: var(--accent);
+}
+
+.pdf-card h3 {
+  color: white;
+  margin: 10px 0;
+  font-size: 1.3rem;
+}
+
+.pdf-card p {
+  color: var(--light-text);
+  margin: 8px 0 20px;
+}
+
+.pdf-card .page-actions {
+  justify-content: center;
+}
+
 /* Utility */
 .back-btn {
   display: inline-block;
   margin-bottom: 20px;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  body {
+    padding: 10px;
+  }
+
+  .container, .form-container {
+    padding: 20px;
+    margin: 15px auto;
+  }
+
+  nav {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  nav a {
+    text-align: center;
+    padding: 12px 14px;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+  }
+
+  h2 {
+    font-size: 1.2rem;
+  }
+
+  .page-actions {
+    flex-direction: column;
+  }
+
+  .page-actions .btn,
+  .page-actions .back-btn {
+    margin: 4px 0;
+    text-align: center;
+  }
+
+  table {
+    font-size: 0.9rem;
+  }
+
+  th, td {
+    padding: 8px 6px;
+  }
+
+  .schedule-embed {
+    height: 500px;
+  }
+
+  .pdf-viewer {
+    height: 60vh;
+    min-height: 400px;
+  }
+
+  .btn, .back-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 480px) {
+  .header {
+    padding: 12px 10px;
+  }
+
+  .logo {
+    max-height: 50px;
+  }
+
+  table {
+    font-size: 0.8rem;
+  }
+
+  th, td {
+    padding: 6px 4px;
+  }
+
+  input {
+    padding: 12px;
+    font-size: 16px; /* prevent zoom on iOS */
+  }
 }
 
 @media print {
