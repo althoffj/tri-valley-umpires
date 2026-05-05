@@ -26,15 +26,23 @@ const ACKNOWLEDGMENT_COLUMNS = [
   "Password"
 ];
 
+// Each entry: [GameId, City, Date (plain text), Time (plain text), Division, Field]
+//
+// GameIds now include a sequence suffix (-1, -2, …) so two games on the same
+// date and at the same time each get their own unique row and signup slot.
+// Date and Time are stored as plain text strings (apostrophe-prefixed in the
+// sheet via setValues) so Google Sheets never auto-converts them into Date
+// serial numbers.
 const INITIAL_GAMES = [
-  ["crooks-12u-2026-05-13", "City of Crooks", "Wednesday, May 13", "6:30 PM", "12U", "NH-North"],
-  ["crooks-12u-2026-05-20", "City of Crooks", "Wednesday, May 20", "6:30 PM", "12U", "NH-North"],
-  ["crooks-12u-2026-05-27", "City of Crooks", "Wednesday, May 27", "6:30 PM", "12U", "NH-North"],
-  ["colton-10u-2026-05-11", "City of Colton", "Monday, May 11", "6:30 PM", "10U", "West"],
-  ["colton-10u-2026-05-13", "City of Colton", "Wednesday, May 13", "6:30 PM", "10U", "West"],
-  ["colton-10u-2026-05-18", "City of Colton", "Monday, May 18", "6:30 PM", "10U", "West"],
-  ["colton-10u-2026-05-20", "City of Colton", "Wednesday, May 20", "6:30 PM", "10U", "West"],
-  ["colton-10u-2026-05-27", "City of Colton", "Wednesday, May 27", "6:30 PM", "10U", "East & West"]
+  ["crooks-12u-2026-05-13-1", "City of Crooks", "Wednesday, May 13", "6:30 PM", "12U", "NH-North"],
+  ["crooks-12u-2026-05-20-1", "City of Crooks", "Wednesday, May 20", "6:30 PM", "12U", "NH-North"],
+  ["crooks-12u-2026-05-27-1", "City of Crooks", "Wednesday, May 27", "6:30 PM", "12U", "NH-North"],
+  ["colton-10u-2026-05-11-1", "City of Colton", "Monday, May 11",    "6:30 PM", "10U", "West"],
+  ["colton-10u-2026-05-13-1", "City of Colton", "Wednesday, May 13", "6:30 PM", "10U", "West"],
+  ["colton-10u-2026-05-18-1", "City of Colton", "Monday, May 18",    "6:30 PM", "10U", "West"],
+  ["colton-10u-2026-05-20-1", "City of Colton", "Wednesday, May 20", "6:30 PM", "10U", "West"],
+  ["colton-10u-2026-05-27-1", "City of Colton", "Wednesday, May 27", "6:30 PM", "10U", "East"],
+  ["colton-10u-2026-05-27-2", "City of Colton", "Wednesday, May 27", "6:30 PM", "10U", "West"]
 ];
 
 function doPost(event) {
@@ -271,7 +279,21 @@ function getGamesSheet() {
 
   INITIAL_GAMES.forEach((game) => {
     if (!existingIds.includes(game[0])) {
-      sheet.appendRow([...game, "", "", ""]);
+      // Write date and time as plain text by prepending an apostrophe via
+      // setValues on a single row. This prevents Google Sheets from
+      // auto-converting "Wednesday, May 13" or "6:30 PM" into a Date serial.
+      const lastRow = sheet.getLastRow() + 1;
+      sheet.getRange(lastRow, 1, 1, 9).setValues([[
+        game[0],          // GameId
+        game[1],          // City
+        "'" + game[2],    // Date  — apostrophe forces plain-text storage
+        "'" + game[3],    // Time  — apostrophe forces plain-text storage
+        game[4],          // Division
+        game[5],          // Field
+        "",               // AssignedName
+        "",               // AssignedEmail
+        ""                // AssignedAt
+      ]]);
     }
   });
 
@@ -293,17 +315,39 @@ function getOrCreateSheet(name, headers) {
   return sheet;
 }
 
+// rowToGame reads date and time from the sheet. If Sheets stored a Date object
+// (from old rows written before this fix), it formats it back to readable
+// strings rather than returning a raw serial number.
 function rowToGame(row) {
   return {
-    id: clean(row[0]),
-    city: clean(row[1]),
-    date: clean(row[2]),
-    time: clean(row[3]),
-    division: clean(row[4]),
-    field: clean(row[5]),
-    assignedName: clean(row[6]),
+    id:            clean(row[0]),
+    city:          clean(row[1]),
+    date:          formatSheetDate(row[2]),
+    time:          formatSheetTime(row[3]),
+    division:      clean(row[4]),
+    field:         clean(row[5]),
+    assignedName:  clean(row[6]),
     assignedEmail: clean(row[7])
   };
+}
+
+// If the cell holds a JS Date (Sheets auto-converted it), format it as
+// "Weekday, Month Day". If it's already a plain string, return it as-is.
+function formatSheetDate(value) {
+  if (value instanceof Date && !isNaN(value)) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), "EEEE, MMMM d");
+  }
+  // Strip the leading apostrophe that was written to force plain-text storage
+  return clean(value).replace(/^'/, "");
+}
+
+// If the cell holds a JS Date (Sheets auto-converted it), format it as
+// "h:mm a" (e.g. "6:30 PM"). If it's already a plain string, return it as-is.
+function formatSheetTime(value) {
+  if (value instanceof Date && !isNaN(value)) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), "h:mm a");
+  }
+  return clean(value).replace(/^'/, "");
 }
 
 function clean(value) {

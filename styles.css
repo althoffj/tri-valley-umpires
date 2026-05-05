@@ -53,16 +53,18 @@ nav a:hover {
   background: var(--accent);
 }
 
-.container, .form-container {
+.container,
+.form-container {
   max-width: 1100px;
   margin: 30px auto;
   background: var(--container);
   padding: 40px;
   border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.7);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
 }
 
-h1, h2 {
+h1,
+h2 {
   color: white;
 }
 
@@ -94,6 +96,7 @@ h2 {
 .page-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-bottom: 24px;
 }
@@ -226,21 +229,31 @@ input:focus {
   border-top: 2px solid #444;
 }
 
-.btn, .back-btn {
+.btn,
+.back-btn {
   background: var(--accent);
   color: white;
-  padding: 14px 28px;
+  /* Compact, consistent padding — same for every button regardless of label */
+  padding: 8px 16px;
   border-radius: 6px;
   text-decoration: none;
-  display: inline-block;
-  margin: 8px 8px 8px 0;
+  /* inline-flex keeps <a> and <button> elements the same height */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
   font-weight: bold;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-sizing: border-box;
+  margin: 0;
   cursor: pointer;
   border: none;
   transition: background 0.2s;
 }
 
-.btn:hover, .back-btn:hover {
+.btn:hover,
+.back-btn:hover {
   background: var(--accent-hover);
 }
 
@@ -259,7 +272,8 @@ table {
   margin: 25px 0;
 }
 
-th, td {
+th,
+td {
   border: 1px solid #555;
   padding: 12px;
   text-align: left;
@@ -304,8 +318,7 @@ th {
 
 /* Utility */
 .back-btn {
-  display: inline-block;
-  margin-bottom: 20px;
+  margin-bottom: 4px;
 }
 
 /* Mobile Responsive */
@@ -314,7 +327,8 @@ th {
     padding: 10px;
   }
 
-  .container, .form-container {
+  .container,
+  .form-container {
     padding: 20px;
     margin: 15px auto;
   }
@@ -339,19 +353,27 @@ th {
 
   .page-actions {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .page-actions .btn,
   .page-actions .back-btn {
-    margin: 4px 0;
-    text-align: center;
+    width: 100%;
+  }
+
+  .btn,
+  .back-btn {
+    display: flex;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   table {
     font-size: 0.9rem;
   }
 
-  th, td {
+  th,
+  td {
     padding: 8px 6px;
   }
 
@@ -362,13 +384,6 @@ th {
   .pdf-viewer {
     height: 60vh;
     min-height: 400px;
-  }
-
-  .btn, .back-btn {
-    display: block;
-    width: 100%;
-    text-align: center;
-    box-sizing: border-box;
   }
 }
 
@@ -385,7 +400,8 @@ th {
     font-size: 0.8rem;
   }
 
-  th, td {
+  th,
+  td {
     padding: 6px 4px;
   }
 
@@ -396,7 +412,22 @@ th {
 }
 
 @media print {
-  .header, nav, .back-btn, .page-actions, .footer, .no-print { display: none !important; }
-  .container, .form-container { box-shadow: none; margin: 0; padding: 20px; max-width: 100%; }
-  .pdf-viewer { display: none; }
+  .header,
+  nav,
+  .back-btn,
+  .page-actions,
+  .footer,
+  .no-print {
+    display: none !important;
+  }
+  .container,
+  .form-container {
+    box-shadow: none;
+    margin: 0;
+    padding: 20px;
+    max-width: 100%;
+  }
+  .pdf-viewer {
+    display: none;
+  }
 }
