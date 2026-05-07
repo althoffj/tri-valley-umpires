@@ -1211,6 +1211,12 @@ th {
   align-items: center;
 }
 
+.game-day-weather {
+  font-size: 0.88rem;
+  color: #a8d8ea;
+  margin: 4px 0 6px;
+}
+
 /* ── Mobile bottom tabs ──────────────────────────────────────────────────── */
 
 .mobile-tabs {
@@ -1266,4 +1272,94 @@ th {
 .mobile-tab.active {
   color: #d4737c;
   border-top-color: var(--accent);
+}
+
+/* ── Analytics dashboard ───────────────────────────────────────── */
+.analytics-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 16px 0 24px;
+}
+
+.analytics-card {
+  background: var(--container);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 12px;
+  text-align: center;
+}
+
+.analytics-card-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.analytics-card-label {
+  font-size: 0.72rem;
+  color: var(--light-text);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* bar chart */
+.analytics-bar-chart {
+  margin: 16px 0 32px;
+  min-height: 140px;
+}
+
+.bar-chart-inner {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 140px;
+  padding-bottom: 40px;
+  overflow-x: auto;
+}
+
+.bar-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 36px;
+  max-width: 64px;
+  height: 140px;
+  position: relative;
+}
+
+.bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.bar {
+  width: 100%;
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  transition: background 0.15s;
+}
+
+.bar:hover {
+  background: var(--accent-hover);
+}
+
+.bar-count {
+  font-size: 0.72rem;
+  color: var(--text);
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+.bar-label {
+  font-size: 0.66rem;
+  color: var(--light-text);
+  margin-top: 2px;
+  white-space: nowrap;
 }

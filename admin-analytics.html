@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Admin: Analytics - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="schedule.html">Schedule &amp; Signups</a>
+    <a href="request-umpire.html">Request Umpire</a>
+  </nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html">Games</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-config.html">Config</a>
+      <a href="admin-analytics.html" class="admin-subnav-active">Analytics</a>
+    </nav>
+
+    <h2>Season Analytics</h2>
+    <p id="analyticsNote" class="schedule-source">Loading…</p>
+
+    <!-- ── Stat cards ────────────────────────────────────────────────────── -->
+    <div id="statCards" class="analytics-cards"></div>
+
+    <!-- ── Umpire leaderboard ─────────────────────────────────────────────── -->
+    <h2 style="margin-top:32px">Umpire Activity</h2>
+    <div class="schedule-section" style="margin-top:0">
+      <table id="leaderboardTable">
+        <thead>
+          <tr>
+            <th>Umpire</th>
+            <th>Games</th>
+            <th>Plate</th>
+            <th>Field</th>
+            <th>Extra</th>
+            <th>Earned</th>
+            <th>Paid</th>
+            <th>Outstanding</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboardBody">
+          <tr><td colspan="8" style="color:var(--light-text);text-align:center">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Weekly game counts ─────────────────────────────────────────────── -->
+    <h2 style="margin-top:32px">Games by Week</h2>
+    <div id="weeklyChart" class="analytics-bar-chart"></div>
+
+  </div>
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=8"></script>
+  <script type="module" src="admin-analytics.js?v=1"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=1"></script>
+</body>
+</html>

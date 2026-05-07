@@ -32,6 +32,80 @@ let pendingSlotType = null;
 const teamGameDates = {};
 let teamCalendars   = []; // [{name, icsUrl}]
 
+// ── Weather ───────────────────────────────────────────────────────────────────
+
+const CITY_COORDS = {
+  "City of Crooks": { lat: 43.6503, lon: -96.8108 },
+  "City of Colton": { lat: 43.7877, lon: -97.0002 }
+};
+
+const weatherCache = {}; // "city|date" → { temp, condition, wind } | null
+
+const WMO_LABELS = {
+  0: "Clear", 1: "Mainly Clear", 2: "Partly Cloudy", 3: "Overcast",
+  45: "Fog", 48: "Freezing Fog",
+  51: "Light Drizzle", 53: "Drizzle", 55: "Heavy Drizzle",
+  61: "Light Rain", 63: "Rain", 65: "Heavy Rain",
+  71: "Light Snow", 73: "Snow", 75: "Heavy Snow", 77: "Snow Grains",
+  80: "Showers", 81: "Showers", 82: "Heavy Showers",
+  85: "Snow Showers", 86: "Heavy Snow Showers",
+  95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm"
+};
+
+const WMO_ICONS = {
+  0: "☀️", 1: "🌤️", 2: "⛅", 3: "☁️",
+  45: "🌫️", 48: "🌫️",
+  51: "🌦️", 53: "🌦️", 55: "🌦️",
+  61: "🌧️", 63: "🌧️", 65: "🌧️",
+  71: "❄️", 73: "❄️", 75: "❄️", 77: "❄️",
+  80: "🌦️", 81: "🌦️", 82: "🌦️",
+  85: "❄️", 86: "❄️",
+  95: "⛈️", 96: "⛈️", 99: "⛈️"
+};
+
+async function fetchWeather(city, date, timeStr) {
+  const key = `${city}|${date}`;
+  if (key in weatherCache) return weatherCache[key];
+
+  const coords = CITY_COORDS[city];
+  if (!coords) return (weatherCache[key] = null);
+
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}` +
+      `&hourly=temperature_2m,weathercode,windspeed_10m` +
+      `&temperature_unit=fahrenheit&windspeed_unit=mph` +
+      `&timezone=America%2FChicago&start_date=${date}&end_date=${date}`;
+    const res  = await fetch(url);
+    const data = await res.json();
+
+    const times = data.hourly?.time ?? [];
+    const temps = data.hourly?.temperature_2m ?? [];
+    const codes = data.hourly?.weathercode ?? [];
+    const winds = data.hourly?.windspeed_10m ?? [];
+
+    // Find the index closest to game time
+    const [h, m] = (timeStr || "12:00").split(":").map(Number);
+    const gameMinutes = h * 60 + (m || 0);
+    let best = 0, bestDiff = Infinity;
+    times.forEach((t, i) => {
+      const tHour = new Date(t).getHours();
+      const diff  = Math.abs(tHour * 60 - gameMinutes);
+      if (diff < bestDiff) { bestDiff = diff; best = i; }
+    });
+
+    const result = {
+      temp:      Math.round(temps[best] ?? 0),
+      code:      codes[best] ?? 0,
+      wind:      Math.round(winds[best] ?? 0),
+      label:     WMO_LABELS[codes[best]] ?? "Unknown",
+      icon:      WMO_ICONS[codes[best]]  ?? "🌡️"
+    };
+    return (weatherCache[key] = result);
+  } catch {
+    return (weatherCache[key] = null);
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function esc(v) {
@@ -213,6 +287,12 @@ async function renderGameDayBar() {
 
   const facilities = await getFacilities();
 
+  // Fetch weather for all games in parallel before rendering
+  const weatherMap = {};
+  await Promise.all(todayGames.map(async g => {
+    weatherMap[g.id] = await fetchWeather(g.city, g.date, g.time);
+  }));
+
   bar.style.display = "";
   bar.innerHTML = todayGames.map(game => {
     const mySlot      = getSlots(game).find(s => s.assignedUid === uid);
@@ -222,6 +302,12 @@ async function renderGameDayBar() {
       || `https://maps.google.com/?q=${encodeURIComponent(`${game.field || ""} ${game.city || ""}`)}`;
     const checkedIn   = mySlot?.checkedIn === true;
     const typeCls     = mySlot?.type === "Plate" ? "plate" : mySlot?.type === "Field" ? "field" : "extra";
+    const wx          = weatherMap[game.id];
+    const wxHtml      = wx
+      ? `<div class="game-day-weather" title="${esc(wx.label)}">
+           ${wx.icon} ${wx.temp}°F &middot; ${esc(wx.label)} &middot; ${wx.wind} mph wind
+         </div>`
+      : "";
 
     return `
     <div class="game-day-card" data-game-id="${esc(game.id)}">
@@ -231,6 +317,7 @@ async function renderGameDayBar() {
         <span class="badge badge-${typeCls}">${esc(mySlot?.type || "")}</span>
         &mdash; ${esc(game.field || "")} &mdash; ${esc(game.time || "TBD")}
       </div>
+      ${wxHtml}
       <div class="game-day-actions">
         <a href="${esc(mapsUrl)}" class="btn" target="_blank" rel="noopener">Directions</a>
         ${partnerSlot
