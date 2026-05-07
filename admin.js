@@ -223,16 +223,23 @@ function renderAdminGames() {
           </div>`).join("")
       : "—";
 
+    const changeWarning = g.possibleChange
+      ? `<div style="color:#ffcc80;font-size:0.78rem;margin-top:4px">⚠ GameChanger event missing — verify with city</div>`
+      : "";
+    const linkedBadge = g.icsLinks?.length
+      ? `<div style="color:var(--light-text);font-size:0.72rem;margin-top:2px">GC linked</div>`
+      : "";
+
     return `
-    <tr style="${g.cancelled ? "opacity:0.55" : ""}">
+    <tr style="${g.cancelled ? "opacity:0.55" : ""}${g.possibleChange ? ";background:rgba(255,204,0,0.06)" : ""}">
       <td>${esc(fmtDate(g.date))}</td>
       <td>${esc(fmtTime(g.time))}</td>
       <td>${esc(g.city || "—")}</td>
       <td>${esc(g.division || "—")}</td>
       <td>${esc(g.type || "—")}</td>
-      <td>${esc(g.field || "—")}</td>
+      <td>${esc(g.field || "—")}${linkedBadge}</td>
       <td>${g.payRate ? `$${Number(g.payRate).toFixed(2)}` : "—"}</td>
-      <td>${g.cancelled ? '<span style="color:#ffb4b4">Cancelled</span>' : slotHtml}</td>
+      <td>${g.cancelled ? '<span style="color:#ffb4b4">Cancelled</span>' : slotHtml}${changeWarning}</td>
       <td>
         ${g.cancelled
           ? ""
@@ -414,10 +421,12 @@ async function syncGamesFromCalendars() {
     const functions   = getFunctions(app, "us-central1");
     const syncGamesNow = httpsCallable(functions, "syncGamesNow");
     const { data } = await syncGamesNow();
-    const parts = [`${data.added} game${data.added !== 1 ? "s" : ""} added`];
-    if (data.failed) parts.push(`${data.failed} feed${data.failed !== 1 ? "s" : ""} failed`);
-    setMsg("syncCalMessage", `Sync complete: ${parts.join(", ")}.`, data.added > 0 ? "success" : "info");
-    if (data.added > 0) await loadGames();
+    const parts = [];
+    if (data.linked)  parts.push(`${data.linked} game${data.linked !== 1 ? "s" : ""} linked to GameChanger`);
+    if (data.flagged) parts.push(`${data.flagged} possible change${data.flagged !== 1 ? "s" : ""} flagged`);
+    if (data.failed)  parts.push(`${data.failed} feed${data.failed !== 1 ? "s" : ""} failed`);
+    setMsg("syncCalMessage", parts.length ? `Sync: ${parts.join(", ")}.` : "Sync complete — nothing new.", data.flagged > 0 ? "warning" : "success");
+    if (data.linked || data.flagged) await loadGames();
   } catch (err) {
     setMsg("syncCalMessage", `Error: ${err.message}`, "error");
   } finally {

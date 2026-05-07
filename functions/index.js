@@ -76,84 +76,80 @@ async function runSync() {
 
   const teamsSnap = await db.doc("config/teamCalendars").get();
   const teams     = teamsSnap.exists ? (teamsSnap.data().teams || []) : [];
-  console.log(`Teams in Firestore (${teams.length}): ${teams.map(t => t.name).join(", ") || "none"}`);
   const relevant  = teams.filter(t => /10U|12U/i.test(t.name));
-  console.log(`Relevant 10U/12U teams (${relevant.length}): ${relevant.map(t => t.name).join(", ") || "none"}`);
 
-  if (relevant.length === 0) return { added: 0, failed: 0 };
+  if (relevant.length === 0) return { added: 0, failed: 0, linked: 0, flagged: 0 };
 
-  const gamesSnap  = await db.collection("games").get();
-  const seenUids   = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
-
-  const ratesSnap  = await db.doc("config/payRates").get();
-  const rates      = ratesSnap.exists ? ratesSnap.data() : {};
-  const defaultPay = rates.plate || 0;
-
-  const today = todayISO();
-  let added = 0, failed = 0;
+  // Build a map: "DIVISION|DATE" → [{ uid, teamName }] from all ICS feeds
+  const eventsByDivDate = {}; // e.g. "12U|2026-05-13" → [{uid, teamName}]
+  let failed = 0;
 
   for (const team of relevant) {
     let icsText;
-    try {
-      icsText = await fetchICS(team.icsUrl);
-    } catch (err) {
-      console.error(`Failed to fetch ${team.name}: ${err.message}`);
-      failed++;
-      continue;
-    }
+    try { icsText = await fetchICS(team.icsUrl); }
+    catch (err) { console.error(`Failed to fetch ${team.name}: ${err.message}`); failed++; continue; }
 
     const division = /10U/i.test(team.name) ? "10U" : "12U";
-
-    const events = parseVEvents(icsText);
-    const upcoming = events.filter(e => e.date >= today);
-    console.log(`  ${team.name}: ${events.length} total, ${upcoming.length} upcoming`);
-
-    for (const ev of events) {
-      if (ev.date < today) continue;
-
-      // Empty location = home game; non-empty = away game at another venue
-      // Also accept explicit Crooks/Colton addresses in case GameChanger fills them in
-      let city = null;
-      if (!ev.location) {
-        city = division === "12U" ? "City of Crooks" : "City of Colton";
-      } else if (/crooks,\s*sd/i.test(ev.location)) {
-        city = "City of Crooks";
-      } else if (/colton,\s*sd/i.test(ev.location)) {
-        city = "City of Colton";
+    for (const ev of parseVEvents(icsText)) {
+      if (!ev.uid) continue;
+      const key = `${division}|${ev.date}`;
+      if (!eventsByDivDate[key]) eventsByDivDate[key] = [];
+      // avoid duplicate UIDs across teams
+      if (!eventsByDivDate[key].some(e => e.uid === ev.uid)) {
+        eventsByDivDate[key].push({ uid: ev.uid, teamName: team.name, location: ev.location });
       }
-      if (!city) continue;
+    }
+  }
 
-      if (ev.uid && seenUids.has(ev.uid)) continue;
+  // ── Match city-schedule games to ICS events (by date + division) ─────────────
+  const cityGamesSnap = await db.collection("games").where("source", "==", "city-schedule").get();
+  const today = todayISO();
+  let linked = 0, flagged = 0;
 
-      await db.collection("games").add({
-        city, division,
-        date:   ev.date,
-        time:   ev.time,
-        type:   "Regular",
-        field:  ev.location,
-        payRate: defaultPay,
-        umpireSlots: [
-          { type: "Plate", assignedUid: null, assignedName: null },
-          { type: "Field", assignedUid: null, assignedName: null }
-        ],
-        cancelled:  false,
-        externalId: ev.uid || null,
-        source:     "calendar",
-        createdAt:  FieldValue.serverTimestamp()
-      });
+  for (const docSnap of cityGamesSnap.docs) {
+    const game = docSnap.data();
+    if (game.date < today || game.cancelled) continue;
 
-      if (ev.uid) seenUids.add(ev.uid);
-      added++;
+    const key     = `${game.division}|${game.date}`;
+    const matches = eventsByDivDate[key] || [];
+
+    if (!game.icsLinks || game.icsLinks.length === 0) {
+      // First time: try to link
+      if (matches.length > 0) {
+        await docSnap.ref.update({ icsLinks: matches.map(e => ({ uid: e.uid, teamName: e.teamName })) });
+        linked++;
+        console.log(`Linked ${game.division} ${game.date} (${game.field}) → ${matches.length} ICS event(s)`);
+      }
+    } else {
+      // Already linked: check if any UIDs vanished (possible cancellation / reschedule)
+      const liveUids = new Set(matches.map(e => e.uid));
+      const missing  = game.icsLinks.filter(l => !liveUids.has(l.uid));
+      if (missing.length > 0 && !game.possibleChange) {
+        await docSnap.ref.update({ possibleChange: true });
+        flagged++;
+        console.log(`Possible change: ${game.division} ${game.date} — ${missing.length} ICS event(s) missing`);
+      } else if (missing.length === 0 && game.possibleChange) {
+        await docSnap.ref.update({ possibleChange: false });
+      }
+
+      // Check if an explicitly-located Crooks/Colton entry appeared (field update)
+      const locatedMatch = matches.find(e =>
+        /crooks,\s*sd/i.test(e.location) || /colton,\s*sd/i.test(e.location)
+      );
+      if (locatedMatch && !game.field.includes(locatedMatch.location)) {
+        await docSnap.ref.update({ field: locatedMatch.location });
+        console.log(`Field updated for ${game.division} ${game.date}: ${locatedMatch.location}`);
+      }
     }
   }
 
   await db.doc("config/syncState").set(
-    { lastSyncedAt: FieldValue.serverTimestamp(), lastResult: { added, failed } },
+    { lastSyncedAt: FieldValue.serverTimestamp(), lastResult: { linked, flagged, failed } },
     { merge: true }
   );
 
-  console.log(`Sync complete: ${added} added, ${failed} failed`);
-  return { added, failed };
+  console.log(`Sync: ${linked} linked, ${flagged} flagged, ${failed} feed(s) failed`);
+  return { linked, flagged, failed };
 }
 
 // ── Scheduled: runs every 6 hours automatically ───────────────────────────────
