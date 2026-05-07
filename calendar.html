@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calendar - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=5" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Game Calendar</h1>
+  </div>
+
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="expectations.html">Expectations</a>
+    <a href="principles_of_umpiring.html">Principles</a>
+    <a href="rule_breakdown.html">Rules</a>
+    <a href="pregame-meeting.html">Plate Meeting</a>
+    <a href="schedule.html">Schedule &amp; Signups</a>
+    <a href="calendar.html">Calendar</a>
+    <a href="fields.html" data-auth-approved style="display:none">Fields</a>
+    <a href="incident.html" data-auth-approved style="display:none">Incident Report</a>
+    <a href="form.html" data-auth-guest>Acknowledgment</a>
+    <a href="request-umpire.html">Request Umpire</a>
+    <a href="admin.html" data-auth-admin style="display:none">Admin</a>
+  </nav>
+
+  <div class="container">
+
+    <!-- View tabs + nav -->
+    <div class="page-actions" style="justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+      <div style="display:flex;gap:8px">
+        <button class="btn cal-tab-btn filter-active" data-view="month">Month</button>
+        <button class="btn print-btn cal-tab-btn" data-view="week">Week</button>
+        <button class="btn print-btn cal-tab-btn" data-view="day">Day</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn print-btn" id="calPrev">&larr;</button>
+        <span id="calLabel" style="color:white;font-weight:bold;min-width:160px;text-align:center"></span>
+        <button class="btn print-btn" id="calNext">&rarr;</button>
+        <button class="btn print-btn" id="calToday">Today</button>
+      </div>
+    </div>
+
+    <!-- Calendar display area -->
+    <div id="calView"></div>
+
+  </div>
+
+  <div class="footer">
+    <p>
+      <span data-auth-approved style="display:none">
+        Questions? Post in
+        <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+        | Jeff Althoff: 605-380-0229 (urgent only) |
+      </span>
+      <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+      | <a href="https://www.minndak.org/" target="_blank">Minndak Baseball League</a>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=5"></script>
+  <script type="module" src="calendar.js?v=5"></script>
+</body>
+</html>
