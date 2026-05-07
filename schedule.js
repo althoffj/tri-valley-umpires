@@ -1,5 +1,5 @@
 // schedule.js — Firestore-based schedule with multi-slot signups, badges, and pay tracking
-import { db } from "./firebase.js";
+import { db, auth } from "./firebase.js";
 import {
   authReadyPromise,
   isLoggedIn,
@@ -8,6 +8,9 @@ import {
   getCurrentProfile
 } from "./auth.js";
 import {
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
   collection,
   getDocs,
   getDoc,
@@ -15,6 +18,7 @@ import {
   doc,
   query,
   orderBy,
+  where,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -220,7 +224,12 @@ function showLoading() {
 async function loadGames() {
   showLoading();
   try {
-    const q = query(collection(db, "games"), orderBy("date"), orderBy("time"));
+    const q = query(
+      collection(db, "games"),
+      where("needsUmpires", "==", true),
+      orderBy("date"),
+      orderBy("time")
+    );
     const snap = await getDocs(q);
     games = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderGameRows();
@@ -463,4 +472,12 @@ authReadyPromise.then(() => {
   if (myGamesBtn) myGamesBtn.style.display = isLoggedIn() ? "" : "none";
   loadTeamCalendars();
   loadGames();
+});
+
+// Re-render buttons whenever auth state changes (sign in / sign out / token refresh)
+// so signup buttons appear immediately without requiring a page reload.
+onAuthStateChanged(auth, () => {
+  const myGamesBtn = document.getElementById("myGamesBtn");
+  if (myGamesBtn) myGamesBtn.style.display = isLoggedIn() ? "" : "none";
+  if (games.length > 0) renderGameRows();
 });
