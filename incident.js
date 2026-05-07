@@ -1,5 +1,5 @@
 // incident.js — submit incident reports against games the umpire worked
-import { db, storage } from "./firebase.js";
+import { db } from "./firebase.js";
 import {
   authReadyPromise,
   isApproved,
@@ -9,21 +9,11 @@ import {
 import {
   collection,
   addDoc,
-  updateDoc,
-  doc,
   getDocs,
   query,
   orderBy,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-
-const MAX_FILES     = 3;
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
 function esc(v) {
   return String(v ?? "")
@@ -53,13 +43,7 @@ function fieldError(id, msg) {
 }
 
 function clearErrors() {
-  ["gameSelectError", "incidentTypeError", "descriptionError", "attachmentsError"]
-    .forEach(id => fieldError(id, ""));
-}
-
-function setProgress(html) {
-  const el = document.getElementById("uploadProgress");
-  if (el) el.innerHTML = html;
+  ["gameSelectError", "incidentTypeError", "descriptionError"].forEach(id => fieldError(id, ""));
 }
 
 async function loadMyGames() {
@@ -102,27 +86,6 @@ async function loadMyGames() {
   }
 }
 
-async function uploadAttachments(files, uid, reportId) {
-  const results = [];
-  for (let i = 0; i < files.length; i++) {
-    const file     = files[i];
-    const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const storageRef = ref(storage, `incidentReports/${uid}/${reportId}/${safeName}`);
-
-    setProgress(
-      `<span style="color:var(--light-text);font-size:0.85rem">Uploading ${i + 1} of ${files.length}: ${esc(file.name)}&hellip;</span>`
-    );
-
-    const snapshot = await uploadBytes(storageRef, file, {
-      contentType: file.type || "application/octet-stream"
-    });
-    const url = await getDownloadURL(snapshot.ref);
-    results.push({ name: file.name, url, type: file.type || "" });
-  }
-  setProgress("");
-  return results;
-}
-
 async function handleSubmit(e) {
   e.preventDefault();
   clearErrors();
@@ -131,25 +94,11 @@ async function handleSubmit(e) {
   const incidentType    = document.getElementById("incidentType");
   const description     = document.getElementById("description");
   const involvedParties = document.getElementById("involvedParties");
-  const fileInput       = document.getElementById("attachments");
-  const files           = [...(fileInput?.files ?? [])];
 
   let valid = true;
   if (!gameSelect.value)         { fieldError("gameSelectError",   "Please select a game.");           valid = false; }
   if (!incidentType.value)       { fieldError("incidentTypeError", "Please select an incident type."); valid = false; }
   if (!description.value.trim()) { fieldError("descriptionError",  "Please describe the incident.");   valid = false; }
-
-  if (files.length > MAX_FILES) {
-    fieldError("attachmentsError", `Maximum ${MAX_FILES} files allowed.`);
-    valid = false;
-  }
-  const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
-  if (oversized.length) {
-    fieldError("attachmentsError",
-      `${oversized.map(f => f.name).join(", ")} exceed${oversized.length === 1 ? "s" : ""} the 5 MB limit.`);
-    valid = false;
-  }
-
   if (!valid) return;
 
   const user        = getCurrentUser();
@@ -161,8 +110,7 @@ async function handleSubmit(e) {
   setMsg("Submitting…", "info");
 
   try {
-    // Write Firestore doc first to get an ID used as the Storage folder
-    const docRef = await addDoc(collection(db, "incidentReports"), {
+    await addDoc(collection(db, "incidentReports"), {
       gameId:          gameSelect.value,
       gameDate:        selectedOpt.dataset.date     ?? "",
       gameCity:        selectedOpt.dataset.city     ?? "",
@@ -174,24 +122,15 @@ async function handleSubmit(e) {
       reporterName:    profile
         ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
         : user.email,
-      attachments: [],
       submittedAt: serverTimestamp()
     });
 
-    // Upload files then patch the doc with the download URLs
-    if (files.length) {
-      const attachments = await uploadAttachments(files, user.uid, docRef.id);
-      await updateDoc(doc(db, "incidentReports", docRef.id), { attachments });
-    }
-
     setMsg("Report submitted. An administrator will review it.", "success");
     document.getElementById("incidentForm").reset();
-    setProgress("");
     await loadMyGames();
   } catch (err) {
     console.error(err);
     setMsg("Error submitting report. Please try again.", "error");
-    setProgress("");
     btn.disabled = false;
   }
 }

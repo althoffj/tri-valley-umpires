@@ -337,21 +337,6 @@ async function loadIncidents() {
           ${gameLabel ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Game:</span> ${esc(gameLabel)}</p>` : ""}
           ${r.involvedParties ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Involved:</span> ${esc(r.involvedParties)}</p>` : ""}
           <p style="margin:8px 0 0;white-space:pre-wrap">${esc(r.description ?? "")}</p>
-          ${(r.attachments ?? []).length ? `
-          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
-            ${(r.attachments).map(a => {
-              const isImage = a.type?.startsWith("image/");
-              return isImage
-                ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">
-                     <img src="${esc(a.url)}" alt="${esc(a.name)}"
-                       style="max-width:120px;max-height:90px;border-radius:6px;border:1px solid #444;object-fit:cover" />
-                   </a>`
-                : `<a href="${esc(a.url)}" target="_blank" rel="noopener"
-                     style="font-size:0.82rem;color:#7ec8f7;display:flex;align-items:center;gap:4px">
-                     📎 ${esc(a.name)}
-                   </a>`;
-            }).join("")}
-          </div>` : ""}
         </div>`;
     }).join("");
   } catch (err) {

@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#601929">
   <title>Incident Report - Tri-Valley Baseball Umpires</title>
   <link rel="stylesheet" href="styles.css?v=8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io https://firebasestorage.googleapis.com; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebasestorage.googleapis.com;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com;">
 </head>
 <body>
   <div class="header">
@@ -72,12 +72,6 @@
         style="width:100%;padding:14px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:16px;box-sizing:border-box;resize:vertical;font-family:inherit"
         placeholder="Describe what happened, the sequence of events, and any actions you took…"></textarea>
       <p class="field-error" id="descriptionError"></p>
-
-      <label for="attachments">Attachments <span style="font-weight:normal;color:var(--light-text)">(optional — up to 3 photos or PDFs, 5 MB each)</span></label>
-      <input type="file" id="attachments" multiple accept="image/*,application/pdf"
-        style="display:block;width:100%;padding:10px 0;color:#eee;font-size:0.9rem" />
-      <p class="field-error" id="attachmentsError"></p>
-      <div id="uploadProgress" style="margin-top:8px"></div>
 
       <p id="incidentMessage" class="signup-message" aria-live="polite" style="margin-top:16px"></p>
 
