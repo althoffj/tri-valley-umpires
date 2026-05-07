@@ -1,4 +1,4 @@
-const SIGNUP_API_URL = "https://script.google.com/macros/s/AKfycbxG9irOvcLQfiPi-O7BtwP_Kt8QL6At0pJpM6393iEeE10AX4ZbuGGtmGbky8Lv9Vhu/exec";
+const SIGNUP_API_URL = "https://script.google.com/macros/s/AKfycbydMOi6hVva4DBCFIUdcanW_rDnVYeehUMSizpVShojTTA0wrY9-459yeekTWMbfXuu/exec";
 
 // NOTE: The !SIGNUP_API_URL branches below are development-only fallbacks.
 // In production this constant is always set, so those code paths are inactive.

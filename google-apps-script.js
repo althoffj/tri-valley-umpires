@@ -407,6 +407,14 @@ function getOrCreateSheet(name, headers) {
 
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
+  } else {
+    // Ensure all expected columns exist — add any missing ones
+    const existingColumns = sheet.getLastColumn();
+    if (existingColumns < headers.length) {
+      for (let col = existingColumns + 1; col <= headers.length; col++) {
+        sheet.getRange(1, col).setValue(headers[col - 1]);
+      }
+    }
   }
 
   return sheet;
