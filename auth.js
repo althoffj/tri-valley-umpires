@@ -1,138 +1,135 @@
-// Authentication for Tri-Valley Umpires Portal
-// Uses localStorage to persist login session
-// Validates against Google Sheets via JSONP
-//
-// SECURITY NOTE: The login() function passes the password as a URL query
-// parameter because JSONP is required for GitHub Pages → Google Apps Script
-// communication (no CORS support on the Apps Script side). This means the
-// password will appear in browser history and server access logs. A backend
-// proxy would eliminate this risk but is not available in this static-site
-// architecture. Umpires should use a unique password not shared with other
-// services.
+// auth.js — Firebase Authentication + session management
+import { auth, db } from "./firebase.js";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  sendPasswordResetEmail
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  doc,
+  getDoc
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-const AUTH_API_URL = "https://script.google.com/macros/s/AKfycbxAUMxCm-PebuhlMTlnODLyaWXwtO5rbiAzBVgI8ozSJQeGxPyB_t6StTiI1Ejy_QOA/exec";
+// Module-level state — populated by onAuthStateChanged
+let currentUser    = null;
+let currentProfile = null; // umpires/{uid} document data
+let currentIsAdmin = false;
+let authReady      = false;
 
-const AUTH_STORAGE_KEY = "umpireSession";
+// Resolves once the initial auth state check completes (used by other pages
+// to await auth before deciding whether to redirect)
+let authReadyResolve;
+export const authReadyPromise = new Promise(resolve => { authReadyResolve = resolve; });
 
-// Sessions expire after 30 days of inactivity
-const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30;
-
-// JSONP login requests time out after 10 seconds
-const JSONP_TIMEOUT_MS = 10000;
-
-function getSession() {
-  try {
-    var raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!raw) return null;
-    var session = JSON.parse(raw);
-
-    // Expire stale sessions
-    if (session && session.loggedInAt) {
-      var age = Date.now() - new Date(session.loggedInAt).getTime();
-      if (age > SESSION_MAX_AGE_MS) {
-        clearSession();
-        return null;
-      }
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    currentUser = user;
+    try {
+      const [umpireSnap, adminSnap] = await Promise.all([
+        getDoc(doc(db, "umpires", user.uid)),
+        getDoc(doc(db, "admins", user.uid))
+      ]);
+      currentProfile = umpireSnap.exists() ? umpireSnap.data() : null;
+      currentIsAdmin = adminSnap.exists();
+    } catch (e) {
+      currentProfile = null;
+      currentIsAdmin = false;
     }
-
-    return session;
-  } catch (e) {
-    return null;
+  } else {
+    currentUser    = null;
+    currentProfile = null;
+    currentIsAdmin = false;
   }
+  authReady = true;
+  authReadyResolve();
+  applyAuthGate();
+});
+
+// ── Public API ───────────────────────────────────────────────────────────────
+
+export function isLoggedIn() {
+  return currentUser !== null;
 }
 
-function setSession(name, email) {
-  var session = {
-    name: name,
-    email: email,
-    loggedInAt: new Date().toISOString()
-  };
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+export function isApproved() {
+  return currentProfile && currentProfile.approved === true;
 }
 
-function clearSession() {
-  localStorage.removeItem(AUTH_STORAGE_KEY);
+export function isAdmin() {
+  return currentIsAdmin;
 }
 
-function isLoggedIn() {
-  return getSession() !== null;
+export function getLoggedInName() {
+  if (currentProfile?.name) return currentProfile.name;
+  if (currentUser?.displayName) return currentUser.displayName;
+  if (currentUser?.email) return currentUser.email;
+  return null;
 }
 
-function getLoggedInName() {
-  var s = getSession();
-  return s ? s.name : null;
+export function getCurrentUser() {
+  return currentUser;
 }
 
-function login(email, password) {
-  return new Promise(function(resolve, reject) {
-    var callbackName = "umpireLogin_" + Date.now() + "_" + Math.random().toString(36).slice(2);
-    var script = document.createElement("script");
-    var url = new URL(AUTH_API_URL);
-    var settled = false;
-
-    url.searchParams.set("action", "login");
-    url.searchParams.set("callback", callbackName);
-    url.searchParams.set("email", email);
-    url.searchParams.set("password", password);
-
-    // Timeout: if the Apps Script doesn't respond in time, reject cleanly
-    var timer = setTimeout(function() {
-      if (settled) return;
-      settled = true;
-      delete window[callbackName];
-      script.remove();
-      reject(new Error("Login timed out. Please check your connection and try again."));
-    }, JSONP_TIMEOUT_MS);
-
-    window[callbackName] = function(payload) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      delete window[callbackName];
-      script.remove();
-      if (payload && payload.ok) {
-        setSession(payload.name, email);
-        resolve(payload);
-      } else {
-        reject(new Error((payload && payload.message) || "Login failed."));
-      }
-    };
-
-    script.onerror = function() {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      delete window[callbackName];
-      script.remove();
-      reject(new Error("Unable to reach the login service."));
-    };
-
-    script.src = url.toString();
-    document.body.appendChild(script);
-  });
+export function getCurrentProfile() {
+  return currentProfile;
 }
 
-function logout() {
-  clearSession();
+export async function login(email, password) {
+  const credential = await signInWithEmailAndPassword(auth, email, password);
+  const snap = await getDoc(doc(db, "umpires", credential.user.uid));
+
+  if (!snap.exists()) {
+    await signOut(auth);
+    throw new Error("Account profile not found. Please contact the league administrator.");
+  }
+
+  const profile = snap.data();
+  if (profile.approved === false) {
+    await signOut(auth);
+    throw new Error("Your account has not yet been approved by an administrator. Please wait for approval before signing in.");
+  }
+
+  currentProfile = profile;
+  return credential;
 }
 
-// Show/hide elements based on login state
-function applyAuthGate() {
-  var loggedIn = isLoggedIn();
-  var name = getLoggedInName();
+export async function logout() {
+  await signOut(auth);
+}
 
-  document.querySelectorAll("[data-auth-required]").forEach(function(el) {
+export async function sendResetEmail(email) {
+  await sendPasswordResetEmail(auth, email);
+}
+
+export async function checkIsAdmin(uid) {
+  const snap = await getDoc(doc(db, "admins", uid));
+  return snap.exists();
+}
+
+// ── DOM gating ───────────────────────────────────────────────────────────────
+
+export function applyAuthGate() {
+  const loggedIn = isLoggedIn();
+  const name     = getLoggedInName();
+
+  document.querySelectorAll("[data-auth-required]").forEach(el => {
     el.style.display = loggedIn ? "" : "none";
   });
 
-  document.querySelectorAll("[data-auth-guest]").forEach(function(el) {
+  document.querySelectorAll("[data-auth-guest]").forEach(el => {
     el.style.display = loggedIn ? "none" : "";
   });
 
-  document.querySelectorAll("[data-auth-name]").forEach(function(el) {
+  document.querySelectorAll("[data-auth-name]").forEach(el => {
     el.textContent = name || "";
+  });
+
+  // Show admin nav link only for admins
+  document.querySelectorAll("[data-auth-admin]").forEach(el => {
+    el.style.display = (loggedIn && isAdmin()) ? "" : "none";
   });
 }
 
-// Run on every page load
+// Run on every page load to set initial state before auth resolves
 document.addEventListener("DOMContentLoaded", applyAuthGate);
