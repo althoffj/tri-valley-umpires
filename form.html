@@ -4,16 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Umpire Acknowledgment - Tri-Valley Baseball</title>
-    <link rel="stylesheet" href="styles.css?v=2" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://script.google.com https://script.googleusercontent.com https://challenges.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://challenges.cloudflare.com; connect-src 'self' https://script.google.com;">
+    <link rel="stylesheet" href="styles.css?v=4" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com;">
   </head>
   <body>
     <div class="header">
-      <img
-        src="logo.png"
-        alt="Tri-Valley Baseball"
-        class="logo"
-      />
+      <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
       <h1>Umpire Acknowledgment Contract</h1>
     </div>
 
@@ -23,99 +19,137 @@
       <a href="principles_of_umpiring.html">Principles</a>
       <a href="rule_breakdown.html">Rules</a>
       <a href="pregame-meeting.html">Plate Meeting</a>
-      <a href="schedule.html" data-auth-required style="display:none">Schedule & Signups</a>
-      <a href="form.html">Acknowledgment</a>
+      <a href="schedule.html">Schedule & Signups</a>
+      <a href="form.html" data-auth-guest>Acknowledgment</a>
+      <a href="admin.html" data-auth-admin style="display:none">Admin</a>
     </nav>
 
     <div class="form-container">
       <div class="page-actions">
         <a href="index.html" class="back-btn">Back to Home</a>
-        <a href="umpire_responsibility.pdf" target="_blank" class="btn" download
-          >Download Expectations PDF</a
-        >
-        <a href="umpire_responsibility.pdf" target="_blank" class="btn print-btn"
-          >Open / Print Expectations PDF</a
-        >
+        <a href="umpire_responsibility.pdf" target="_blank" class="btn" download>Download Expectations PDF</a>
+        <a href="umpire_responsibility.pdf" target="_blank" class="btn print-btn">Open / Print Expectations PDF</a>
       </div>
 
       <h1>Umpire Rules & Expectations Acknowledgment</h1>
 
       <div class="document-note">
-        <p>
-          Before submitting this form, review the official expectations PDF. The
-          PDF is the source of truth for the rules and expectations you are
-          acknowledging.
-        </p>
+        <p>Before submitting this form, review the official expectations PDF. The PDF is the source of truth for the rules and expectations you are acknowledging.</p>
       </div>
 
       <div class="document-note" style="border-left-color: #b8f2c4;">
-        <p>
-          <strong>What happens after you submit:</strong>
-        </p>
+        <p><strong>What happens after you submit:</strong></p>
         <ol style="margin: 8px 0 0; padding-left: 20px; color: var(--text);">
           <li>Your acknowledgment is recorded and a confirmation email is sent.</li>
-          <li>
-            An administrator reviews and approves your account. You'll receive
-            confirmation once approved &mdash; this typically takes 1&ndash;2 days.
-          </li>
-          <li>
-            Once approved, log in on the home page to view contact information,
-            the Slack link, and sign up for games.
-          </li>
+          <li>An administrator reviews and approves your account. You'll receive confirmation once approved &mdash; this typically takes 1&ndash;2 days.</li>
+          <li>Once approved, log in on the home page to view contact information, the Slack link, and sign up for games.</li>
         </ol>
       </div>
 
-      <form id="umpireForm">
-        <label>Umpire Full Name *</label>
-        <input type="text" id="name" required />
+      <form id="umpireForm" novalidate>
 
-        <label>Umpire Address</label>
-        <input type="text" id="address" placeholder="Street, City, State, ZIP" />
-
-        <label>Umpire Email *</label>
-        <input type="email" id="email" required />
-
-        <label>Umpire Phone *</label>
-        <input type="tel" id="phone" required />
-
-        <label>Create a Password *</label>
-        <input type="password" id="password" required minlength="6"
-          placeholder="At least 6 characters — used to log in later" />
-
-        <label>Electronic Signature (Type Full Name) *</label>
-        <input type="text" id="signature" required />
-
-        <div class="parent-section">
-          <h2>Parent / Guardian (if under 18)</h2>
-          <label>Parent Name</label>
-          <input type="text" id="parent_name" />
-
-          <label>Parent Email</label>
-          <input type="email" id="parent_email" />
-
-          <label>Parent Phone</label>
-          <input type="tel" id="parent_phone" />
+        <!-- Name -->
+        <div class="form-row">
+          <div class="form-group">
+            <label for="firstName">First Name *</label>
+            <input type="text" id="firstName" required autocomplete="given-name" />
+            <p class="field-error" id="firstNameError"></p>
+          </div>
+          <div class="form-group">
+            <label for="lastName">Last Name *</label>
+            <input type="text" id="lastName" required autocomplete="family-name" />
+            <p class="field-error" id="lastNameError"></p>
+          </div>
         </div>
 
-        <div
-          class="cf-turnstile"
-          data-sitekey="0x4AAAAAADKfkT0hEMR0Z8Xc"
-          data-theme="dark"
-          style="margin: 25px 0"
-        ></div>
+        <!-- Email -->
+        <label for="email">Umpire Email *</label>
+        <input type="email" id="email" required autocomplete="email" />
+        <p class="field-error" id="emailError"></p>
 
-        <button type="submit" class="btn">Submit Official Acknowledgment</button>
-        <button type="button" class="btn print-btn" onclick="window.print()">
-          Print / Save Form
-        </button>
+        <!-- Phone -->
+        <label for="phone">Umpire Phone *</label>
+        <input type="tel" id="phone" required autocomplete="tel" placeholder="(605) 555-1234" maxlength="14" />
+        <p class="field-error" id="phoneError"></p>
+
+        <!-- Address -->
+        <div class="document-note" style="border-left-color: #f2d4b8; margin-bottom: 8px;">
+          <p><strong>Payroll address:</strong> This address will be used for payment. Please double-check it before submitting.</p>
+        </div>
+
+        <label for="street">Street Address *</label>
+        <input type="text" id="street" required autocomplete="address-line1" placeholder="123 Main St" />
+        <p class="field-error" id="streetError"></p>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="city">City *</label>
+            <input type="text" id="city" required autocomplete="address-level2" />
+            <p class="field-error" id="cityError"></p>
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="state">State *</label>
+            <select id="state" required autocomplete="address-level1">
+              <option value="">--</option>
+              <option>AL</option><option>AK</option><option>AZ</option><option>AR</option>
+              <option>CA</option><option>CO</option><option>CT</option><option>DE</option>
+              <option>FL</option><option>GA</option><option>HI</option><option>ID</option>
+              <option>IL</option><option>IN</option><option>IA</option><option>KS</option>
+              <option>KY</option><option>LA</option><option>ME</option><option>MD</option>
+              <option>MA</option><option>MI</option><option>MN</option><option>MS</option>
+              <option>MO</option><option>MT</option><option>NE</option><option>NV</option>
+              <option>NH</option><option>NJ</option><option>NM</option><option>NY</option>
+              <option>NC</option><option>ND</option><option>OH</option><option>OK</option>
+              <option>OR</option><option>PA</option><option>RI</option><option>SC</option>
+              <option>SD</option><option>TN</option><option>TX</option><option>UT</option>
+              <option>VT</option><option>VA</option><option>WA</option><option>WV</option>
+              <option>WI</option><option>WY</option>
+            </select>
+            <p class="field-error" id="stateError"></p>
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="zip">ZIP *</label>
+            <input type="text" id="zip" required autocomplete="postal-code" placeholder="57001" maxlength="10" />
+            <p class="field-error" id="zipError"></p>
+          </div>
+        </div>
+
+        <!-- Password -->
+        <label for="password">Create a Password *</label>
+        <input type="password" id="password" required minlength="6"
+          placeholder="At least 6 characters — used to log in later" autocomplete="new-password" />
+        <p class="field-error" id="passwordError"></p>
+
+        <!-- Signature -->
+        <label for="signature">Electronic Signature (Type Full Name) *</label>
+        <input type="text" id="signature" required autocomplete="name" />
+        <p class="field-error" id="signatureError"></p>
+
+        <!-- Parent / Guardian -->
+        <div class="parent-section">
+          <h2>Parent / Guardian (if under 18)</h2>
+          <label for="parent_name">Parent Name</label>
+          <input type="text" id="parent_name" autocomplete="name" />
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="parent_email">Parent Email</label>
+              <input type="email" id="parent_email" autocomplete="email" />
+              <p class="field-error" id="parentEmailError"></p>
+            </div>
+            <div class="form-group">
+              <label for="parent_phone">Parent Phone</label>
+              <input type="tel" id="parent_phone" autocomplete="tel" placeholder="(605) 555-1234" maxlength="14" />
+            </div>
+          </div>
+        </div>
+
+        <p id="formMessage" class="signup-message" aria-live="polite"></p>
+
+        <button type="submit" class="btn" id="submitBtn">Submit Official Acknowledgment</button>
+        <button type="button" class="btn print-btn" onclick="window.print()">Print / Save Form</button>
       </form>
     </div>
-
-    <!-- Turnstile CAPTCHA -->
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-    <script src="form.js?v=1"></script>
 
     <div class="footer">
       <p>
@@ -125,5 +159,9 @@
         | Official Umpire Portal
       </p>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script type="module" src="auth.js?v=4"></script>
+    <script type="module" src="form.js?v=4"></script>
   </body>
 </html>

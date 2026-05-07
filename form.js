@@ -99,12 +99,6 @@ document.getElementById("email").addEventListener("blur", function() {
 document.getElementById("umpireForm").addEventListener("submit", async function(e) {
   e.preventDefault();
 
-  const turnstileResponse = document.querySelector("[name='cf-turnstile-response']")?.value;
-  if (!turnstileResponse) {
-    alert("Please complete the security check before submitting.");
-    return;
-  }
-
   const data = {
     firstName:   document.getElementById("firstName").value.trim(),
     lastName:    document.getElementById("lastName").value.trim(),
@@ -178,7 +172,6 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
     msgEl.className   = "signup-message error";
     submitBtn.disabled    = false;
     submitBtn.textContent = "Submit Official Acknowledgment";
-    if (window.turnstile) turnstile.reset();
     return;
   }
 
@@ -201,8 +194,6 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
   if (data.parentEmail) {
     try { await emailjs.send("service_vljauqe", "template_n8kehkc", emailData); } catch (_) {}
   }
-
-  if (window.turnstile) turnstile.reset();
 
   msgEl.textContent = `Thank you, ${fullName}! Your acknowledgment has been recorded. You'll receive confirmation once an administrator approves your account — this typically takes 1–2 days.`;
   msgEl.className   = "signup-message success";
