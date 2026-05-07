@@ -400,6 +400,134 @@ document.getElementById("addTeamForm").addEventListener("submit", async function
   }
 });
 
+// ── Calendar Sync ─────────────────────────────────────────────────────────────
+
+function normalizeIcsUrl(url) {
+  return url.replace(/^webcal:\/\//i, "https://");
+}
+
+async function fetchICS(rawUrl) {
+  const url = normalizeIcsUrl(rawUrl);
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (res.ok) return await res.text();
+  } catch (_) {}
+  try {
+    const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+    if (res.ok) return await res.text();
+  } catch (_) {}
+  return null;
+}
+
+function parseVEvents(icsText) {
+  const events = [];
+  const blocks = icsText.split(/BEGIN:VEVENT/i);
+  for (let i = 1; i < blocks.length; i++) {
+    const block = blocks[i];
+    const get = key => {
+      // handles folded lines and optional param segments before the colon
+      const re = new RegExp(`^${key}[^:\r\n]*:([^\r\n]+)`, "im");
+      const m = block.match(re);
+      return m ? m[1].trim() : "";
+    };
+    const dtstart  = get("DTSTART");
+    const location = get("LOCATION");
+    const uid      = get("UID");
+
+    const dateM = dtstart.match(/(\d{4})(\d{2})(\d{2})/);
+    if (!dateM) continue;
+    const date = `${dateM[1]}-${dateM[2]}-${dateM[3]}`;
+
+    const timeM = dtstart.match(/T(\d{2})(\d{2})/);
+    const time  = timeM ? `${timeM[1]}:${timeM[2]}` : "";
+
+    events.push({ date, time, location, uid });
+  }
+  return events;
+}
+
+async function syncGamesFromCalendars() {
+  const btn   = document.getElementById("syncCalBtn");
+  const msgEl = document.getElementById("syncCalMessage");
+  btn.disabled = true;
+  setMsg("syncCalMessage", "Fetching calendars…", "info");
+
+  try {
+    const { setDoc: _setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+
+    const teamsSnap = await getDoc(doc(db, "config", "teamCalendars"));
+    const teams = teamsSnap.exists() ? (teamsSnap.data().teams || []) : [];
+    const relevantTeams = teams.filter(t => /10U|12U/i.test(t.name));
+
+    if (relevantTeams.length === 0) {
+      setMsg("syncCalMessage", "No 10U or 12U teams are configured under Team Calendars.", "warning");
+      btn.disabled = false;
+      return;
+    }
+
+    const existingSnap = await getDocs(collection(db, "games"));
+    const existingUids = new Set(existingSnap.docs.map(d => d.data().externalId).filter(Boolean));
+
+    const ratesSnap = await getDoc(doc(db, "config", "payRates"));
+    const rates = ratesSnap.exists() ? ratesSnap.data() : {};
+    const defaultPay = rates.plate || 0;
+
+    const today = todayISO();
+    let added = 0, skipped = 0, failed = 0;
+
+    for (const team of relevantTeams) {
+      const icsText = await fetchICS(team.icsUrl);
+      if (!icsText) { failed++; continue; }
+
+      const division = /10U/i.test(team.name) ? "10U" : "12U";
+      const events   = parseVEvents(icsText);
+
+      for (const ev of events) {
+        if (ev.date < today) continue;
+
+        let city = null;
+        if (/crooks,\s*sd/i.test(ev.location))  city = "City of Crooks";
+        if (/colton,\s*sd/i.test(ev.location))   city = "City of Colton";
+        if (!city) continue;
+
+        if (ev.uid && existingUids.has(ev.uid)) continue;
+
+        await addDoc(collection(db, "games"), {
+          city,
+          division,
+          date:    ev.date,
+          time:    ev.time,
+          type:    "Regular",
+          field:   ev.location,
+          payRate: defaultPay,
+          umpireSlots: [
+            { type: "Plate", assignedUid: null, assignedName: null },
+            { type: "Field", assignedUid: null, assignedName: null }
+          ],
+          cancelled:  false,
+          externalId: ev.uid || null,
+          source:     "calendar",
+          createdAt:  serverTimestamp()
+        });
+
+        if (ev.uid) existingUids.add(ev.uid);
+        added++;
+      }
+    }
+
+    const parts = [`${added} game${added !== 1 ? "s" : ""} added`];
+    if (failed) parts.push(`${failed} feed${failed !== 1 ? "s" : ""} could not be fetched`);
+    setMsg("syncCalMessage", `Sync complete: ${parts.join(", ")}.`, added > 0 ? "success" : "info");
+    if (added > 0) await loadGames();
+  } catch (err) {
+    setMsg("syncCalMessage", `Error: ${err.message}`, "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("syncCalBtn").addEventListener("click", syncGamesFromCalendars);
+
 // ── Pay rates ─────────────────────────────────────────────────────────────────
 
 async function loadPayRates() {
