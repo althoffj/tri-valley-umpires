@@ -4,16 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tri-Valley Baseball Umpires - 2026</title>
-    <link rel="stylesheet" href="styles.css?v=2" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://script.google.com https://challenges.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://challenges.cloudflare.com; connect-src 'self' https://script.google.com;">
+    <link rel="stylesheet" href="styles.css?v=4" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://challenges.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://challenges.cloudflare.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com;">
   </head>
   <body>
     <div class="header">
-      <img
-        src="logo.png"
-        alt="Tri-Valley Baseball"
-        class="logo"
-      />
+      <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
       <h1>Umpires - 2026 Season</h1>
     </div>
 
@@ -23,8 +19,9 @@
       <a href="principles_of_umpiring.html">Principles</a>
       <a href="rule_breakdown.html">Rules</a>
       <a href="pregame-meeting.html">Plate Meeting</a>
-      <a href="schedule.html" data-auth-required style="display:none">Schedule & Signups</a>
-      <a href="form.html">Acknowledgment</a>
+      <a href="schedule.html">Schedule &amp; Signups</a>
+      <a href="form.html" data-auth-guest>Acknowledgment</a>
+      <a href="admin.html" data-auth-admin style="display:none">Admin</a>
     </nav>
 
     <div class="container">
@@ -52,40 +49,30 @@
           you can log in. Once approved you'll receive confirmation &mdash; this
           typically takes 1&ndash;2 days.
         </p>
+
         <form id="loginForm" class="signup-form">
-          <label for="loginEmail">Your Email</label>
+          <label for="loginEmail">Email</label>
           <input type="email" id="loginEmail" required autocomplete="email" />
 
           <label for="loginPassword">Password</label>
           <input type="password" id="loginPassword" required autocomplete="current-password" />
 
-          <div class="page-actions">
+          <div class="page-actions" style="margin-top:16px;">
             <button type="submit" id="loginBtn" class="btn">Log In</button>
+            <button type="button" id="showResetBtn" class="btn print-btn">Forgot Password?</button>
           </div>
           <p id="loginMessage" class="signup-message" aria-live="polite"></p>
-          <p style="margin-top:12px;font-size:0.85rem;">
-            <button type="button" id="showResetBtn" class="btn print-btn" style="font-size:0.85rem;padding:6px 12px;">Reset Password</button>
-          </p>
         </form>
 
-        <form id="resetPasswordForm" class="signup-form" hidden>
-          <h2>Reset Password</h2>
-          <p class="schedule-source">Enter your current password to set a new one. If you forgot your current password, contact the league administrator to have it reset.</p>
+        <form id="resetForm" class="signup-form" hidden>
+          <h3 style="margin-top:0;color:white;">Reset Password</h3>
+          <p class="schedule-source">Enter your email and we'll send a password reset link.</p>
 
-          <label for="resetName">Your Full Name</label>
-          <input type="text" id="resetName" required />
+          <label for="resetEmail">Email</label>
+          <input type="email" id="resetEmail" required autocomplete="email" />
 
-          <label for="resetEmail">Your Email</label>
-          <input type="email" id="resetEmail" required />
-
-          <label for="resetCurrentPassword">Current Password</label>
-          <input type="password" id="resetCurrentPassword" required />
-
-          <label for="resetNewPassword">New Password (at least 6 characters)</label>
-          <input type="password" id="resetNewPassword" required minlength="6" />
-
-          <div class="page-actions">
-            <button type="submit" id="resetBtn" class="btn">Update Password</button>
+          <div class="page-actions" style="margin-top:16px;">
+            <button type="submit" id="resetBtn" class="btn">Send Reset Email</button>
             <button type="button" id="cancelResetBtn" class="btn print-btn">Cancel</button>
           </div>
           <p id="resetMessage" class="signup-message" aria-live="polite"></p>
@@ -102,63 +89,42 @@
         </div>
 
         <h2>Getting Started</h2>
-        <p>
-          If you're new this season, follow these three steps:
-        </p>
+        <p>If you're new this season, follow these steps:</p>
         <ol>
-          <li>
-            <strong>Review the resources</strong> &mdash; Read through the
-            umpire expectations, core principles, rule breakdowns, and the
-            pre-game plate meeting guide linked below.
-          </li>
-          <li>
-            <strong>Complete the acknowledgment form</strong> &mdash; Confirm
-            you've read and understand the expectations.
-          </li>
-          <li>
-            <strong>Claim your games</strong> &mdash; Browse the schedule and sign
-            up for open games.
-          </li>
+          <li><strong>Review the resources</strong> &mdash; Read through the umpire expectations, core principles, rule breakdowns, and the pre-game plate meeting guide linked below.</li>
+          <li><strong>Claim your games</strong> &mdash; Browse the schedule and sign up for open games.</li>
         </ol>
 
-        <div class="centered-action">
-          <a href="form.html" class="btn">Complete Acknowledgment Form</a>
-          <a href="schedule.html" class="btn">View Schedule & Sign Up</a>
+        <div class="page-actions">
+          <a href="schedule.html" class="btn">View Schedule &amp; Sign Up</a>
+          <a href="expectations.html" class="btn print-btn">Umpire Expectations</a>
         </div>
 
-        <h2>Contact & Communication</h2>
+        <h2>Contact &amp; Communication</h2>
         <ul>
           <li>
             <strong>Slack (recommended for general questions)</strong><br />
-            <a
-              href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA"
-              target="_blank"
-            >Join Umpire Slack Group</a
-            >
-            &mdash; Use Slack for scheduling questions, rule clarifications, and
-            general discussion with the rest of the crew.
+            <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Join Umpire Slack Group</a>
+            &mdash; Use Slack for scheduling questions, rule clarifications, and general discussion.
           </li>
           <li>
-            <strong>Phone (for urgent, time-sensitive issues)</strong><br />
+            <strong>Phone (urgent, time-sensitive issues only)</strong><br />
             Jeff Althoff: <strong>605-380-0229</strong>
             &mdash; Call or text for last-minute cancellations or emergencies.
           </li>
           <li>
             <strong>Email</strong><br />
             <a href="mailto:althoff.jeff@gmail.com">althoff.jeff@gmail.com</a>
-            &mdash; For documentation, formal requests, or non-urgent matters.
+            &mdash; For formal requests or non-urgent matters.
           </li>
         </ul>
       </div>
 
-      <h2>Resources & Documents</h2>
-      <p>
-        These resources are available to everyone. Review them before submitting
-        your acknowledgment.
-      </p>
+      <h2>Resources &amp; Documents</h2>
+      <p>These resources are available to everyone. Review them before the season begins.</p>
       <ul>
         <li>
-          <a href="expectations.html">Umpire Responsibilities & Expectations</a>
+          <a href="expectations.html">Umpire Responsibilities &amp; Expectations</a>
           <a href="umpire_responsibility.pdf" target="_blank" download>(Download PDF)</a>
         </li>
         <li>
@@ -177,10 +143,6 @@
           &mdash; Official VFW baseball program site for South Dakota
         </li>
         <li>
-          <a href="https://www.sdvfwbaseball.com/rules-forms" target="_blank">VFW Baseball Rulebook</a>
-          &mdash; Official playing rules for VFW baseball
-        </li>
-        <li>
           <a href="https://www.minndak.org/" target="_blank">Minndak Baseball League</a>
           &mdash; League and tournament information
         </li>
@@ -189,10 +151,7 @@
       <h2>Site Status</h2>
       <p>
         <a href="https://github.com/althoffj/tri-valley-umpires/actions" target="_blank">
-          <img
-            src="https://img.shields.io/github/actions/workflow/status/althoffj/tri-valley-umpires/deploy.yml?label=deploy&logo=github&style=flat"
-            alt="Deploy status"
-          />
+          <img src="https://img.shields.io/github/actions/workflow/status/althoffj/tri-valley-umpires/deploy.yml?label=deploy&logo=github&style=flat" alt="Deploy status" />
         </a>
       </p>
     </div>
@@ -206,7 +165,7 @@
       </p>
     </div>
 
-    <script src="auth.js"></script>
-    <script src="index.js"></script>
+    <script type="module" src="auth.js?v=4"></script>
+    <script type="module" src="index.js?v=4"></script>
   </body>
 </html>

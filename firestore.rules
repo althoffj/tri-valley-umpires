@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isApproved() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/umpires/$(request.auth.uid)).data.approved == true;
+    }
+
+    // Games: anyone can read; only admins can create/delete; approved umpires can claim open games
+    match /games/{gameId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+        (isApproved() &&
+         resource.data.cancelled == false &&
+         resource.data.assignedUid == null &&
+         request.resource.data.assignedUid == request.auth.uid);
+    }
+
+    // Umpires: own profile read/create; admin can read/update all
+    match /umpires/{uid} {
+      allow read:   if request.auth.uid == uid || isAdmin();
+      allow create: if request.auth.uid == uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Config (pay rates, etc.): approved umpires can read; only admins can write
+    match /config/{docId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Admins collection: admin only
+    match /admins/{uid} {
+      allow read, write: if isAdmin();
+    }
+
+    // FCM notification tokens: own doc only
+    match /notifications/{uid} {
+      allow read, write: if request.auth.uid == uid;
+      allow read:        if isAdmin();
+    }
+  }
+}
