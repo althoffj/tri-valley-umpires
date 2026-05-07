@@ -6,12 +6,12 @@ importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 
 // Must match the config in firebase.js
 firebase.initializeApp({
-  apiKey:            "REPLACE_WITH_API_KEY",
-  authDomain:        "REPLACE_WITH_AUTH_DOMAIN",
-  projectId:         "REPLACE_WITH_PROJECT_ID",
-  storageBucket:     "REPLACE_WITH_STORAGE_BUCKET",
-  messagingSenderId: "REPLACE_WITH_MESSAGING_SENDER_ID",
-  appId:             "REPLACE_WITH_APP_ID"
+  apiKey:            "AIzaSyBGVJap9DNKsulP_GZHP7lkYv9BxlKJK3o",
+  authDomain:        "tri-valley-baseball-umpires.firebaseapp.com",
+  projectId:         "tri-valley-baseball-umpires",
+  storageBucket:     "tri-valley-baseball-umpires.firebasestorage.app",
+  messagingSenderId: "1094604898891",
+  appId:             "1:1094604898891:web:b0554f8098deac98d043ce"
 });
 
 const messaging = firebase.messaging();
