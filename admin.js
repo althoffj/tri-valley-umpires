@@ -738,9 +738,141 @@ authReadyPromise.then(() => {
   loadGames();
   loadPayRates();
   loadTeamCalendars();
+  loadPayroll();
   loadUmpireRequests();
   loadIncidents();
 });
+
+// ── Payroll Summary ───────────────────────────────────────────────────────────
+
+let payrollRows = []; // flat list of {gameId, slotType, umpireName, date, city, division, pay, paid}
+let payrollFromFilter = "";
+let payrollToFilter   = "";
+
+async function loadPayroll() {
+  const tbody    = document.getElementById("payrollBody");
+  const totalsEl = document.getElementById("payrollTotals");
+  if (!tbody) return;
+
+  try {
+    const snap = await getDocs(query(collection(db, "games"), orderBy("date", "asc")));
+
+    payrollRows = [];
+    snap.forEach(d => {
+      const g = { id: d.id, ...d.data() };
+      (g.umpireSlots ?? []).forEach(slot => {
+        if (!slot.assignedUid) return;
+        payrollRows.push({
+          gameId:    g.id,
+          slotType:  slot.type,
+          uid:       slot.assignedUid,
+          umpireName: slot.assignedName ?? slot.assignedUid,
+          date:      g.date ?? "",
+          city:      g.city ?? "",
+          division:  g.division ?? "",
+          pay:       Number(slot.payRate ?? g.payRate ?? 0),
+          paid:      slot.paid === true
+        });
+      });
+    });
+
+    renderPayrollTable();
+    wirePayrollFilters();
+  } catch (err) {
+    console.error(err);
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#ffb4b4">Error loading payroll.</td></tr>';
+  }
+}
+
+function renderPayrollTable() {
+  const tbody    = document.getElementById("payrollBody");
+  const totalsEl = document.getElementById("payrollTotals");
+  if (!tbody) return;
+
+  const rows = payrollRows.filter(r => {
+    if (payrollFromFilter && r.date < payrollFromFilter) return false;
+    if (payrollToFilter   && r.date > payrollToFilter)   return false;
+    return true;
+  });
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--light-text);text-align:center">No payroll records found.</td></tr>';
+    if (totalsEl) totalsEl.textContent = "";
+    return;
+  }
+
+  const totalOwed = rows.reduce((s, r) => s + r.pay, 0);
+  const totalPaid = rows.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
+  const outstanding = totalOwed - totalPaid;
+  if (totalsEl) {
+    totalsEl.textContent =
+      `Total: $${totalOwed.toFixed(2)} — Paid: $${totalPaid.toFixed(2)} — Outstanding: $${outstanding.toFixed(2)}`;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const fmtDate = iso => iso ? iso.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$2/$3/$1") : "—";
+    const paidBadge = r.paid
+      ? `<span class="badge" style="background:#17351f;color:#b8f2c4">Paid</span>`
+      : `<span class="badge" style="background:#4a2c00;color:#ffcc80">Unpaid</span>`;
+    const toggleBtn = `<button class="btn ${r.paid ? "print-btn" : ""} payroll-toggle-btn"
+        data-game-id="${esc(r.gameId)}" data-slot-type="${esc(r.slotType)}" data-uid="${esc(r.uid)}"
+        style="font-size:0.78rem;padding:3px 10px;margin-left:8px">
+        ${r.paid ? "Mark Unpaid" : "Mark Paid"}
+      </button>`;
+    return `<tr>
+      <td>${esc(r.umpireName)}</td>
+      <td>${esc(fmtDate(r.date))}</td>
+      <td>${esc(r.city)}<br><span style="color:var(--light-text);font-size:0.85rem">${esc(r.division)}</span></td>
+      <td><span class="badge badge-${r.slotType.toLowerCase()}">${esc(r.slotType)}</span></td>
+      <td>$${r.pay.toFixed(2)}</td>
+      <td style="white-space:nowrap">${paidBadge}${toggleBtn}</td>
+    </tr>`;
+  }).join("");
+
+  tbody.querySelectorAll(".payroll-toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () =>
+      togglePaid(btn.dataset.gameId, btn.dataset.slotType, btn.dataset.uid)
+    );
+  });
+}
+
+async function togglePaid(gameId, slotType, uid) {
+  const ref = doc(db, "games", gameId);
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+    const slots = (snap.data().umpireSlots ?? []).map(s => {
+      if (s.type === slotType && s.assignedUid === uid) {
+        return { ...s, paid: !s.paid };
+      }
+      return s;
+    });
+    await updateDoc(ref, { umpireSlots: slots });
+
+    // Update in-memory payrollRows and re-render
+    const row = payrollRows.find(r => r.gameId === gameId && r.slotType === slotType && r.uid === uid);
+    if (row) row.paid = !row.paid;
+    renderPayrollTable();
+  } catch (err) {
+    console.error(err);
+    alert("Error updating paid status.");
+  }
+}
+
+function wirePayrollFilters() {
+  document.getElementById("payrollFilterBtn")?.addEventListener("click", () => {
+    payrollFromFilter = document.getElementById("payrollFrom").value;
+    payrollToFilter   = document.getElementById("payrollTo").value;
+    renderPayrollTable();
+  });
+  document.getElementById("payrollResetBtn")?.addEventListener("click", () => {
+    payrollFromFilter = "";
+    payrollToFilter   = "";
+    document.getElementById("payrollFrom").value = "";
+    document.getElementById("payrollTo").value   = "";
+    renderPayrollTable();
+  });
+}
 
 // ── Umpire Requests ───────────────────────────────────────────────────────────
 

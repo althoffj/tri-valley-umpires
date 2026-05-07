@@ -243,6 +243,42 @@
       <p id="notifMessage" class="signup-message" aria-live="polite"></p>
     </form>
 
+    <!-- ── Payroll Summary ───────────────────────────────────────────────── -->
+    <h2>Payroll Summary</h2>
+    <div class="document-note">
+      <p>All games where an umpire slot is filled. Mark slots paid when payment has been issued. Totals update automatically.</p>
+    </div>
+    <div class="page-actions" style="margin-bottom:12px">
+      <div class="form-group form-group--sm" style="flex:0 0 160px">
+        <label for="payrollFrom" style="margin-top:0">From</label>
+        <input type="date" id="payrollFrom" style="padding:7px 10px;font-size:0.875rem" />
+      </div>
+      <div class="form-group form-group--sm" style="flex:0 0 160px">
+        <label for="payrollTo" style="margin-top:0">To</label>
+        <input type="date" id="payrollTo" style="padding:7px 10px;font-size:0.875rem" />
+      </div>
+      <button type="button" class="btn" id="payrollFilterBtn" style="align-self:flex-end">Filter</button>
+      <button type="button" class="btn print-btn" id="payrollResetBtn" style="align-self:flex-end">Show All</button>
+    </div>
+    <p id="payrollTotals" class="schedule-source" style="margin-top:0;font-weight:bold"></p>
+    <div class="schedule-section" style="margin-top:0">
+      <table id="payrollTable">
+        <thead>
+          <tr>
+            <th>Umpire</th>
+            <th>Date</th>
+            <th>City / Div</th>
+            <th>Slot</th>
+            <th>Pay</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="payrollBody">
+          <tr><td colspan="6" style="color:var(--light-text);text-align:center">Loading payroll…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
     <!-- ── Umpire Requests ───────────────────────────────────────────────── -->
     <h2>Umpire Requests</h2>
     <p id="requestNote" class="schedule-source"></p>
