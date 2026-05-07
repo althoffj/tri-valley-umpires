@@ -343,7 +343,8 @@ async function addTeam(name, icsUrl) {
   const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
   const snap = await getDoc(doc(db, "config", "teamCalendars"));
   const teams = snap.exists() ? (snap.data().teams || []) : [];
-  teams.push({ name, icsUrl });
+  const normalizedUrl = icsUrl.replace(/^webcal:\/\//i, "https://");
+  teams.push({ name, icsUrl: normalizedUrl });
   await setDoc(doc(db, "config", "teamCalendars"), { teams });
 }
 

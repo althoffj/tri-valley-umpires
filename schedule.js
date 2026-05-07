@@ -241,7 +241,12 @@ async function loadTeamCalendars() {
   } catch (_) {}
 }
 
-async function fetchICS(url) {
+function normalizeIcsUrl(url) {
+  return url.replace(/^webcal:\/\//i, "https://");
+}
+
+async function fetchICS(rawUrl) {
+  const url = normalizeIcsUrl(rawUrl);
   // Try direct fetch first; fall back to CORS proxy if blocked
   try {
     const res = await fetch(url, { mode: "cors" });
