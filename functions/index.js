@@ -71,85 +71,115 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function inferDivision(teamName) {
+  if (/10U/i.test(teamName)) return "10U";
+  if (/12U/i.test(teamName)) return "12U";
+  if (/14U/i.test(teamName)) return "14U";
+  if (/HS\s*JV/i.test(teamName)) return "HS JV";
+  if (/HS/i.test(teamName)) return "HS Varsity";
+  return "Other";
+}
+
 async function runSync() {
   const db = getFirestore();
 
   const teamsSnap = await db.doc("config/teamCalendars").get();
   const teams     = teamsSnap.exists ? (teamsSnap.data().teams || []) : [];
-  const relevant  = teams.filter(t => /10U|12U/i.test(t.name));
+  if (teams.length === 0) return { added: 0, linked: 0, flagged: 0, failed: 0 };
 
-  if (relevant.length === 0) return { added: 0, failed: 0, linked: 0, flagged: 0 };
-
-  // Build a map: "DIVISION|DATE" → [{ uid, teamName }] from all ICS feeds
-  const eventsByDivDate = {}; // e.g. "12U|2026-05-13" → [{uid, teamName}]
-  let failed = 0;
-
-  for (const team of relevant) {
-    let icsText;
-    try { icsText = await fetchICS(team.icsUrl); }
-    catch (err) { console.error(`Failed to fetch ${team.name}: ${err.message}`); failed++; continue; }
-
-    const division = /10U/i.test(team.name) ? "10U" : "12U";
-    for (const ev of parseVEvents(icsText)) {
-      if (!ev.uid) continue;
-      const key = `${division}|${ev.date}`;
-      if (!eventsByDivDate[key]) eventsByDivDate[key] = [];
-      // avoid duplicate UIDs across teams
-      if (!eventsByDivDate[key].some(e => e.uid === ev.uid)) {
-        eventsByDivDate[key].push({ uid: ev.uid, teamName: team.name, location: ev.location });
-      }
+  // Load all existing games for dedup
+  const gamesSnap         = await db.collection("games").get();
+  const existingExtIds    = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
+  const linkedUids        = new Set();
+  const cityGames         = [];
+  for (const d of gamesSnap.docs) {
+    const g = d.data();
+    if (g.source === "city-schedule") {
+      cityGames.push({ ref: d.ref, ...g });
+      (g.icsLinks || []).forEach(l => linkedUids.add(l.uid));
     }
   }
 
-  // ── Match city-schedule games to ICS events (by date + division) ─────────────
-  const cityGamesSnap = await db.collection("games").where("source", "==", "city-schedule").get();
-  const today = todayISO();
+  const ratesSnap  = await db.doc("config/payRates").get();
+  const defaultPay = ratesSnap.exists ? (ratesSnap.data().plate || 0) : 0;
+  const today      = todayISO();
+
+  // Fetch ALL team feeds; build reference games + divDate map for city-schedule matching
+  const eventsByDivDate = {}; // "DIVISION|DATE" → [{uid, teamName, location}]
+  let added = 0, failed = 0;
+
+  for (const team of teams) {
+    let icsText;
+    try { icsText = await fetchICS(team.icsUrl); }
+    catch (err) { console.error(`Failed: ${team.name}: ${err.message}`); failed++; continue; }
+
+    const division = inferDivision(team.name);
+
+    for (const ev of parseVEvents(icsText)) {
+      if (!ev.uid) continue;
+
+      // Build divDate map (all divisions — used for matching below)
+      const key = `${division}|${ev.date}`;
+      if (!eventsByDivDate[key]) eventsByDivDate[key] = [];
+      if (!eventsByDivDate[key].some(e => e.uid === ev.uid))
+        eventsByDivDate[key].push({ uid: ev.uid, teamName: team.name, location: ev.location });
+
+      // Save as reference game if not already stored
+      if (existingExtIds.has(ev.uid) || linkedUids.has(ev.uid)) continue;
+
+      await db.collection("games").add({
+        teamName:     team.name,
+        division,
+        date:         ev.date,
+        time:         ev.time,
+        location:     ev.location,
+        needsUmpires: false,
+        umpireSlots:  [],
+        cancelled:    false,
+        externalId:   ev.uid,
+        source:       "calendar",
+        createdAt:    FieldValue.serverTimestamp()
+      });
+      existingExtIds.add(ev.uid);
+      added++;
+    }
+  }
+
+  // ── Match / monitor city-schedule games against ICS events ───────────────────
   let linked = 0, flagged = 0;
 
-  for (const docSnap of cityGamesSnap.docs) {
-    const game = docSnap.data();
+  for (const game of cityGames) {
     if (game.date < today || game.cancelled) continue;
-
     const key     = `${game.division}|${game.date}`;
     const matches = eventsByDivDate[key] || [];
 
     if (!game.icsLinks || game.icsLinks.length === 0) {
-      // First time: try to link
       if (matches.length > 0) {
-        await docSnap.ref.update({ icsLinks: matches.map(e => ({ uid: e.uid, teamName: e.teamName })) });
+        await game.ref.update({ icsLinks: matches.map(e => ({ uid: e.uid, teamName: e.teamName })) });
         linked++;
-        console.log(`Linked ${game.division} ${game.date} (${game.field}) → ${matches.length} ICS event(s)`);
       }
     } else {
-      // Already linked: check if any UIDs vanished (possible cancellation / reschedule)
       const liveUids = new Set(matches.map(e => e.uid));
       const missing  = game.icsLinks.filter(l => !liveUids.has(l.uid));
       if (missing.length > 0 && !game.possibleChange) {
-        await docSnap.ref.update({ possibleChange: true });
-        flagged++;
-        console.log(`Possible change: ${game.division} ${game.date} — ${missing.length} ICS event(s) missing`);
+        await game.ref.update({ possibleChange: true }); flagged++;
       } else if (missing.length === 0 && game.possibleChange) {
-        await docSnap.ref.update({ possibleChange: false });
+        await game.ref.update({ possibleChange: false });
       }
-
-      // Check if an explicitly-located Crooks/Colton entry appeared (field update)
+      // Pick up an explicit location if GameChanger ever fills it in
       const locatedMatch = matches.find(e =>
         /crooks,\s*sd/i.test(e.location) || /colton,\s*sd/i.test(e.location)
       );
-      if (locatedMatch && !game.field.includes(locatedMatch.location)) {
-        await docSnap.ref.update({ field: locatedMatch.location });
-        console.log(`Field updated for ${game.division} ${game.date}: ${locatedMatch.location}`);
-      }
+      if (locatedMatch) await game.ref.update({ field: locatedMatch.location });
     }
   }
 
   await db.doc("config/syncState").set(
-    { lastSyncedAt: FieldValue.serverTimestamp(), lastResult: { linked, flagged, failed } },
+    { lastSyncedAt: FieldValue.serverTimestamp(), lastResult: { added, linked, flagged, failed } },
     { merge: true }
   );
-
-  console.log(`Sync: ${linked} linked, ${flagged} flagged, ${failed} feed(s) failed`);
-  return { linked, flagged, failed };
+  console.log(`Sync: ${added} reference games added, ${linked} linked, ${flagged} flagged, ${failed} failed`);
+  return { added, linked, flagged, failed };
 }
 
 // ── Scheduled: runs every 6 hours automatically ───────────────────────────────
@@ -205,13 +235,14 @@ exports.importCitySchedule = onCall(
       const existing = await db.collection("games").where("externalId", "==", externalId).limit(1).get();
       if (!existing.empty) { skipped++; continue; }
       await db.collection("games").add({
-        city:       g.city,
-        division:   g.division,
-        date:       g.date,
-        time:       g.time,
-        type:       "Regular",
-        field:      g.field,
-        payRate:    defaultPay,
+        city:         g.city,
+        division:     g.division,
+        date:         g.date,
+        time:         g.time,
+        type:         "Regular",
+        field:        g.field,
+        payRate:      defaultPay,
+        needsUmpires: true,
         umpireSlots: [
           { type: "Plate", assignedUid: null, assignedName: null },
           { type: "Field", assignedUid: null, assignedName: null }

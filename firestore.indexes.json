@@ -12,6 +12,15 @@
       "collectionGroup": "games",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "needsUmpires", "order": "ASCENDING" },
+        { "fieldPath": "date",         "order": "ASCENDING" },
+        { "fieldPath": "time",         "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "games",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "date", "order": "ASCENDING" },
         { "fieldPath": "time", "order": "ASCENDING" }
       ]

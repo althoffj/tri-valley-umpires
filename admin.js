@@ -188,7 +188,7 @@ async function revokeUmpire(uid, name) {
 async function loadGames() {
   const tbody = document.getElementById("adminGameBody");
   try {
-    const q = query(collection(db, "games"), orderBy("date"), orderBy("time"));
+    const q = query(collection(db, "games"), where("needsUmpires", "==", true), orderBy("date"), orderBy("time"));
     const snap = await getDocs(q);
     allGames = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderAdminGames();
