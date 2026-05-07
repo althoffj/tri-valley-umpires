@@ -140,8 +140,13 @@ function updateDropdownState() {
     if (loginView?.style.display !== "none" || resetView?.style.display !== "none") {
       showView("authSignedInView");
     }
+    // Show Admin Panel link only for admins
+    const adminLink = document.getElementById("hmAdminLink");
+    if (adminLink) adminLink.style.display = isAdmin() ? "" : "none";
   } else {
     showView("authLoginView");
+    const adminLink = document.getElementById("hmAdminLink");
+    if (adminLink) adminLink.style.display = "none";
   }
 }
 
@@ -214,6 +219,7 @@ function initAuthUI() {
           <button class="auth-dropdown-close" id="authSignedInCloseBtn" aria-label="Close">&#x2715;</button>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
+          <a id="hmAdminLink" href="admin.html" class="btn print-btn" style="width:100%;display:none;text-align:center">Admin Panel</a>
           <button type="button" class="btn print-btn" id="hmEditProfileBtn" style="width:100%">Edit Profile</button>
           <button type="button" class="btn print-btn" id="hmLogoutBtn" style="width:100%">Sign Out</button>
         </div>

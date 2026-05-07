@@ -38,9 +38,10 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Admins collection: admin only
+    // Admins collection: own doc self-read (breaks circular dependency); write = admin
     match /admins/{uid} {
-      allow read, write: if isAdmin();
+      allow read:  if request.auth.uid == uid || isAdmin();
+      allow write: if isAdmin();
     }
 
     // FCM notification tokens: own doc only
