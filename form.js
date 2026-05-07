@@ -8,10 +8,32 @@ import {
 import {
   doc,
   setDoc,
+  getDoc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 emailjs.init("H9Z9Qz-HB-PehAQjp");
+
+// ── Load team checkboxes ─────────────────────────────────────────────────────
+
+(async function loadTeams() {
+  const container = document.getElementById("teamCheckboxes");
+  try {
+    const snap = await getDoc(doc(db, "config", "teamCalendars"));
+    const teams = snap.exists() ? (snap.data().teams || []) : [];
+    if (teams.length === 0) {
+      container.innerHTML = `<span style="color:var(--light-text);font-size:0.9rem">No teams configured yet.</span>`;
+      return;
+    }
+    container.innerHTML = teams.map((t, i) => `
+      <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+        <input type="checkbox" name="teamAffiliation" value="${t.name.replace(/"/g, "&quot;")}" />
+        ${t.name.replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+      </label>`).join("");
+  } catch (_) {
+    container.innerHTML = `<span style="color:var(--light-text);font-size:0.9rem">Could not load teams.</span>`;
+  }
+})();
 
 // ── Validation helpers ───────────────────────────────────────────────────────
 
@@ -148,6 +170,7 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
       parentName:  data.parentName  || "",
       parentEmail: data.parentEmail || "",
       parentPhone: data.parentPhone || "",
+      teamsPlayed: [...document.querySelectorAll("[name='teamAffiliation']:checked")].map(cb => cb.value),
       approved:    false,
       submittedAt: serverTimestamp()
     });

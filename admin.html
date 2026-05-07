@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin - Tri-Valley Baseball Umpires</title>
   <link rel="stylesheet" href="styles.css?v=4" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://api.allorigins.win https://*.gc.com https://*.gamechanger.io;">
 </head>
 <body>
   <div class="header">
@@ -153,6 +153,32 @@
         </tbody>
       </table>
     </div>
+
+    <!-- ── Team Calendars ────────────────────────────────────────────────── -->
+    <h2>Team Calendars</h2>
+    <div class="document-note">
+      <p>Add each Tri-Valley team with its GameChanger iCal URL. Umpires who play for a team will see a conflict warning when signing up for a game on the same date as their team's game.</p>
+      <p style="margin-bottom:0">Find the iCal URL in GameChanger: <strong>Team → Schedule → Subscribe to Calendar → Copy Link</strong>.</p>
+    </div>
+
+    <div id="teamCalendarList" style="margin-bottom:16px"></div>
+
+    <form id="addTeamForm" class="signup-form" style="margin-bottom:0">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="teamName">Team Name</label>
+          <input type="text" id="teamName" placeholder="e.g. Crooks 12U Blue" required />
+        </div>
+        <div class="form-group">
+          <label for="teamIcsUrl">GameChanger iCal URL</label>
+          <input type="url" id="teamIcsUrl" placeholder="https://gc.com/..." required />
+        </div>
+      </div>
+      <div class="page-actions" style="margin-top:12px">
+        <button type="submit" class="btn" id="addTeamBtn">Add Team</button>
+      </div>
+      <p id="addTeamMessage" class="signup-message" aria-live="polite"></p>
+    </form>
 
     <!-- ── Pay Rates Config ───────────────────────────────────────────────── -->
     <h2>Default Pay Rates</h2>

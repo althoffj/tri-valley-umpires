@@ -314,6 +314,66 @@ document.getElementById("addGameForm").addEventListener("submit", async function
   }
 });
 
+// ── Team Calendars ────────────────────────────────────────────────────────────
+
+async function loadTeamCalendars() {
+  const listEl = document.getElementById("teamCalendarList");
+  try {
+    const snap = await getDoc(doc(db, "config", "teamCalendars"));
+    const teams = snap.exists() ? (snap.data().teams || []) : [];
+
+    if (teams.length === 0) {
+      listEl.innerHTML = `<p class="schedule-source">No teams added yet.</p>`;
+      return;
+    }
+
+    listEl.innerHTML = teams.map((t, i) => `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #444">
+        <span style="flex:1"><strong>${esc(t.name)}</strong><br>
+          <span style="color:var(--light-text);font-size:0.82rem;word-break:break-all">${esc(t.icsUrl)}</span>
+        </span>
+        <button class="btn print-btn remove-team-btn" data-index="${i}" style="flex-shrink:0">Remove</button>
+      </div>`).join("");
+  } catch (err) {
+    listEl.innerHTML = `<p style="color:#ffb4b4">Failed to load teams.</p>`;
+  }
+}
+
+async function addTeam(name, icsUrl) {
+  const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+  const snap = await getDoc(doc(db, "config", "teamCalendars"));
+  const teams = snap.exists() ? (snap.data().teams || []) : [];
+  teams.push({ name, icsUrl });
+  await setDoc(doc(db, "config", "teamCalendars"), { teams });
+}
+
+async function removeTeam(index) {
+  const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+  const snap = await getDoc(doc(db, "config", "teamCalendars"));
+  const teams = snap.exists() ? (snap.data().teams || []) : [];
+  teams.splice(index, 1);
+  await setDoc(doc(db, "config", "teamCalendars"), { teams });
+}
+
+document.getElementById("addTeamForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn  = document.getElementById("addTeamBtn");
+  const name = document.getElementById("teamName").value.trim();
+  const url  = document.getElementById("teamIcsUrl").value.trim();
+  btn.disabled = true;
+  setMsg("addTeamMessage", "Saving…", "info");
+  try {
+    await addTeam(name, url);
+    setMsg("addTeamMessage", "Team added!", "success");
+    this.reset();
+    await loadTeamCalendars();
+  } catch (err) {
+    setMsg("addTeamMessage", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // ── Pay rates ─────────────────────────────────────────────────────────────────
 
 async function loadPayRates() {
@@ -394,6 +454,13 @@ document.addEventListener("click", e => {
   const unassignBtn = e.target.closest(".unassign-btn");
   if (unassignBtn) { unassignSlot(unassignBtn.dataset.gameId, unassignBtn.dataset.slotType); return; }
 
+  const removeTeamBtn = e.target.closest(".remove-team-btn");
+  if (removeTeamBtn) {
+    if (!confirm("Remove this team?")) return;
+    removeTeam(Number(removeTeamBtn.dataset.index)).then(loadTeamCalendars).catch(err => alert(err.message));
+    return;
+  }
+
   const filterBtn = e.target.closest(".filter-btn");
   if (filterBtn) {
     gameFilter = filterBtn.dataset.filter;
@@ -419,4 +486,5 @@ authReadyPromise.then(() => {
   loadRoster();
   loadGames();
   loadPayRates();
+  loadTeamCalendars();
 });

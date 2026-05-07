@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Game Schedule & Umpire Signups - Tri-Valley Baseball</title>
-  <link rel="stylesheet" href="styles.css?v=2" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://script.google.com https://script.googleusercontent.com https://challenges.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://challenges.cloudflare.com; connect-src 'self' https://script.google.com;">
+  <link rel="stylesheet" href="styles.css?v=4" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://api.allorigins.win https://*.gc.com https://*.gamechanger.io;">
 </head>
 <body>
   <div class="header">
@@ -19,58 +19,50 @@
     <a href="principles_of_umpiring.html">Principles</a>
     <a href="rule_breakdown.html">Rules</a>
     <a href="pregame-meeting.html">Plate Meeting</a>
-    <a href="schedule.html" data-auth-required style="display:none">Schedule & Signups</a>
-    <a href="form.html">Acknowledgment</a>
+    <a href="schedule.html">Schedule & Signups</a>
+    <a href="form.html" data-auth-guest>Acknowledgment</a>
+    <a href="admin.html" data-auth-admin style="display:none">Admin</a>
   </nav>
 
   <div class="container">
-    <h2>10U & 12U Home Games Needing Umpires</h2>
-    <!-- How signups work -->
+    <h2>10U & 12U Home Games</h2>
+
     <div class="document-note">
       <p>
-        <strong>How signups work:</strong> Games listed below as "Needs umpire"
-        are open for claiming. You must be logged in to sign up &mdash; if you
-        don't have an account yet, complete the
-        <a href="form.html">acknowledgment form</a> first to register.
+        <strong>How signups work:</strong> Open games show a <strong>Sign up</strong>
+        button when you are logged in. You must be an approved umpire to claim a game.
+        If you don't have an account yet, complete the
+        <a href="form.html">acknowledgment form</a> to register.
       </p>
-      <p>
-        Once logged in, click <strong>Sign up</strong> next to an open game and
-        enter the name and email you used on your acknowledgment form. You will
-        only be verified and assigned if they match.
-      </p>
-      <p style="margin-bottom: 0;">
-        <strong>Note:</strong> Additional 10U and 12U games are expected to be
-        added once the schedule is completed. Check back for new dates.
+      <p style="margin-bottom:0">
+        <strong>Note:</strong> Additional games will be added as the schedule is completed.
+        Check back for new dates.
       </p>
     </div>
 
+    <!-- Filter bar -->
     <div class="page-actions" id="filterBar">
       <button type="button" class="btn filter-btn filter-active" data-filter="all">All Games</button>
       <button type="button" class="btn print-btn filter-btn" data-filter="needs">Needs Umpire</button>
       <button type="button" class="btn print-btn filter-btn" data-filter="filled">Filled</button>
+      <button type="button" class="btn print-btn filter-btn" data-filter="mine" id="myGamesBtn" style="display:none">My Games</button>
     </div>
 
     <p id="signupCount" class="schedule-source" style="margin-top:0;"></p>
+    <p id="paySummary" class="pay-summary" style="display:none"></p>
 
-    <form id="signupForm" class="signup-form" hidden>
-      <h2>Claim This Game</h2>
-      <p id="selectedGame" class="schedule-source"></p>
-      <input type="hidden" id="gameId" />
-
-      <label for="umpireName">Umpire Name</label>
-      <input type="text" id="umpireName" autocomplete="name" required />
-
-      <label for="umpireEmail">Umpire Email</label>
-      <input type="email" id="umpireEmail" autocomplete="email" required />
-
+    <!-- Signup confirmation modal -->
+    <div id="signupModal" class="document-note" style="display:none; border-left-color:#7ec8f7;">
+      <h3 style="margin-top:0">Claim This Game?</h3>
+      <p id="modalGameDetail" style="margin-bottom:12px;"></p>
       <div class="page-actions">
-        <button type="submit" id="submitSignup" class="btn">Claim Game</button>
-        <button type="button" id="cancelSignup" class="btn print-btn">Cancel</button>
+        <button type="button" class="btn" id="confirmSignupBtn">Confirm Signup</button>
+        <button type="button" class="btn print-btn" id="cancelSignupBtn">Cancel</button>
       </div>
-    </form>
+      <p id="signupMessage" class="signup-message" aria-live="polite"></p>
+    </div>
 
-    <p id="signupMessage" class="signup-message" aria-live="polite"></p>
-
+    <!-- City of Crooks -->
     <div class="schedule-section">
       <h2>City of Crooks - 12U</h2>
       <table>
@@ -79,6 +71,7 @@
             <th>Date</th>
             <th>Time</th>
             <th>Division</th>
+            <th>Type</th>
             <th>Field</th>
             <th>Status</th>
             <th>Action</th>
@@ -90,14 +83,16 @@
             <td>June dates pending</td>
             <td>TBD</td>
             <td>12U</td>
+            <td>—</td>
             <td>TBD</td>
             <td class="status-pending">To be added</td>
-            <td>Check back after the end of May</td>
+            <td>Check back after end of May</td>
           </tr>
         </tbody>
       </table>
     </div>
 
+    <!-- City of Colton -->
     <div class="schedule-section">
       <h2>City of Colton - 10U</h2>
       <table>
@@ -106,6 +101,7 @@
             <th>Date</th>
             <th>Time</th>
             <th>Division</th>
+            <th>Type</th>
             <th>Field</th>
             <th>Status</th>
             <th>Action</th>
@@ -117,9 +113,10 @@
             <td>June dates pending</td>
             <td>TBD</td>
             <td>10U</td>
+            <td>—</td>
             <td>TBD</td>
             <td class="status-pending">To be added</td>
-            <td>Check back after the end of May</td>
+            <td>Check back after end of May</td>
           </tr>
         </tbody>
       </table>
@@ -136,8 +133,7 @@
     </p>
   </div>
 
-  <!-- auth.js must load before schedule.js so isLoggedIn() is available -->
-  <script src="auth.js?v=3"></script>
-  <script src="schedule.js?v=3"></script>
+  <script type="module" src="auth.js?v=4"></script>
+  <script type="module" src="schedule.js?v=4"></script>
 </body>
 </html>

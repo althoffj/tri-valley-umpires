@@ -10,6 +10,7 @@ import {
 import {
   collection,
   getDocs,
+  getDoc,
   runTransaction,
   doc,
   query,
@@ -18,9 +19,13 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 let games = [];
-let activeFilter  = "all";
-let pendingGameId = null;
+let activeFilter    = "all";
+let pendingGameId   = null;
 let pendingSlotType = null;
+
+// Cache: team name → Set of ISO date strings with games
+const teamGameDates = {};
+let teamCalendars   = []; // [{name, icsUrl}]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -227,9 +232,67 @@ async function loadGames() {
   }
 }
 
+// ── Team calendar / conflict detection ───────────────────────────────────────
+
+async function loadTeamCalendars() {
+  try {
+    const snap = await getDoc(doc(db, "config", "teamCalendars"));
+    teamCalendars = snap.exists() ? (snap.data().teams || []) : [];
+  } catch (_) {}
+}
+
+async function fetchICS(url) {
+  // Try direct fetch first; fall back to CORS proxy if blocked
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (res.ok) return await res.text();
+  } catch (_) {}
+  try {
+    const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const res = await fetch(proxy);
+    if (res.ok) return await res.text();
+  } catch (_) {}
+  return null;
+}
+
+function parseICSdates(icsText) {
+  const dates = new Set();
+  const re = /DTSTART[^:]*:(\d{4})(\d{2})(\d{2})/g;
+  let m;
+  while ((m = re.exec(icsText)) !== null) {
+    dates.add(`${m[1]}-${m[2]}-${m[3]}`);
+  }
+  return dates;
+}
+
+async function getTeamDatesForGame(gameDate) {
+  const profile = getCurrentProfile();
+  const teamsPlayed = profile?.teamsPlayed || [];
+  if (!teamsPlayed.length || !teamCalendars.length) return [];
+
+  const conflictingTeams = [];
+
+  await Promise.all(teamsPlayed.map(async teamName => {
+    const cal = teamCalendars.find(t => t.name === teamName);
+    if (!cal) return;
+
+    // Use cached dates if available
+    if (!teamGameDates[teamName]) {
+      const icsText = await fetchICS(cal.icsUrl);
+      teamGameDates[teamName] = icsText ? parseICSdates(icsText) : new Set();
+    }
+
+    if (teamGameDates[teamName].has(gameDate)) {
+      conflictingTeams.push(teamName);
+    }
+  }));
+
+  return conflictingTeams;
+}
+
 // ── Signup modal ──────────────────────────────────────────────────────────────
 
-function openModal(gameId, slotType) {
+async function openModal(gameId, slotType) {
   const game = games.find(g => g.id === gameId);
   if (!game) return;
   pendingGameId   = gameId;
@@ -246,6 +309,15 @@ function openModal(gameId, slotType) {
   msgEl.className   = "signup-message";
   document.getElementById("signupModal").style.display = "";
   document.getElementById("confirmSignupBtn").disabled = false;
+
+  // Conflict check — runs async after modal opens so it doesn't delay display
+  if (isLoggedIn()) {
+    const conflicts = await getTeamDatesForGame(game.date);
+    if (conflicts.length > 0) {
+      msgEl.textContent = `⚠️ Possible conflict — ${conflicts.join(", ")} may have a game on this date. Verify your availability before confirming.`;
+      msgEl.className   = "signup-message warning";
+    }
+  }
 }
 
 function closeModal() {
@@ -384,5 +456,6 @@ document.getElementById("cancelSignupBtn").addEventListener("click", closeModal)
 authReadyPromise.then(() => {
   const myGamesBtn = document.getElementById("myGamesBtn");
   if (myGamesBtn) myGamesBtn.style.display = isLoggedIn() ? "" : "none";
+  loadTeamCalendars();
   loadGames();
 });
