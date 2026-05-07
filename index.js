@@ -1,131 +1,74 @@
+// index.js — home page login, logout, and password reset
+import { authReadyPromise, login, logout, sendResetEmail } from "./auth.js";
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+
 document.getElementById("loginForm").addEventListener("submit", async function(e) {
   e.preventDefault();
+  const email    = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  const msgEl    = document.getElementById("loginMessage");
+  const btn      = document.getElementById("loginBtn");
 
-  var email = document.getElementById("loginEmail").value.trim();
-  var password = document.getElementById("loginPassword").value;
-  var messageEl = document.getElementById("loginMessage");
-  var btn = document.getElementById("loginBtn");
-
-  btn.disabled = true;
-  messageEl.textContent = "Logging in...";
-  messageEl.className = "signup-message info";
+  btn.disabled      = true;
+  msgEl.textContent = "Logging in…";
+  msgEl.className   = "signup-message info";
 
   try {
     await login(email, password);
-    messageEl.textContent = "Login successful!";
-    messageEl.className = "signup-message success";
-    applyAuthGate();
+    msgEl.textContent = "Login successful!";
+    msgEl.className   = "signup-message success";
     this.reset();
   } catch (err) {
-    messageEl.textContent = err.message;
-    messageEl.className = "signup-message error";
+    msgEl.textContent = err.message;
+    msgEl.className   = "signup-message error";
   } finally {
     btn.disabled = false;
   }
 });
 
-document.getElementById("logoutBtn").addEventListener("click", function() {
-  logout();
-  applyAuthGate();
-});
+// ── Logout ────────────────────────────────────────────────────────────────────
 
-document.getElementById("showResetBtn").addEventListener("click", function() {
+document.getElementById("logoutBtn").addEventListener("click", () => logout());
+
+// ── Password reset toggle ─────────────────────────────────────────────────────
+
+document.getElementById("showResetBtn").addEventListener("click", () => {
   document.getElementById("loginForm").hidden = true;
-  document.getElementById("resetPasswordForm").hidden = false;
+  document.getElementById("resetForm").hidden = false;
   document.getElementById("resetMessage").textContent = "";
-  document.getElementById("resetMessage").className = "signup-message";
 });
 
-document.getElementById("cancelResetBtn").addEventListener("click", function() {
-  document.getElementById("resetPasswordForm").hidden = true;
+document.getElementById("cancelResetBtn").addEventListener("click", () => {
+  document.getElementById("resetForm").hidden = true;
   document.getElementById("loginForm").hidden = false;
   document.getElementById("resetMessage").textContent = "";
-  document.getElementById("resetMessage").className = "signup-message";
 });
 
-document.getElementById("resetPasswordForm").addEventListener("submit", async function(e) {
+// ── Password reset submit ─────────────────────────────────────────────────────
+
+document.getElementById("resetForm").addEventListener("submit", async function(e) {
   e.preventDefault();
+  const email  = document.getElementById("resetEmail").value.trim();
+  const msgEl  = document.getElementById("resetMessage");
+  const btn    = document.getElementById("resetBtn");
 
-  var name = document.getElementById("resetName").value.trim();
-  var email = document.getElementById("resetEmail").value.trim();
-  var currentPassword = document.getElementById("resetCurrentPassword").value;
-  var newPassword = document.getElementById("resetNewPassword").value;
-  var messageEl = document.getElementById("resetMessage");
-  var btn = document.getElementById("resetBtn");
-
-  if (newPassword.length < 6) {
-    messageEl.textContent = "New password must be at least 6 characters.";
-    messageEl.className = "signup-message error";
-    return;
-  }
-
-  btn.disabled = true;
-  messageEl.textContent = "Updating password...";
-  messageEl.className = "signup-message info";
+  btn.disabled      = true;
+  msgEl.textContent = "Sending…";
+  msgEl.className   = "signup-message info";
 
   try {
-    var result = await jsonpReset(name, email, currentPassword, newPassword);
-    messageEl.textContent = result.message;
-    messageEl.className = "signup-message success";
+    await sendResetEmail(email);
+    msgEl.textContent = "Reset email sent! Check your inbox and follow the link to set a new password.";
+    msgEl.className   = "signup-message success";
     this.reset();
-
-    setTimeout(function() {
-      document.getElementById("resetPasswordForm").hidden = true;
-      document.getElementById("loginForm").hidden = false;
-    }, 2500);
   } catch (err) {
-    messageEl.textContent = err.message;
-    messageEl.className = "signup-message error";
+    const friendly = err.code === "auth/user-not-found"
+      ? "No account found with that email address."
+      : "Failed to send reset email. Please try again.";
+    msgEl.textContent = friendly;
+    msgEl.className   = "signup-message error";
   } finally {
     btn.disabled = false;
   }
 });
-
-function jsonpReset(name, email, currentPassword, newPassword) {
-  return new Promise(function(resolve, reject) {
-    var callbackName = "umpireReset_" + Date.now() + "_" + Math.random().toString(36).slice(2);
-    var script = document.createElement("script");
-    var url = new URL(AUTH_API_URL);
-    var settled = false;
-
-    url.searchParams.set("action", "resetPassword");
-    url.searchParams.set("callback", callbackName);
-    url.searchParams.set("name", name);
-    url.searchParams.set("email", email);
-    url.searchParams.set("currentPassword", currentPassword);
-    url.searchParams.set("newPassword", newPassword);
-
-    var timer = setTimeout(function() {
-      if (settled) return;
-      settled = true;
-      delete window[callbackName];
-      script.remove();
-      reject(new Error("Password reset timed out. Please check your connection and try again."));
-    }, JSONP_TIMEOUT_MS);
-
-    window[callbackName] = function(payload) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      delete window[callbackName];
-      script.remove();
-      if (payload && payload.ok) {
-        resolve(payload);
-      } else {
-        reject(new Error((payload && payload.message) || "Password reset failed."));
-      }
-    };
-
-    script.onerror = function() {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      delete window[callbackName];
-      script.remove();
-      reject(new Error("Unable to reach the password reset service."));
-    };
-
-    script.src = url.toString();
-    document.body.appendChild(script);
-  });
-}

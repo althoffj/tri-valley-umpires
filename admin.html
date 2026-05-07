@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=4" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="expectations.html">Expectations</a>
+    <a href="principles_of_umpiring.html">Principles</a>
+    <a href="rule_breakdown.html">Rules</a>
+    <a href="pregame-meeting.html">Plate Meeting</a>
+    <a href="schedule.html">Schedule &amp; Signups</a>
+    <a href="form.html" data-auth-guest>Acknowledgment</a>
+    <a href="admin.html" data-auth-admin style="display:none">Admin</a>
+  </nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <!-- ── Pending Approvals ──────────────────────────────────────────────── -->
+    <h2>Pending Approvals</h2>
+    <p id="pendingNote" class="schedule-source"></p>
+    <div id="pendingList"></div>
+
+    <!-- ── Umpire Roster ─────────────────────────────────────────────────── -->
+    <h2>Umpire Roster</h2>
+    <div class="schedule-section">
+      <table id="rosterTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Address</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="rosterBody">
+          <tr><td colspan="6" style="color:var(--light-text);text-align:center">Loading roster…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Add Game ───────────────────────────────────────────────────────── -->
+    <h2>Add Game</h2>
+    <form id="addGameForm" class="signup-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="gameCity">City / League</label>
+          <select id="gameCity" required>
+            <option value="">-- Select --</option>
+            <option value="City of Crooks">City of Crooks</option>
+            <option value="City of Colton">City of Colton</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="gameDivision">Division</label>
+          <select id="gameDivision" required>
+            <option value="">-- Select --</option>
+            <option value="10U">10U</option>
+            <option value="12U">12U</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="gameDate">Date</label>
+          <input type="date" id="gameDate" required />
+        </div>
+        <div class="form-group">
+          <label for="gameTime">Time</label>
+          <input type="time" id="gameTime" required />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="gameType">Game Type</label>
+          <select id="gameType" required>
+            <option value="Regular">Regular</option>
+            <option value="Playoff">Playoff</option>
+            <option value="Tournament">Tournament</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="gameUmpireType">Umpire Type Needed</label>
+          <select id="gameUmpireType" required>
+            <option value="Plate">Plate</option>
+            <option value="Field">Field</option>
+            <option value="Extra">Extra</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="gameField">Field / Location</label>
+          <input type="text" id="gameField" placeholder="e.g. Field 1, Crooks Complex" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="gamePayRate">Pay Rate ($)</label>
+          <input type="number" id="gamePayRate" min="0" step="0.01" placeholder="40" />
+        </div>
+      </div>
+
+      <div class="page-actions" style="margin-top:16px">
+        <button type="submit" class="btn" id="addGameBtn">Add Game</button>
+      </div>
+      <p id="addGameMessage" class="signup-message" aria-live="polite"></p>
+    </form>
+
+    <!-- ── Game List ──────────────────────────────────────────────────────── -->
+    <h2>All Games</h2>
+    <div class="page-actions">
+      <button type="button" class="btn filter-btn filter-active" data-filter="upcoming">Upcoming</button>
+      <button type="button" class="btn print-btn filter-btn" data-filter="all">All</button>
+    </div>
+    <div class="schedule-section">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Time</th>
+            <th>City</th>
+            <th>Div</th>
+            <th>Type</th>
+            <th>Field</th>
+            <th>Pay</th>
+            <th>Umpire</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="adminGameBody">
+          <tr><td colspan="9" style="color:var(--light-text);text-align:center">Loading games…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Pay Rates Config ───────────────────────────────────────────────── -->
+    <h2>Default Pay Rates</h2>
+    <form id="payRatesForm" class="signup-form">
+      <div class="form-row">
+        <div class="form-group form-group--sm">
+          <label for="ratePlate">Plate ($)</label>
+          <input type="number" id="ratePlate" min="0" step="0.01" placeholder="40" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="rateField">Field ($)</label>
+          <input type="number" id="rateField" min="0" step="0.01" placeholder="30" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="rateExtra">Extra ($)</label>
+          <input type="number" id="rateExtra" min="0" step="0.01" placeholder="25" />
+        </div>
+      </div>
+      <div class="page-actions" style="margin-top:16px">
+        <button type="submit" class="btn">Save Pay Rates</button>
+      </div>
+      <p id="payRatesMessage" class="signup-message" aria-live="polite"></p>
+    </form>
+
+    <!-- ── Push Notification ─────────────────────────────────────────────── -->
+    <h2>Send Notification</h2>
+    <div class="document-note">
+      <p>Send a push notification to all umpires who have enabled notifications in their browser. Notifications appear even when the site is not open.</p>
+    </div>
+    <form id="notifForm" class="signup-form">
+      <label for="notifTitle">Title</label>
+      <input type="text" id="notifTitle" placeholder="New game added" maxlength="80" required />
+
+      <label for="notifBody">Message</label>
+      <input type="text" id="notifBody" placeholder="A new game has been added to the schedule. Check it out!" maxlength="200" required />
+
+      <div class="page-actions" style="margin-top:16px">
+        <button type="submit" class="btn" id="sendNotifBtn">Send Notification</button>
+      </div>
+      <p id="notifMessage" class="signup-message" aria-live="polite"></p>
+    </form>
+
+  </div>
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229
+    </p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script type="module" src="auth.js?v=4"></script>
+  <script type="module" src="admin.js?v=4"></script>
+</body>
+</html>
