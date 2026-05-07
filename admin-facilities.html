@@ -59,6 +59,20 @@
           <input type="url" id="facilityMapsUrl" placeholder="https://maps.google.com/…" />
         </div>
       </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="facilityNotes">Facility Notes</label>
+          <input type="text" id="facilityNotes" placeholder="General notes about this facility" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="facilityIssues" style="color:#f5c842">⚠ Active Issues</label>
+          <textarea id="facilityIssues" rows="2"
+            placeholder="Current facility issues to be addressed or to notify umpires…"
+            style="width:100%;padding:10px 12px;border:1px solid #b8860b;border-radius:6px;background:#2a2200;color:#eee;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
+        </div>
+      </div>
       <div class="page-actions" style="margin-top:16px">
         <button type="button" class="btn" id="saveAddFacilityBtn">Save Facility</button>
         <button type="button" class="btn print-btn" id="cancelAddFacilityBtn">Cancel</button>
