@@ -46,31 +46,10 @@ const INITIAL_GAMES = [
   ["colton-10u-2026-05-27-2", "City of Colton", "Wednesday, May 27", "6:30 PM", "10U", "West"]
 ];
 
-function doPost(event) {
-  try {
-    const data = JSON.parse(event.postData.contents);
-    const sheet = getOrCreateSheet(UMPIRES_SHEET_NAME, ACKNOWLEDGMENT_COLUMNS);
-
-    sheet.appendRow([
-      new Date(),
-      clean(data.name),
-      clean(data.email),
-      clean(data.phone),
-      clean(data.signature),
-      clean(data.parent_name),
-      clean(data.parent_email),
-      clean(data.parent_phone),
-      clean(data.password),
-      "No"  // Approved — must be set to "Yes" by an administrator before the umpire can log in
-    ]);
-
-    return ContentService.createTextOutput("Success")
-      .setMimeType(ContentService.MimeType.TEXT);
-  } catch (error) {
-    return ContentService.createTextOutput("Error: " + error)
-      .setMimeType(ContentService.MimeType.TEXT);
-  }
-}
+// FIX: Removed doPost(). The site uses JSONP (GET requests) exclusively —
+// doPost was never reachable from form.html or any other page, because JSONP
+// injects a <script> tag which always triggers a GET. All form submissions are
+// handled by the submitAcknowledgment branch inside doGet below.
 
 function doGet(event) {
   const params = event.parameter || {};
@@ -94,6 +73,7 @@ function doGet(event) {
 
     return jsonp(callback, payload);
   } catch (error) {
+    Logger.log("doGet error [action=" + (params.action || "list") + "]: " + error.message);
     return jsonp(callback, { ok: false, message: error.message });
   }
 }
@@ -125,6 +105,9 @@ function login(params) {
     return { ok: false, message: "Unable to find credential columns in the sheet." };
   }
 
+  // FIX: normalize() already collapses internal whitespace via replace(/\s+/g, " ").
+  // Using it consistently on both the stored value and the incoming value means
+  // "Jeff  Althoff" in the sheet matches "Jeff Althoff" from the login form.
   var requestedName = normalize(name);
   var requestedEmail = email.toLowerCase();
 
@@ -141,6 +124,7 @@ function login(params) {
   }
 
   if (!foundRow) {
+    Logger.log("login: no match for name=" + requestedName + " email=" + requestedEmail);
     return {
       ok: false,
       message: "You do not have a valid account. Please complete the acknowledgment form at https://althoffj.github.io/tri-valley-umpires/form.html to register."
@@ -158,6 +142,7 @@ function login(params) {
     }
   }
 
+  Logger.log("login: success for " + requestedEmail);
   return { ok: true };
 }
 
@@ -211,16 +196,18 @@ function resetPassword(params) {
     return { ok: false, message: "Name, email, or current password do not match our records. If you have forgotten your password, please contact the league administrator to have it reset." };
   }
 
-  // Update the password in the sheet (rowNumber is 1-indexed, i is 0-indexed + 1 for header)
   var rowNumber = foundRowIndex + 1;
-  var columnNumber = passwordIdx + 1; // convert 0-indexed to 1-indexed for Sheets API
+  var columnNumber = passwordIdx + 1;
   sheet.getRange(rowNumber, columnNumber).setValue(newPassword);
 
+  Logger.log("resetPassword: updated for " + requestedEmail);
   return { ok: true, message: "Password has been updated successfully. You can now log in with your new password." };
 }
 
 function submitAcknowledgment(params) {
   try {
+    Logger.log("submitAcknowledgment: received for " + clean(params.email));
+
     var sheet = getOrCreateSheet(UMPIRES_SHEET_NAME, ACKNOWLEDGMENT_COLUMNS);
 
     sheet.appendRow([
@@ -236,8 +223,10 @@ function submitAcknowledgment(params) {
       "No"  // Approved — must be set to "Yes" by an administrator
     ]);
 
+    Logger.log("submitAcknowledgment: row written for " + clean(params.email));
     return { ok: true, message: "Acknowledgment recorded." };
   } catch (error) {
+    Logger.log("submitAcknowledgment error: " + error.message);
     return { ok: false, message: "Failed to save acknowledgment: " + error.message };
   }
 }
@@ -299,6 +288,7 @@ function assignGame(params) {
       new Date()
     ]]);
 
+    Logger.log("assignGame: " + umpire.email + " assigned to " + gameId);
     return {
       ok: true,
       game: {
@@ -365,7 +355,6 @@ function readRosterFromSheet(sheet) {
     const name = clean(row[nameIndex]);
     const email = clean(row[emailIndex]).toLowerCase();
 
-    // Skip if not approved by an administrator
     if (approvedIndex !== -1) {
       const approved = clean(row[approvedIndex]).toLowerCase();
       if (approved !== "yes") continue;
@@ -401,9 +390,6 @@ function getGamesSheet() {
 
   INITIAL_GAMES.forEach((game) => {
     if (!existingIds.includes(game[0])) {
-      // Write date and time as plain text by prepending an apostrophe via
-      // setValues on a single row. This prevents Google Sheets from
-      // auto-converting "Wednesday, May 13" or "6:30 PM" into a Date serial.
       const lastRow = sheet.getLastRow() + 1;
       sheet.getRange(lastRow, 1, 1, 9).setValues([[
         game[0],          // GameId
@@ -433,7 +419,6 @@ function getOrCreateSheet(name, headers) {
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
   } else {
-    // Ensure all expected columns exist — add any missing ones
     const existingColumns = sheet.getLastColumn();
     if (existingColumns < headers.length) {
       for (let col = existingColumns + 1; col <= headers.length; col++) {
@@ -445,9 +430,6 @@ function getOrCreateSheet(name, headers) {
   return sheet;
 }
 
-// rowToGame reads date and time from the sheet. If Sheets stored a Date object
-// (from old rows written before this fix), it formats it back to readable
-// strings rather than returning a raw serial number.
 function rowToGame(row) {
   return {
     id:            clean(row[0]),
@@ -461,18 +443,13 @@ function rowToGame(row) {
   };
 }
 
-// If the cell holds a JS Date (Sheets auto-converted it), format it as
-// "Weekday, Month Day". If it's already a plain string, return it as-is.
 function formatSheetDate(value) {
   if (value instanceof Date && !isNaN(value)) {
     return Utilities.formatDate(value, Session.getScriptTimeZone(), "EEEE, MMMM d");
   }
-  // Strip the leading apostrophe that was written to force plain-text storage
   return clean(value).replace(/^'/, "");
 }
 
-// If the cell holds a JS Date (Sheets auto-converted it), format it as
-// "h:mm a" (e.g. "6:30 PM"). If it's already a plain string, return it as-is.
 function formatSheetTime(value) {
   if (value instanceof Date && !isNaN(value)) {
     return Utilities.formatDate(value, Session.getScriptTimeZone(), "h:mm a");
@@ -484,6 +461,10 @@ function clean(value) {
   return String(value || "").trim();
 }
 
+// FIX: normalize() collapses ALL internal whitespace (not just leading/trailing)
+// so "Jeff  Althoff" (double space, possibly stored from an early form submission)
+// matches "Jeff Althoff" entered at login. clean() handles leading/trailing;
+// the replace handles runs of spaces, tabs, or newlines between words.
 function normalize(value) {
   return clean(value).toLowerCase().replace(/\s+/g, " ");
 }

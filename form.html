@@ -167,9 +167,10 @@
           }
         }
 
-        // Submit to Google Apps Script for the umpire roster (includes password)
-        // Uses JSONP (same approach as login/assign) because no-cors POST with
-        // JSON Content-Type can fail silently on some browsers.
+        // Submit to Google Apps Script for the umpire roster (includes password).
+        // Uses JSONP because no-cors POST with JSON Content-Type can fail silently
+        // on some browsers, and Apps Script doesn't support CORS for GET requests
+        // from a static GitHub Pages origin.
         try {
           await new Promise(function(resolve, reject) {
             var callbackName = "umpireSubmit_" + Date.now() + "_" + Math.random().toString(36).slice(2);
@@ -226,17 +227,14 @@
           errors.push("Roster submission failed: " + err.message);
         }
 
-        // FIX: Always reset Turnstile regardless of outcome so the user
-        // can re-submit without reloading the page. Previously this only
-        // ran in the success branch, leaving the CAPTCHA in a broken state
-        // after a partial failure.
+        // FIX: Always reset Turnstile before checking outcome. Previously this
+        // only ran inside the success branch, leaving the CAPTCHA permanently
+        // broken after any partial failure — the user had to reload the page to
+        // try again. Resetting unconditionally here means the user can resubmit
+        // after a transient network error without refreshing.
         if (window.turnstile) turnstile.reset();
 
         if (emailSuccess || sheetSuccess) {
-          // FIX: localStorage is only written on success. Previously these
-          // two calls also ran unconditionally before this block, meaning
-          // they would fire even on a complete failure, potentially caching
-          // stale or incorrect data.
           localStorage.setItem("umpireName", formData.name);
           localStorage.setItem("umpireEmail", formData.email);
 
