@@ -14,7 +14,12 @@ The schedule page uses `schedule.js` for the public UI and
    history and server access logs.
 3. **Umpires should use a unique password** that is not reused with any other
    service.
-4. A backend proxy server would be required to fully mitigate these issues.
+4. **Administrator approval required.** After submitting the acknowledgment
+   form, an administrator must set the `Approved` column to `Yes` in the
+   Google Sheet before the umpire can log in or sign up for games. This
+   prevents unauthorized access and ensures only verified umpires can claim
+   games.
+5. A backend proxy server would be required to fully mitigate these issues.
    This is a known architectural limitation of the static-site approach.
 
 ## Google Sheet
@@ -86,6 +91,8 @@ The script intentionally contains both entrypoints:
     `games` is the full game list from the sheet and `assignments` maps
     game IDs to their filled status
   - `action=assign` — validates and assigns an umpire to a game
+  - `action=login` — verifies umpire credentials and approval status
+  - `action=resetPassword` — updates password when current credentials are provided
 
 The public page uses JSONP so it can read and write from a static GitHub Pages
 site without browser CORS issues. The Apps Script still validates every signup

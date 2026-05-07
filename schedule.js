@@ -298,4 +298,12 @@ document.getElementById("signupForm").addEventListener("submit", async function(
   }
 });
 
+// Redirect unauthenticated users who navigate directly to the schedule page
+document.addEventListener("DOMContentLoaded", function() {
+  if (!userIsLoggedIn()) {
+    window.location.href = "index.html";
+    return;
+  }
+});
+
 loadAssignments();

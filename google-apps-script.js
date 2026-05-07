@@ -23,7 +23,8 @@ const ACKNOWLEDGMENT_COLUMNS = [
   "ParentName",
   "ParentEmail",
   "ParentPhone",
-  "Password"
+  "Password",
+  "Approved"
 ];
 
 // Each entry: [GameId, City, Date (plain text), Time (plain text), Division, Field]
@@ -59,7 +60,8 @@ function doPost(event) {
       clean(data.parent_name),
       clean(data.parent_email),
       clean(data.parent_phone),
-      clean(data.password)
+      clean(data.password),
+      "No"  // Approved — must be set to "Yes" by an administrator before the umpire can log in
     ]);
 
     return ContentService.createTextOutput("Success")
@@ -82,6 +84,8 @@ function doGet(event) {
       payload = assignGame(params);
     } else if (action === "login") {
       payload = login(params);
+    } else if (action === "resetPassword") {
+      payload = resetPassword(params);
     } else {
       payload = listGames();
     }
@@ -112,6 +116,8 @@ function login(params) {
   var nameIdx = findHeaderIndex(headers, ["name", "umpire name", "umpire full name", "full name"]);
   var emailIdx = findHeaderIndex(headers, ["email", "email address", "umpire email", "umpire email address"]);
   var passwordIdx = findHeaderIndex(headers, ["password", "umpire password"]);
+  var approvedIdx = findHeaderIndex(headers, ["approved"]);
+  var foundRow = null;
 
   if (nameIdx === -1 || emailIdx === -1 || passwordIdx === -1) {
     return { ok: false, message: "Unable to find credential columns in the sheet." };
@@ -127,11 +133,88 @@ function login(params) {
     var rowPassword = clean(row[passwordIdx]);
 
     if (rowName === requestedName && rowEmail === requestedEmail && rowPassword === password) {
-      return { ok: true };
+      foundRow = row;
+      break;
     }
   }
 
-  return { ok: false, message: "Name, email, or password do not match. Did you complete the acknowledgment form?" };
+  if (!foundRow) {
+    return {
+      ok: false,
+      message: "You do not have a valid account. Please complete the acknowledgment form at https://althoffj.github.io/tri-valley-umpires/form.html to register."
+    };
+  }
+
+  // Check if the umpire has been approved by an administrator
+  if (approvedIdx !== -1) {
+    var approved = clean(foundRow[approvedIdx]).toLowerCase();
+    if (approved !== "yes") {
+      return {
+        ok: false,
+        message: "Your account has not yet been approved by an administrator. Please wait for approval before signing up for games."
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+function resetPassword(params) {
+  var name = clean(params.name);
+  var email = clean(params.email).toLowerCase();
+  var currentPassword = clean(params.currentPassword);
+  var newPassword = clean(params.newPassword);
+
+  if (!name || !email || !currentPassword || !newPassword) {
+    return { ok: false, message: "Name, email, current password, and new password are required." };
+  }
+
+  if (newPassword.length < 6) {
+    return { ok: false, message: "New password must be at least 6 characters." };
+  }
+
+  var sheet = getOrCreateSheet(UMPIRES_SHEET_NAME, ACKNOWLEDGMENT_COLUMNS);
+  var values = sheet.getDataRange().getValues();
+
+  if (values.length < 2) {
+    return { ok: false, message: "No umpire records found. Did you complete the acknowledgment form?" };
+  }
+
+  var headers = values[0].map(function(h) { return normalizeHeader(h); });
+  var nameIdx = findHeaderIndex(headers, ["name", "umpire name", "umpire full name", "full name"]);
+  var emailIdx = findHeaderIndex(headers, ["email", "email address", "umpire email", "umpire email address"]);
+  var passwordIdx = findHeaderIndex(headers, ["password", "umpire password"]);
+
+  if (nameIdx === -1 || emailIdx === -1 || passwordIdx === -1) {
+    return { ok: false, message: "Unable to find credential columns in the sheet." };
+  }
+
+  var requestedName = normalize(name);
+  var requestedEmail = email.toLowerCase();
+  var foundRowIndex = -1;
+
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    var rowName = normalize(clean(row[nameIdx]));
+    var rowEmail = clean(row[emailIdx]).toLowerCase();
+    var rowPassword = clean(row[passwordIdx]);
+
+    if (rowName === requestedName && rowEmail === requestedEmail && rowPassword === currentPassword) {
+      foundRowIndex = i;
+      break;
+    }
+  }
+
+  if (foundRowIndex === -1) {
+    return { ok: false, message: "Name, email, or current password do not match our records. If you have forgotten your password, please contact the league administrator to have it reset." };
+  }
+
+  // Update the password in the sheet (rowNumber is 1-indexed, i is 0-indexed + 1 for header)
+  var rowNumber = foundRowIndex + 1;
+  var columnNumber = passwordIdx + 1; // convert 0-indexed to 1-indexed for Sheets API
+  sheet.getRange(rowNumber, columnNumber).setValue(newPassword);
+
+  return { ok: true, message: "Password has been updated successfully. You can now log in with your new password." };
 }
 
 function listGames() {
@@ -243,18 +326,26 @@ function readRosterFromSheet(sheet) {
   const headers = values[0].map((header) => normalizeHeader(header));
   const nameIndex = findHeaderIndex(headers, ["name", "umpire name", "umpire full name", "full name"]);
   const emailIndex = findHeaderIndex(headers, ["email", "email address", "umpire email", "umpire email address"]);
+  const approvedIndex = findHeaderIndex(headers, ["approved"]);
 
   if (nameIndex === -1 || emailIndex === -1) {
     return [];
   }
 
   // Deduplicate: iterate from bottom to top so the most recent submission
-  // per email address wins. This handles umpires who re-submit the form.
+  // per email address wins. Only include umpires who have been approved.
   const seen = {};
   for (let i = values.length - 1; i >= 1; i--) {
     const row = values[i];
     const name = clean(row[nameIndex]);
     const email = clean(row[emailIndex]).toLowerCase();
+
+    // Skip if not approved by an administrator
+    if (approvedIndex !== -1) {
+      const approved = clean(row[approvedIndex]).toLowerCase();
+      if (approved !== "yes") continue;
+    }
+
     if (name && email && !seen[email]) {
       seen[email] = { name, email };
     }
