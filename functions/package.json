@@ -1,0 +1,11 @@
+{
+  "name": "tri-valley-umpires-functions",
+  "description": "Cloud Functions for tri-valley-umpires",
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^6.0.0"
+  },
+  "private": true
+}
