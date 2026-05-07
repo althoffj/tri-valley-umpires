@@ -84,18 +84,12 @@
             <input type="email" id="addAdminEmail" placeholder="umpire@example.com" required />
           </div>
         </div>
-        <div style="margin-top:12px">
-          <label style="margin:0 0 4px;font-weight:bold;color:#ccc">Roles (leave all unchecked + no super admin = super admin)</label>
-          <div class="check-list">
-            <label><input type="checkbox" name="addAdminRole" value="games" /> Games</label>
-            <label><input type="checkbox" name="addAdminRole" value="umpires" /> Umpires</label>
-            <label><input type="checkbox" name="addAdminRole" value="payroll" /> Payroll</label>
-            <label><input type="checkbox" name="addAdminRole" value="config" /> Config</label>
-            <label><input type="checkbox" name="addAdminRole" value="facilities" /> Facilities</label>
-            <label><input type="checkbox" name="addAdminRole" value="superAdmin" /> Super Admin</label>
-          </div>
-        </div>
-        <div class="page-actions" style="margin-top:16px">
+        <label style="margin:16px 0 8px;color:#ccc">Permissions — click a card to grant or revoke</label>
+        <p style="font-size:0.82rem;color:var(--light-text);margin:0 0 12px">
+          All unchecked with no Super Admin = no access. Grant Super Admin to give full unrestricted access.
+        </p>
+        <div id="addPermCards"></div>
+        <div class="page-actions" style="margin-top:20px">
           <button type="submit" class="btn">Add Admin</button>
         </div>
         <p id="addAdminMessage" class="signup-message" aria-live="polite"></p>
@@ -119,7 +113,20 @@
     </p>
   </div>
 
+  <!-- ── Edit Permissions Modal ──────────────────────────────────────────── -->
+  <div id="editPermModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:900px;max-height:90vh;overflow-y:auto">
+      <h2 id="editPermTitle" style="margin-top:0">Edit Permissions</h2>
+      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 16px">Click a card to grant or revoke that permission. Changes take effect on the admin's next page load.</p>
+      <div id="editPermCards"></div>
+      <div class="page-actions" style="margin-top:20px">
+        <button type="button" class="btn" id="savePermBtn">Save Permissions</button>
+        <button type="button" class="btn print-btn" id="cancelPermBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="auth.js?v=7"></script>
-  <script type="module" src="admin.js?v=7"></script>
+  <script type="module" src="admin.js?v=8"></script>
 </body>
 </html>

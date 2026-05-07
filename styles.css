@@ -952,3 +952,140 @@ th {
 .assign-umpire-row:hover {
   background: rgba(255, 255, 255, 0.05);
 }
+
+/* ── Permission cards ──────────────────────────────────────────────────────── */
+
+.perm-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.perm-card {
+  border: 2px solid #444;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #1e1e1e;
+  transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+
+.perm-card-interactive {
+  cursor: pointer;
+}
+
+.perm-card-interactive:hover {
+  border-color: #888;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.06);
+}
+
+.perm-card-interactive:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(96,25,41,0.5);
+}
+
+.perm-card-granted {
+  border-color: #2a6a2a;
+  background: #161e16;
+}
+
+.perm-card-granted.perm-card-interactive:hover {
+  border-color: #3a8a3a;
+}
+
+.perm-card-sa {
+  border-color: #8b6914 !important;
+  background: #1c1800 !important;
+}
+
+.perm-card-sa.perm-card-granted {
+  border-color: #d4a017 !important;
+  background: #1e1b00 !important;
+}
+
+.perm-card-dimmed {
+  opacity: 0.65;
+}
+
+/* Card header */
+.perm-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  gap: 8px;
+}
+
+.perm-header-none    { background: #2a2a2a; }
+.perm-header-granted { background: #1a3a1a; }
+.perm-header-sa      { background: #2a2000; }
+
+.perm-card-title {
+  font-weight: bold;
+  font-size: 0.95rem;
+  color: #fff;
+}
+
+.perm-badge {
+  font-size: 0.72rem;
+  padding: 2px 9px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.perm-badge-granted {
+  background: #1a4a1a;
+  color: #8fc;
+  border: 1px solid #2a6a2a;
+}
+
+.perm-badge-none {
+  background: #2a2a2a;
+  color: #888;
+  border: 1px solid #444;
+}
+
+/* Card body */
+.perm-card-body {
+  padding: 10px 14px 14px;
+}
+
+.perm-desc {
+  font-size: 0.82rem;
+  color: var(--light-text);
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.perm-lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+
+.perm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.perm-list-head {
+  font-size: 0.7rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  margin-bottom: 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #333;
+}
+
+.perm-item {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  padding: 1px 0;
+}
+
+.perm-allow { color: #8fc; }
+.perm-deny  { color: #f88; }

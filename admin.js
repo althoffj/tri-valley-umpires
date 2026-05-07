@@ -172,7 +172,100 @@ async function revokeUmpire(uid, name) {
 
 // ── Admin Users Management ────────────────────────────────────────────────────
 
-const ALL_ROLES = ["games", "umpires", "payroll", "config", "facilities"];
+const ROLE_DEFS = [
+  {
+    key: "games",
+    label: "Games",
+    icon: "⚾",
+    description: "Manage the game schedule — add, edit, cancel, and delete games. Sync from team calendars.",
+    allowed: [
+      "Add, edit, cancel, and delete games",
+      "Sync games from GameChanger calendars",
+      "Import city schedule",
+      "Manage team calendar subscriptions",
+    ],
+    notAllowed: [
+      "Manually assign umpires to slots (Super Admin only)",
+      "Approve or deny umpire accounts",
+      "Edit pay rates or system config",
+    ],
+  },
+  {
+    key: "umpires",
+    label: "Umpires",
+    icon: "👤",
+    description: "Manage the umpire roster — approve or deny registrations and revoke access.",
+    allowed: [
+      "View full umpire roster",
+      "Approve or deny new umpire registrations",
+      "Revoke existing umpire approval",
+    ],
+    notAllowed: [
+      "Add or remove admin users",
+      "Edit pay rates or system config",
+      "Manage games or facilities",
+    ],
+  },
+  {
+    key: "payroll",
+    label: "Payroll",
+    icon: "💵",
+    description: "Access payroll summaries and mark umpire game slots as paid.",
+    allowed: [
+      "View payroll summary for all umpires",
+      "Mark individual game slots as paid",
+      "Filter by date range and umpire",
+    ],
+    notAllowed: [
+      "Edit pay rates (requires Config role)",
+      "Add or modify games",
+      "Approve umpire accounts",
+    ],
+  },
+  {
+    key: "config",
+    label: "Config",
+    icon: "⚙️",
+    description: "Edit system-wide settings including pay rates and default umpire slot types.",
+    allowed: [
+      "Set Plate / Field / Extra default pay rates",
+      "Set default umpire slot types for game imports",
+    ],
+    notAllowed: [
+      "Manage umpire accounts",
+      "Add or delete games",
+      "Manage admin users",
+    ],
+  },
+  {
+    key: "facilities",
+    label: "Facilities",
+    icon: "🏟",
+    description: "Manage ballpark facilities, field characteristics, and field issue reports.",
+    allowed: [
+      "Add, edit, and delete facilities and fields",
+      "Update field issue status and add admin notes",
+      "View all umpire-submitted field issues",
+    ],
+    notAllowed: [
+      "Approve umpire accounts",
+      "Manage games or pay rates",
+    ],
+  },
+  {
+    key: "superAdmin",
+    label: "Super Admin",
+    icon: "★",
+    description: "Full unrestricted access to every admin section and function.",
+    allowed: [
+      "All permissions above, plus:",
+      "Manually assign umpires to game slots",
+      "Add, edit, and remove admin users",
+      "Grant or restrict roles for any admin",
+    ],
+    notAllowed: [],
+  },
+];
 
 async function loadAdminUsers() {
   const tbody = document.getElementById("adminUsersBody");
@@ -226,56 +319,130 @@ async function loadAdminUsers() {
   }
 }
 
-function openEditRolesInline(uid) {
-  const cell = document.getElementById(`adminRolesCell_${uid}`);
-  if (!cell) return;
+// ── Permission card renderer ──────────────────────────────────────────────────
 
-  // Read current admin doc roles
+function renderPermissionCards(grantedRoles, isSA, interactive = false) {
+  return `<div class="perm-card-grid">` +
+    ROLE_DEFS.map(def => {
+      const key      = def.key;
+      const granted  = isSA || (key === "superAdmin" ? isSA : grantedRoles.includes(key));
+      const isSACard = key === "superAdmin";
+      const dimmed   = isSA && !isSACard; // non-SA cards dimmed when SA is active
+
+      const headerClass = granted
+        ? (isSACard ? "perm-card-header perm-header-sa" : "perm-card-header perm-header-granted")
+        : "perm-card-header perm-header-none";
+
+      const statusBadge = granted
+        ? `<span class="perm-badge perm-badge-granted">${isSACard && isSA ? "★ Active" : "✓ Granted"}</span>`
+        : `<span class="perm-badge perm-badge-none">— Not Granted</span>`;
+
+      const allowedHtml = def.allowed.length
+        ? def.allowed.map(a => `<li class="perm-item perm-allow">✓ ${esc(a)}</li>`).join("")
+        : "";
+      const notAllowedHtml = def.notAllowed.length
+        ? def.notAllowed.map(a => `<li class="perm-item perm-deny">✗ ${esc(a)}</li>`).join("")
+        : `<li class="perm-item" style="color:var(--light-text);font-style:italic">No restrictions</li>`;
+
+      const interactiveAttrs = interactive
+        ? `role="button" tabindex="0" data-role-key="${key}"
+           class="perm-card${granted ? " perm-card-granted" : ""}${isSACard ? " perm-card-sa" : ""}${dimmed ? " perm-card-dimmed" : ""} perm-card-interactive"`
+        : `class="perm-card${granted ? " perm-card-granted" : ""}${isSACard ? " perm-card-sa" : ""}${dimmed ? " perm-card-dimmed" : ""}"`;
+
+      const dimNote = dimmed
+        ? `<p style="font-size:0.78rem;color:#8fc;font-style:italic;margin:4px 0 0">Included via Super Admin</p>` : "";
+
+      return `
+        <div ${interactiveAttrs}>
+          <div class="${headerClass}">
+            <span class="perm-card-title">${def.icon} ${esc(def.label)}</span>
+            ${statusBadge}
+          </div>
+          <div class="perm-card-body">
+            <p class="perm-desc">${esc(def.description)}</p>
+            ${dimNote}
+            <div class="perm-lists">
+              <ul class="perm-list">
+                <li class="perm-list-head">Allowed</li>
+                ${allowedHtml}
+              </ul>
+              ${def.notAllowed.length ? `<ul class="perm-list">
+                <li class="perm-list-head">Not Allowed</li>
+                ${notAllowedHtml}
+              </ul>` : ""}
+            </div>
+          </div>
+        </div>`;
+    }).join("") + `</div>`;
+}
+
+// ── Edit permissions modal ────────────────────────────────────────────────────
+
+let editPermUid     = null;
+let editPermGranted = new Set();
+let editPermIsSA    = false;
+
+function openEditPermissionsModal(uid) {
+  editPermUid = uid;
   getDoc(doc(db, "admins", uid)).then(snap => {
-    const data = snap.exists() ? snap.data() : {};
-    const currentRoles = data.roles || [];
-    const isSA = data.superAdmin === true || currentRoles.length === 0;
+    const data   = snap.exists() ? snap.data() : {};
+    const roles  = data.roles || [];
+    editPermIsSA = data.superAdmin === true || roles.length === 0;
+    editPermGranted = new Set(editPermIsSA ? [] : roles);
 
-    const checkboxes = ALL_ROLES.map(r => `
-      <label style="display:flex;align-items:center;gap:5px;font-weight:normal;margin:2px 0">
-        <input type="checkbox" class="role-edit-cb" value="${r}" ${currentRoles.includes(r) ? "checked" : ""} />
-        ${r}
-      </label>`).join("");
+    const modal = document.getElementById("editPermModal");
+    const title = document.getElementById("editPermTitle");
 
-    cell.innerHTML = `
-      <div style="font-size:0.88rem">
-        ${checkboxes}
-        <label style="display:flex;align-items:center;gap:5px;font-weight:normal;margin:4px 0">
-          <input type="checkbox" id="superAdminCb_${esc(uid)}" ${isSA ? "checked" : ""} />
-          Super Admin
-        </label>
-        <div style="margin-top:8px;display:flex;gap:6px">
-          <button class="btn save-admin-roles-btn" data-uid="${esc(uid)}"
-            style="font-size:0.78rem;padding:4px 10px">Save</button>
-          <button class="btn print-btn cancel-admin-roles-btn"
-            style="font-size:0.78rem;padding:4px 10px">Cancel</button>
-        </div>
-      </div>`;
+    // Try to find name from the table
+    const row  = document.querySelector(`[data-admin-uid="${uid}"]`);
+    const name = row?.querySelector("td:first-child")?.textContent?.trim().split("\n").pop()?.trim() || uid;
+    if (title) title.textContent = `Edit Permissions — ${name}`;
+
+    renderEditPermModal();
+    modal.style.display = "flex";
   }).catch(err => alert(err.message));
 }
 
-async function saveAdminRoles(uid) {
-  const cell = document.getElementById(`adminRolesCell_${uid}`);
-  if (!cell) return;
+function renderEditPermModal() {
+  const container = document.getElementById("editPermCards");
+  if (!container) return;
+  container.innerHTML = renderPermissionCards([...editPermGranted], editPermIsSA, true);
 
-  const superAdminChecked = document.getElementById(`superAdminCb_${uid}`)?.checked || false;
-  const selectedRoles = superAdminChecked
-    ? []
-    : [...cell.querySelectorAll(".role-edit-cb:checked")].map(cb => cb.value);
+  // Wire card clicks
+  container.querySelectorAll(".perm-card-interactive").forEach(card => {
+    card.addEventListener("click",   () => togglePermCard(card.dataset.roleKey));
+    card.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") togglePermCard(card.dataset.roleKey); });
+  });
+}
 
+function togglePermCard(key) {
+  if (key === "superAdmin") {
+    editPermIsSA = !editPermIsSA;
+    if (editPermIsSA) editPermGranted.clear();
+  } else {
+    if (editPermIsSA) return; // SA grants everything; can't toggle individuals without removing SA
+    editPermGranted.has(key) ? editPermGranted.delete(key) : editPermGranted.add(key);
+  }
+  renderEditPermModal();
+}
+
+async function savePermissions() {
+  if (!editPermUid) return;
+  const btn = document.getElementById("savePermBtn");
+  btn.disabled = true;
+
+  const roles = editPermIsSA ? [] : [...editPermGranted];
   try {
-    await updateDoc(doc(db, "admins", uid), {
-      superAdmin: superAdminChecked,
-      roles: selectedRoles
+    await updateDoc(doc(db, "admins", editPermUid), {
+      superAdmin: editPermIsSA,
+      roles
     });
+    document.getElementById("editPermModal").style.display = "none";
     await loadAdminUsers();
   } catch (err) {
     alert(err.message);
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -287,6 +454,32 @@ async function removeAdmin(uid) {
   } catch (err) {
     alert(err.message);
   }
+}
+
+// ── Add Admin permission state ────────────────────────────────────────────────
+
+let addPermGranted = new Set();
+let addPermIsSA    = false;
+
+function renderAddPermCards() {
+  const container = document.getElementById("addPermCards");
+  if (!container) return;
+  container.innerHTML = renderPermissionCards([...addPermGranted], addPermIsSA, true);
+  container.querySelectorAll(".perm-card-interactive").forEach(card => {
+    card.addEventListener("click",   () => toggleAddCard(card.dataset.roleKey));
+    card.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") toggleAddCard(card.dataset.roleKey); });
+  });
+}
+
+function toggleAddCard(key) {
+  if (key === "superAdmin") {
+    addPermIsSA = !addPermIsSA;
+    if (addPermIsSA) addPermGranted.clear();
+  } else {
+    if (addPermIsSA) return;
+    addPermGranted.has(key) ? addPermGranted.delete(key) : addPermGranted.add(key);
+  }
+  renderAddPermCards();
 }
 
 document.getElementById("addAdminForm")?.addEventListener("submit", async function(e) {
@@ -316,12 +509,8 @@ document.getElementById("addAdminForm")?.addEventListener("submit", async functi
       return;
     }
 
-    const superAdminChecked = document.querySelector('[name="addAdminRole"][value="superAdmin"]')?.checked || false;
-    const selectedRoles = superAdminChecked
-      ? []
-      : [...document.querySelectorAll('[name="addAdminRole"]:checked')]
-          .map(cb => cb.value)
-          .filter(v => v !== "superAdmin");
+    const superAdminChecked = addPermIsSA;
+    const selectedRoles     = superAdminChecked ? [] : [...addPermGranted];
 
     await setDoc(doc(db, "admins", uid), {
       superAdmin: superAdminChecked,
@@ -331,6 +520,9 @@ document.getElementById("addAdminForm")?.addEventListener("submit", async functi
 
     setMsg("addAdminMessage", `Admin added: ${email}`, "success");
     this.reset();
+    addPermGranted = new Set();
+    addPermIsSA    = false;
+    renderAddPermCards();
     await loadAdminUsers();
   } catch (err) {
     setMsg("addAdminMessage", err.message, "error");
@@ -352,16 +544,15 @@ document.addEventListener("click", e => {
   if (revokeBtn) { revokeUmpire(revokeBtn.dataset.uid, revokeBtn.dataset.name); return; }
 
   const editRolesBtn = e.target.closest(".edit-admin-roles-btn");
-  if (editRolesBtn) { openEditRolesInline(editRolesBtn.dataset.uid); return; }
-
-  const saveRolesBtn = e.target.closest(".save-admin-roles-btn");
-  if (saveRolesBtn) { saveAdminRoles(saveRolesBtn.dataset.uid); return; }
-
-  const cancelRolesBtn = e.target.closest(".cancel-admin-roles-btn");
-  if (cancelRolesBtn) { loadAdminUsers(); return; }
+  if (editRolesBtn) { openEditPermissionsModal(editRolesBtn.dataset.uid); return; }
 
   const deleteAdminBtn = e.target.closest(".delete-admin-btn");
   if (deleteAdminBtn) { removeAdmin(deleteAdminBtn.dataset.uid); return; }
+
+  if (e.target.id === "savePermBtn")   { savePermissions(); return; }
+  if (e.target.id === "cancelPermBtn") { document.getElementById("editPermModal").style.display = "none"; return; }
+  if (e.target === document.getElementById("editPermModal"))
+    document.getElementById("editPermModal").style.display = "none";
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -383,5 +574,6 @@ authReadyPromise.then(async () => {
   if (isSuperAdmin()) {
     document.getElementById("adminUsersSection").style.display = "";
     loadAdminUsers();
+    renderAddPermCards();
   }
 });
