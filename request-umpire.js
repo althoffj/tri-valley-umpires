@@ -2,11 +2,101 @@
 import { db } from "./firebase.js";
 import {
   collection,
+  getDocs,
   addDoc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 emailjs.init("H9Z9Qz-HB-PehAQjp");
+
+// ── Facilities cascade ────────────────────────────────────────────────────────
+
+function esc(v) {
+  return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+let facilitiesData = [];
+
+async function loadFacilities() {
+  const facSel = document.getElementById("reqFacility");
+  if (!facSel) return;
+  try {
+    const snap = await getDocs(collection(db, "facilities"));
+    facilitiesData = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    facSel.innerHTML = `<option value="">-- Select facility --</option>` +
+      facilitiesData.map(f => `<option value="${esc(f.id)}">${esc(f.name)}</option>`).join("") +
+      `<option value="__other__">Other / Not listed…</option>`;
+  } catch (e) {
+    facSel.innerHTML = `<option value="">-- Could not load facilities --</option>`;
+    console.error("loadFacilities:", e);
+  }
+  facSel.addEventListener("change", cascadeFields);
+}
+
+function cascadeFields() {
+  const facId    = document.getElementById("reqFacility")?.value;
+  const fieldSel = document.getElementById("reqFieldSelect");
+  const fieldOther = document.getElementById("reqFieldOther");
+  if (!fieldSel || !fieldOther) return;
+
+  if (facId === "__other__") {
+    fieldSel.style.display = "none";
+    fieldOther.style.display = "";
+    fieldOther.placeholder = "Facility name / field";
+    return;
+  }
+
+  const fac    = facilitiesData.find(f => f.id === facId);
+  const fields = (fac?.fields || []).filter(f => f.name);
+
+  if (fields.length > 0) {
+    fieldSel.innerHTML = `<option value="">-- Any / All fields --</option>` +
+      fields.map(f => `<option value="${esc(f.name)}">${esc(f.name)}</option>`).join("") +
+      `<option value="__other__">Other / Enter manually…</option>`;
+    fieldSel.style.display = "";
+    fieldOther.style.display = "none";
+    fieldOther.value = "";
+
+    fieldSel.onchange = () => {
+      if (fieldSel.value === "__other__") {
+        fieldOther.style.display = "";
+        fieldOther.placeholder = "Field name";
+        fieldOther.focus();
+      } else {
+        fieldOther.style.display = "none";
+        fieldOther.value = "";
+      }
+    };
+  } else {
+    fieldSel.style.display = "none";
+    fieldOther.style.display = "";
+    fieldOther.placeholder = "Field name (optional)";
+  }
+}
+
+function getLocationStrings() {
+  const facId  = document.getElementById("reqFacility")?.value;
+  const fieldSel = document.getElementById("reqFieldSelect");
+  const fieldOther = document.getElementById("reqFieldOther");
+
+  if (facId === "__other__") {
+    const text = fieldOther?.value.trim() || "";
+    return { facilityId: "", facilityName: text, fieldName: "", location: text };
+  }
+
+  const fac = facilitiesData.find(f => f.id === facId);
+  const facilityName = fac?.name || "";
+  const fieldName = (fieldSel?.style.display !== "none" && fieldSel?.value && fieldSel.value !== "__other__")
+    ? fieldSel.value
+    : (fieldOther?.value.trim() || "");
+
+  const location = fieldName ? `${facilityName} — ${fieldName}` : facilityName;
+  return { facilityId: facId || "", facilityName, fieldName, location };
+}
+
+loadFacilities();
 
 function setMsg(text, type = "info") {
   const el = document.getElementById("requestMessage");
@@ -66,7 +156,7 @@ document.getElementById("requestForm")?.addEventListener("submit", async functio
 
   const date     = document.getElementById("reqDate").value;
   const time     = document.getElementById("reqTime").value;
-  const location = document.getElementById("reqLocation").value.trim();
+  const { facilityId, facilityName, fieldName, location } = getLocationStrings();
   const homeTeam = document.getElementById("reqHomeTeam").value.trim();
   const awayTeam = document.getElementById("reqAwayTeam").value.trim();
   const division = document.getElementById("reqDivision").value;
@@ -82,7 +172,7 @@ document.getElementById("requestForm")?.addEventListener("submit", async functio
   let valid = true;
   if (!date)     { fieldError("reqDateError",     "Please select a date."); valid = false; }
   if (!time)     { fieldError("reqTimeError",     "Please select a time."); valid = false; }
-  if (!location) { fieldError("reqLocationError", "Location is required."); valid = false; }
+  if (!location) { fieldError("reqLocationError", "Please select a facility."); valid = false; }
   if (!homeTeam) { fieldError("reqHomeTeamError", "Home team is required."); valid = false; }
   if (!awayTeam) { fieldError("reqAwayTeamError", "Visiting team is required."); valid = false; }
   if (!division) { fieldError("reqDivisionError", "Please select a division."); valid = false; }
@@ -102,7 +192,10 @@ document.getElementById("requestForm")?.addEventListener("submit", async functio
 
   try {
     await addDoc(collection(db, "umpireRequests"), {
-      date, time, location, homeTeam, awayTeam, division,
+      date, time,
+      facilityId, facilityName, fieldName,
+      location,   // derived display string for emails and admin view
+      homeTeam, awayTeam, division,
       positions,
       coachName, coachEmail, coachPhone, notes,
       status: "pending",
@@ -145,6 +238,10 @@ document.getElementById("requestForm")?.addEventListener("submit", async functio
 
     setMsg("Request submitted! You'll receive a confirmation email. An administrator will follow up to confirm availability.", "success");
     document.getElementById("requestForm").reset();
+    // Re-init cascade after reset
+    document.getElementById("reqFieldSelect").style.display = "none";
+    document.getElementById("reqFieldOther").style.display = "";
+    document.getElementById("reqFieldOther").placeholder = "Field name (optional)";
   } catch (err) {
     console.error(err);
     setMsg("Error submitting request. Please try again or contact Jeff Althoff at 605-380-0229.", "error");
