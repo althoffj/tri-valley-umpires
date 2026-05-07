@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Request an Umpire - Tri-Valley Baseball</title>
+  <link rel="stylesheet" href="styles.css?v=5" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://api.emailjs.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Request an Umpire</h1>
+  </div>
+
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="expectations.html">Expectations</a>
+    <a href="principles_of_umpiring.html">Principles</a>
+    <a href="rule_breakdown.html">Rules</a>
+    <a href="pregame-meeting.html">Plate Meeting</a>
+    <a href="schedule.html">Schedule &amp; Signups</a>
+    <a href="fields.html" data-auth-approved style="display:none">Fields</a>
+    <a href="incident.html" data-auth-approved style="display:none">Incident Report</a>
+    <a href="form.html" data-auth-guest>Acknowledgment</a>
+    <a href="request-umpire.html">Request Umpire</a>
+    <a href="admin.html" data-auth-admin style="display:none">Admin</a>
+  </nav>
+
+  <div class="form-container">
+
+    <div class="page-actions">
+      <a href="index.html" class="back-btn">Back to Home</a>
+    </div>
+
+    <h1>Request an Umpire for Your Game</h1>
+
+    <div class="document-note">
+      <p>Use this form to request umpire coverage for a non-league or tournament game. An administrator will review your request and reach out to confirm availability.</p>
+      <p style="margin-bottom:0;color:var(--light-text);font-size:0.9rem">
+        <strong>Note:</strong> For non-league games, coaches are responsible for payment directly to umpires. Standard pay rates are Plate: $40 / Field: $30.
+      </p>
+    </div>
+
+    <form id="requestForm" novalidate>
+
+      <!-- Game details -->
+      <div class="form-row">
+        <div class="form-group">
+          <label for="reqDate">Game Date *</label>
+          <input type="date" id="reqDate" required />
+          <p class="field-error" id="reqDateError"></p>
+        </div>
+        <div class="form-group">
+          <label for="reqTime">Game Time *</label>
+          <input type="time" id="reqTime" required />
+          <p class="field-error" id="reqTimeError"></p>
+        </div>
+      </div>
+
+      <label for="reqLocation">Location / Field *</label>
+      <input type="text" id="reqLocation" required placeholder="e.g. Crooks Complex — NH-North" />
+      <p class="field-error" id="reqLocationError"></p>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="reqHomeTeam">Home Team *</label>
+          <input type="text" id="reqHomeTeam" required placeholder="e.g. Crooks 12U Blue" />
+          <p class="field-error" id="reqHomeTeamError"></p>
+        </div>
+        <div class="form-group">
+          <label for="reqAwayTeam">Visiting Team *</label>
+          <input type="text" id="reqAwayTeam" required placeholder="e.g. Mitchell 12U" />
+          <p class="field-error" id="reqAwayTeamError"></p>
+        </div>
+      </div>
+
+      <label for="reqDivision">Age Division *</label>
+      <select id="reqDivision" required style="width:100%;padding:14px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:16px;box-sizing:border-box">
+        <option value="">-- Select --</option>
+        <option value="8U">8U</option>
+        <option value="10U">10U</option>
+        <option value="12U">12U</option>
+        <option value="14U">14U</option>
+        <option value="HS JV">HS JV</option>
+        <option value="HS Varsity">HS Varsity</option>
+        <option value="Adult">Adult</option>
+      </select>
+      <p class="field-error" id="reqDivisionError"></p>
+
+      <!-- Umpire positions needed -->
+      <label>Umpire Positions Needed *</label>
+      <div style="display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:6px 12px;margin:8px 0 4px">
+        <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+          <input type="checkbox" id="needPlate" value="Plate" /> Plate Umpire
+        </label>
+        <span></span>
+        <input type="number" id="payPlate" min="0" step="0.01" placeholder="$40"
+          style="width:70px;padding:6px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" disabled />
+
+        <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+          <input type="checkbox" id="needField" value="Field" /> Field Umpire
+        </label>
+        <span></span>
+        <input type="number" id="payField" min="0" step="0.01" placeholder="$30"
+          style="width:70px;padding:6px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" disabled />
+      </div>
+      <p class="field-error" id="reqPositionsError"></p>
+
+      <!-- Coach info -->
+      <div class="parent-section">
+        <h2>Coach Contact Information</h2>
+
+        <label for="coachName">Coach Name *</label>
+        <input type="text" id="coachName" required autocomplete="name" />
+        <p class="field-error" id="coachNameError"></p>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="coachEmail">Coach Email *</label>
+            <input type="email" id="coachEmail" required autocomplete="email" />
+            <p class="field-error" id="coachEmailError"></p>
+          </div>
+          <div class="form-group">
+            <label for="coachPhone">Coach Phone *</label>
+            <input type="tel" id="coachPhone" required autocomplete="tel" placeholder="(605) 555-1234" maxlength="14" />
+            <p class="field-error" id="coachPhoneError"></p>
+          </div>
+        </div>
+
+        <label for="reqNotes">Additional Notes</label>
+        <textarea id="reqNotes" rows="3"
+          style="width:100%;padding:14px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:16px;box-sizing:border-box;resize:vertical;font-family:inherit"
+          placeholder="Any additional details for the administrator…"></textarea>
+      </div>
+
+      <p id="requestMessage" class="signup-message" aria-live="polite" style="margin-top:16px"></p>
+
+      <button type="submit" class="btn" id="submitRequestBtn" style="margin-top:8px">Submit Request</button>
+
+    </form>
+  </div>
+
+  <div class="footer">
+    <p>
+      <a href="https://www.trivalleyball.com" target="_blank">Tri-Valley Baseball Association</a>
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+      | <a href="https://www.minndak.org/" target="_blank">Minndak Baseball League</a>
+      | Official Umpire Portal
+    </p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script type="module" src="auth.js?v=5"></script>
+  <script type="module" src="request-umpire.js?v=5"></script>
+</body>
+</html>

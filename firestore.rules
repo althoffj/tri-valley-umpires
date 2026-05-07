@@ -54,5 +54,11 @@ service cloud.firestore {
       allow create: if isApproved();
       allow read, update, delete: if isAdmin();
     }
+
+    // Umpire requests from coaches: anyone can create; only admins can read/update
+    match /umpireRequests/{requestId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
   }
 }

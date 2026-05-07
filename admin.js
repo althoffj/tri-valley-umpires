@@ -738,8 +738,106 @@ authReadyPromise.then(() => {
   loadGames();
   loadPayRates();
   loadTeamCalendars();
+  loadUmpireRequests();
   loadIncidents();
 });
+
+// ── Umpire Requests ───────────────────────────────────────────────────────────
+
+async function loadUmpireRequests() {
+  const listEl = document.getElementById("requestList");
+  const noteEl = document.getElementById("requestNote");
+  if (!listEl) return;
+
+  try {
+    const snap = await getDocs(
+      query(collection(db, "umpireRequests"), orderBy("submittedAt", "desc"))
+    );
+
+    if (snap.empty) {
+      noteEl.textContent = "No umpire requests submitted yet.";
+      listEl.innerHTML = "";
+      return;
+    }
+
+    const pending = snap.docs.filter(d => d.data().status === "pending");
+    noteEl.textContent = `${snap.size} total request${snap.size === 1 ? "" : "s"} — ${pending.length} pending.`;
+
+    listEl.innerHTML = snap.docs.map(d => {
+      const r = d.data();
+      const id = d.id;
+      const fmtDate = iso => iso ? iso.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$2/$3/$1") : "—";
+      const fmtTime = t => {
+        if (!t) return "—";
+        const [h, m] = t.split(":").map(Number);
+        return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+      };
+      const positions = (r.positions ?? []).map(p => `${p.type} ($${p.pay})`).join(", ") || "—";
+      const statusBadge = {
+        pending:  '<span class="badge" style="background:#4a2c00;color:#ffcc80">Pending</span>',
+        approved: '<span class="badge" style="background:#17351f;color:#b8f2c4">Approved</span>',
+        denied:   '<span class="badge" style="background:#5a1a1a;color:#ffb4b4">Denied</span>'
+      }[r.status] ?? r.status;
+
+      const actionBtns = r.status === "pending"
+        ? `<button class="btn req-approve-btn" data-id="${esc(id)}" style="font-size:0.8rem;padding:5px 12px">Approve</button>
+           <button class="btn print-btn req-deny-btn" data-id="${esc(id)}" style="font-size:0.8rem;padding:5px 12px">Deny</button>`
+        : "";
+
+      return `
+        <div class="document-note" style="border-left-color:#7ec8f7;margin-bottom:16px" data-request-id="${esc(id)}">
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+            <strong style="color:white">${esc(r.homeTeam ?? "?")} vs ${esc(r.awayTeam ?? "?")} — ${esc(r.division ?? "")}</strong>
+            ${statusBadge}
+          </div>
+          <p style="margin:0 0 3px"><span style="color:var(--light-text)">Date / Time:</span> ${esc(fmtDate(r.date))} at ${esc(fmtTime(r.time))}</p>
+          <p style="margin:0 0 3px"><span style="color:var(--light-text)">Location:</span> ${esc(r.location ?? "")}</p>
+          <p style="margin:0 0 3px"><span style="color:var(--light-text)">Positions:</span> ${esc(positions)}</p>
+          <p style="margin:0 0 3px"><span style="color:var(--light-text)">Coach:</span> ${esc(r.coachName ?? "")} — ${esc(r.coachEmail ?? "")} — ${esc(r.coachPhone ?? "")}</p>
+          ${r.notes ? `<p style="margin:4px 0 0;color:var(--light-text);font-size:0.9rem">${esc(r.notes)}</p>` : ""}
+          ${actionBtns ? `<div class="page-actions" style="margin-top:12px;margin-bottom:0">${actionBtns}</div>` : ""}
+          <p class="signup-message req-status-msg" style="margin:6px 0 0;min-height:0"></p>
+        </div>`;
+    }).join("");
+
+    // Wire approve/deny buttons
+    listEl.querySelectorAll(".req-approve-btn").forEach(btn => {
+      btn.addEventListener("click", () => handleRequestAction(btn.dataset.id, "approved"));
+    });
+    listEl.querySelectorAll(".req-deny-btn").forEach(btn => {
+      btn.addEventListener("click", () => handleRequestAction(btn.dataset.id, "denied"));
+    });
+  } catch (err) {
+    console.error(err);
+    listEl.innerHTML = '<p style="color:#ffb4b4">Error loading umpire requests.</p>';
+  }
+}
+
+async function handleRequestAction(requestId, newStatus) {
+  const card = document.querySelector(`[data-request-id="${requestId}"]`);
+  const msgEl = card?.querySelector(".req-status-msg");
+  if (msgEl) { msgEl.textContent = "Saving…"; msgEl.className = "signup-message req-status-msg info"; }
+
+  try {
+    const ref = doc(db, "umpireRequests", requestId);
+    await updateDoc(ref, { status: newStatus });
+    if (msgEl) {
+      msgEl.textContent = newStatus === "approved" ? "Approved — remember to add the game to the schedule." : "Denied.";
+      msgEl.className = `signup-message req-status-msg ${newStatus === "approved" ? "success" : "warning"}`;
+    }
+    // Update badge and hide buttons
+    card?.querySelectorAll(".req-approve-btn, .req-deny-btn").forEach(b => b.remove());
+    const badgeEl = card?.querySelector(".badge");
+    if (badgeEl) {
+      badgeEl.textContent = newStatus === "approved" ? "Approved" : "Denied";
+      badgeEl.style.background = newStatus === "approved" ? "#17351f" : "#5a1a1a";
+      badgeEl.style.color      = newStatus === "approved" ? "#b8f2c4" : "#ffb4b4";
+    }
+  } catch (err) {
+    console.error(err);
+    if (msgEl) { msgEl.textContent = "Error saving."; msgEl.className = "signup-message req-status-msg error"; }
+  }
+}
 
 // ── Incident Reports ──────────────────────────────────────────────────────────
 
