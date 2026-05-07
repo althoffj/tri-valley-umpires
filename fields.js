@@ -47,7 +47,7 @@ function renderPitching(field) {
   const mounds = Array.isArray(field.pitchingMounds) && field.pitchingMounds.length
     ? field.pitchingMounds
     : (field.pitchingDistance ? [{
-        type: field.fixedMound ? "Fixed" : field.portableMound ? "Portable" : "",
+        type: field.fixedMound ? "Fixed" : field.portableMound ? "Portable" : field.flatMound ? "Flat" : "",
         distance: field.pitchingDistance,
         label: ""
       }] : []);

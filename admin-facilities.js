@@ -53,6 +53,7 @@ function pitchingRowHtml(type = "", distance = "", label = "") {
       <option value="">-- Type --</option>
       ${opt("Fixed","Fixed")}
       ${opt("Portable","Portable")}
+      ${opt("Flat","Flat")}
     </select>
     <input class="pm-dist" type="text" placeholder="Distance (e.g. 44 ft)" value="${esc(distance)}" style="flex:2;min-width:80px" />
     <input class="pm-label" type="text" placeholder="Label (opt., e.g. 10U)" value="${esc(label)}" style="flex:1;min-width:70px" />
@@ -172,25 +173,17 @@ function fieldFormRows(prefix, fId, f = {}) {
     </div>
 
     ${formSection("Amenities")}
-    <div class="form-row">
-      <div class="form-group">
-        <div class="check-list" style="margin-top:4px">
-          <label><input type="checkbox" id="${p}Concession_${id}" ${chk("concessionStand")} /> Concession Stand</label>
-          <label><input type="checkbox" id="${p}Bathrooms_${id}" ${chk("bathrooms")} /> Bathrooms</label>
-          <label><input type="checkbox" id="${p}Portapotty_${id}" ${chk("portapotty")} /> Porta-Potty</label>
-          <label><input type="checkbox" id="${p}Lights_${id}" ${chk("lights")} /> Lights</label>
-          <label><input type="checkbox" id="${p}Scoreboard_${id}" ${chk("scoreboard")} /> Scoreboard</label>
-        </div>
-      </div>
-      <div class="form-group">
-        <div class="check-list" style="margin-top:4px">
-          <label><input type="checkbox" id="${p}PA_${id}" ${chk("paSystem")} /> PA System</label>
-          <label><input type="checkbox" id="${p}FirstAid_${id}" ${chk("firstAid")} /> First Aid Kit</label>
-          <label><input type="checkbox" id="${p}BattingCage_${id}" ${chk("battingCage")} /> Batting Cage</label>
-          <label><input type="checkbox" id="${p}WarningTrack_${id}" ${chk("warningTrack")} /> Warning Track</label>
-          <label><input type="checkbox" id="${p}CoveredSeating_${id}" ${chk("coveredSeating")} /> Covered/Shaded Seating</label>
-        </div>
-      </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin-top:8px">
+      <label class="check-list-item"><input type="checkbox" id="${p}Concession_${id}" ${chk("concessionStand")} /> Concession Stand</label>
+      <label class="check-list-item"><input type="checkbox" id="${p}PA_${id}" ${chk("paSystem")} /> PA System</label>
+      <label class="check-list-item"><input type="checkbox" id="${p}Bathrooms_${id}" ${chk("bathrooms")} /> Bathrooms</label>
+      <label class="check-list-item"><input type="checkbox" id="${p}FirstAid_${id}" ${chk("firstAid")} /> First Aid Kit</label>
+      <label class="check-list-item"><input type="checkbox" id="${p}Portapotty_${id}" ${chk("portapotty")} /> Porta-Potty</label>
+      <label class="check-list-item"><input type="checkbox" id="${p}BattingCage_${id}" ${chk("battingCage")} /> Batting Cage</label>
+      <label class="check-list-item"><input type="checkbox" id="${p}Lights_${id}" ${chk("lights")} /> Lights</label>
+      <label class="check-list-item"><input type="checkbox" id="${p}WarningTrack_${id}" ${chk("warningTrack")} /> Warning Track</label>
+      <label class="check-list-item"><input type="checkbox" id="${p}Scoreboard_${id}" ${chk("scoreboard")} /> Scoreboard</label>
+      <label class="check-list-item"><input type="checkbox" id="${p}CoveredSeating_${id}" ${chk("coveredSeating")} /> Covered/Shaded Seating</label>
     </div>
 
     ${formSection("Umpire Info")}
