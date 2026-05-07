@@ -1,4 +1,4 @@
-// schedule.js — Firestore-based schedule with signups, badges, and pay tracking
+// schedule.js — Firestore-based schedule with multi-slot signups, badges, and pay tracking
 import { db } from "./firebase.js";
 import {
   authReadyPromise,
@@ -18,8 +18,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 let games = [];
-let activeFilter = "all";
+let activeFilter  = "all";
 let pendingGameId = null;
+let pendingSlotType = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -61,15 +62,34 @@ function typeBadge(type) {
   return `<span class="badge badge-${cls}">${esc(type || "—")}</span>`;
 }
 
+// ── Slot helpers ──────────────────────────────────────────────────────────────
+
+function getSlots(game) {
+  return Array.isArray(game.umpireSlots) ? game.umpireSlots : [];
+}
+
+function openSlots(game) {
+  return getSlots(game).filter(s => !s.assignedUid);
+}
+
+function mySlots(game) {
+  const uid = getCurrentUser()?.uid;
+  return getSlots(game).filter(s => s.assignedUid === uid);
+}
+
+function allSlotsFilled(game) {
+  const slots = getSlots(game);
+  return slots.length > 0 && slots.every(s => s.assignedUid);
+}
+
 // ── Filtering ─────────────────────────────────────────────────────────────────
 
 function gameMatchesFilter(game) {
-  const uid = getCurrentUser()?.uid;
   switch (activeFilter) {
-    case "needs": return !game.cancelled && !game.assignedUid;
-    case "filled": return !game.cancelled && !!game.assignedUid;
-    case "mine":  return game.assignedUid === uid;
-    default:      return true;
+    case "needs":  return !game.cancelled && openSlots(game).length > 0;
+    case "filled": return !game.cancelled && allSlotsFilled(game);
+    case "mine":   return mySlots(game).length > 0;
+    default:       return true;
   }
 }
 
@@ -80,8 +100,7 @@ function renderPaySummary() {
   if (!el) return;
   if (activeFilter !== "mine") { el.style.display = "none"; return; }
 
-  const uid = getCurrentUser()?.uid;
-  const mine = games.filter(g => g.assignedUid === uid);
+  const mine = games.filter(g => mySlots(g).length > 0);
   const total = mine.reduce((sum, g) => sum + (Number(g.payRate) || 0), 0);
   if (mine.length === 0) { el.style.display = "none"; return; }
   el.textContent = `${mine.length} game${mine.length !== 1 ? "s" : ""} — estimated pay: $${total.toFixed(2)}`;
@@ -93,15 +112,41 @@ function renderPaySummary() {
 function renderCount() {
   const el = document.getElementById("signupCount");
   if (!el) return;
-  const active = games.filter(g => !g.cancelled);
-  const filled = active.filter(g => g.assignedUid).length;
-  const avail  = active.length - filled;
-  el.textContent = active.length === 0
+  const active     = games.filter(g => !g.cancelled);
+  const totalSlots = active.reduce((n, g) => n + getSlots(g).length, 0);
+  const filledSlots = active.reduce((n, g) => n + getSlots(g).filter(s => s.assignedUid).length, 0);
+  const openSlotCount = totalSlots - filledSlots;
+  el.textContent = totalSlots === 0
     ? "No games loaded yet."
-    : `${filled} of ${active.length} games filled — ${avail} game${avail !== 1 ? "s" : ""} still available`;
+    : `${filledSlots} of ${totalSlots} slot${totalSlots !== 1 ? "s" : ""} filled — ${openSlotCount} still available`;
 }
 
 // ── Row rendering ─────────────────────────────────────────────────────────────
+
+function buildTypesCell(game) {
+  const slots = getSlots(game);
+  if (!slots.length) return "—";
+  return slots.map(s => typeBadge(s.type)).join(" ");
+}
+
+function buildStatusCell(game) {
+  if (game.cancelled) return '<span style="color:#ffb4b4">Cancelled</span>';
+  const slots = getSlots(game);
+  if (!slots.length) return "—";
+  const filled = slots.filter(s => s.assignedUid).length;
+  if (filled === 0) return "Needs umpire";
+  if (filled === slots.length) return `Filled (${slots.map(s => esc(s.assignedName || "")).join(", ")})`;
+  return `${filled} of ${slots.length} slots filled`;
+}
+
+function buildStatusClass(game) {
+  if (game.cancelled) return "";
+  const slots = getSlots(game);
+  const filled = slots.filter(s => s.assignedUid).length;
+  if (filled === 0) return "status-needs";
+  if (filled === slots.length) return "status-filled";
+  return "status-needs"; // partially filled still needs more
+}
 
 function buildActionCell(game) {
   if (game.cancelled) return "—";
@@ -109,25 +154,28 @@ function buildActionCell(game) {
     return '<span style="color:var(--light-text);font-size:0.85rem">Game over</span>';
   }
 
-  const uid = getCurrentUser()?.uid;
-  if (game.assignedUid) {
-    if (game.assignedUid === uid) {
-      return `<button type="button" class="btn print-btn cancel-btn" data-game-id="${esc(game.id)}">Cancel Signup</button>`;
+  const uid    = getCurrentUser()?.uid;
+  const slots  = getSlots(game);
+  const loggedIn = isLoggedIn() && isApproved();
+
+  return slots.map(slot => {
+    if (slot.assignedUid === uid) {
+      return `<button type="button" class="btn print-btn cancel-btn"
+        data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}"
+        style="margin:2px 0">Cancel ${esc(slot.type)}</button>`;
     }
-    return '<button type="button" class="btn locked-btn" disabled>Filled</button>';
-  }
-
-  if (!isLoggedIn() || !isApproved()) {
-    return '<a href="index.html" class="btn print-btn">Log in to sign up</a>';
-  }
-
-  return `<button type="button" class="btn signup-btn" data-game-id="${esc(game.id)}">Sign up</button>`;
-}
-
-function buildStatusCell(game) {
-  if (game.cancelled) return '<span style="color:#ffb4b4">Cancelled</span>';
-  if (game.assignedUid) return `Filled — ${esc(game.assignedName || "Unknown")}`;
-  return "Needs umpire";
+    if (slot.assignedUid) {
+      return `<button type="button" class="btn locked-btn" disabled
+        style="margin:2px 0">${esc(slot.type)} Filled</button>`;
+    }
+    if (!loggedIn) {
+      return `<a href="index.html" class="btn print-btn"
+        style="margin:2px 0">Log in to sign up</a>`;
+    }
+    return `<button type="button" class="btn signup-btn"
+      data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}"
+      style="margin:2px 0">Sign up · ${esc(slot.type)}</button>`;
+  }).join("");
 }
 
 function renderGameRows() {
@@ -145,10 +193,10 @@ function renderGameRows() {
         <td>${esc(fmtDate(g.date))} ${dateBadge(g)}</td>
         <td>${esc(g.time || "—")}</td>
         <td>${esc(g.division || "—")}</td>
-        <td>${typeBadge(g.umpireType)}</td>
+        <td>${buildTypesCell(g)}</td>
         <td>${esc(g.field || "—")}</td>
-        <td class="${g.cancelled ? "" : g.assignedUid ? "status-filled" : "status-needs"}">${buildStatusCell(g)}</td>
-        <td>${buildActionCell(g)}</td>
+        <td class="${buildStatusClass(g)}">${buildStatusCell(g)}</td>
+        <td style="white-space:nowrap">${buildActionCell(g)}</td>
       </tr>`).join("");
   });
 
@@ -181,14 +229,15 @@ async function loadGames() {
 
 // ── Signup modal ──────────────────────────────────────────────────────────────
 
-function openModal(gameId) {
+function openModal(gameId, slotType) {
   const game = games.find(g => g.id === gameId);
   if (!game) return;
-  pendingGameId = gameId;
+  pendingGameId   = gameId;
+  pendingSlotType = slotType;
 
   const pay = game.payRate ? `$${Number(game.payRate).toFixed(2)}` : "TBD";
   document.getElementById("modalGameDetail").innerHTML =
-    `<strong>${esc(game.city)}</strong> &mdash; ${esc(game.division)} ${typeBadge(game.umpireType)}<br>
+    `<strong>${esc(game.city)}</strong> &mdash; ${esc(game.division)} ${typeBadge(slotType)}<br>
      ${esc(fmtDate(game.date))} at ${esc(game.time || "TBD")} &mdash; ${esc(game.field || "TBD")}<br>
      Pay rate: <strong>${pay}</strong>`;
 
@@ -201,12 +250,13 @@ function openModal(gameId) {
 
 function closeModal() {
   document.getElementById("signupModal").style.display = "none";
-  pendingGameId = null;
+  pendingGameId   = null;
+  pendingSlotType = null;
 }
 
-// ── Claim game ────────────────────────────────────────────────────────────────
+// ── Claim slot ────────────────────────────────────────────────────────────────
 
-async function claimGame(gameId) {
+async function claimSlot(gameId, slotType) {
   const user    = getCurrentUser();
   const profile = getCurrentProfile();
   if (!user || !profile) return;
@@ -219,21 +269,26 @@ async function claimGame(gameId) {
 
   try {
     const gameRef = doc(db, "games", gameId);
+    let updatedSlots;
+
     await runTransaction(db, async tx => {
       const snap = await tx.get(gameRef);
-      if (!snap.exists())   throw new Error("Game not found.");
+      if (!snap.exists()) throw new Error("Game not found.");
       const data = snap.data();
-      if (data.cancelled)   throw new Error("This game has been cancelled.");
-      if (data.assignedUid) throw new Error("This game was just claimed by someone else. Please refresh.");
-      tx.update(gameRef, {
-        assignedUid:  user.uid,
-        assignedName: profile.name,
-        claimedAt:    serverTimestamp()
-      });
+      if (data.cancelled) throw new Error("This game has been cancelled.");
+
+      const slots = data.umpireSlots || [];
+      const slotIdx = slots.findIndex(s => s.type === slotType && !s.assignedUid);
+      if (slotIdx === -1) throw new Error(`The ${slotType} slot was just claimed by someone else. Please refresh.`);
+
+      updatedSlots = slots.map((s, i) =>
+        i === slotIdx ? { ...s, assignedUid: user.uid, assignedName: profile.name } : s
+      );
+      tx.update(gameRef, { umpireSlots: updatedSlots });
     });
 
     const g = games.find(g => g.id === gameId);
-    if (g) { g.assignedUid = user.uid; g.assignedName = profile.name; }
+    if (g) g.umpireSlots = updatedSlots;
 
     msgEl.textContent = "You're signed up!";
     msgEl.className   = "signup-message success";
@@ -249,7 +304,7 @@ async function claimGame(gameId) {
         game_time:    game?.time || "",
         game_city:    game?.city || "",
         game_field:   game?.field || "",
-        game_type:    game?.umpireType || "",
+        game_type:    slotType,
         pay_rate:     game?.payRate ? `$${game.payRate}` : "TBD"
       }).catch(() => {});
     }
@@ -263,24 +318,31 @@ async function claimGame(gameId) {
   }
 }
 
-// ── Cancel signup ─────────────────────────────────────────────────────────────
+// ── Cancel slot ───────────────────────────────────────────────────────────────
 
-async function cancelSignup(gameId) {
+async function cancelSlot(gameId, slotType) {
   const user = getCurrentUser();
   if (!user) return;
-  if (!confirm("Cancel your signup for this game?")) return;
+  if (!confirm(`Cancel your ${slotType} signup for this game?`)) return;
 
   try {
     const gameRef = doc(db, "games", gameId);
+    let updatedSlots;
+
     await runTransaction(db, async tx => {
       const snap = await tx.get(gameRef);
       if (!snap.exists()) throw new Error("Game not found.");
-      const data = snap.data();
-      if (data.assignedUid !== user.uid) throw new Error("You are not signed up for this game.");
-      tx.update(gameRef, { assignedUid: null, assignedName: null, claimedAt: null });
+      const slots = snap.data().umpireSlots || [];
+      const slotIdx = slots.findIndex(s => s.type === slotType && s.assignedUid === user.uid);
+      if (slotIdx === -1) throw new Error("You are not signed up for this slot.");
+      updatedSlots = slots.map((s, i) =>
+        i === slotIdx ? { ...s, assignedUid: null, assignedName: null } : s
+      );
+      tx.update(gameRef, { umpireSlots: updatedSlots });
     });
+
     const g = games.find(g => g.id === gameId);
-    if (g) { g.assignedUid = null; g.assignedName = null; }
+    if (g) g.umpireSlots = updatedSlots;
     renderGameRows();
   } catch (err) {
     alert(err.message);
@@ -294,12 +356,12 @@ document.addEventListener("click", e => {
   const signupBtn = e.target.closest(".signup-btn");
   if (signupBtn) {
     if (!isLoggedIn() || !isApproved()) { window.location.href = "index.html"; return; }
-    openModal(signupBtn.dataset.gameId);
+    openModal(signupBtn.dataset.gameId, signupBtn.dataset.slotType);
     return;
   }
 
   const cancelBtn = e.target.closest(".cancel-btn");
-  if (cancelBtn) { cancelSignup(cancelBtn.dataset.gameId); return; }
+  if (cancelBtn) { cancelSlot(cancelBtn.dataset.gameId, cancelBtn.dataset.slotType); return; }
 
   const filterBtn = e.target.closest(".filter-btn");
   if (filterBtn) {
@@ -312,7 +374,7 @@ document.addEventListener("click", e => {
 });
 
 document.getElementById("confirmSignupBtn").addEventListener("click", () => {
-  if (pendingGameId) claimGame(pendingGameId);
+  if (pendingGameId && pendingSlotType) claimSlot(pendingGameId, pendingSlotType);
 });
 
 document.getElementById("cancelSignupBtn").addEventListener("click", closeModal);

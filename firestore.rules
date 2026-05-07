@@ -15,15 +15,13 @@ service cloud.firestore {
         get(/databases/$(database)/documents/umpires/$(request.auth.uid)).data.approved == true;
     }
 
-    // Games: anyone can read; only admins can create/delete; approved umpires can claim open games
+    // Games: anyone can read; only admins can create/delete;
+    // approved umpires can update umpireSlots on non-cancelled games (claim/cancel slots)
     match /games/{gameId} {
       allow read: if true;
       allow create, delete: if isAdmin();
       allow update: if isAdmin() ||
-        (isApproved() &&
-         resource.data.cancelled == false &&
-         resource.data.assignedUid == null &&
-         request.resource.data.assignedUid == request.auth.uid);
+        (isApproved() && resource.data.cancelled == false);
     }
 
     // Umpires: own profile read/create; admin can read/update all

@@ -94,12 +94,19 @@
           </select>
         </div>
         <div class="form-group">
-          <label for="gameUmpireType">Umpire Type Needed</label>
-          <select id="gameUmpireType" required>
-            <option value="Plate">Plate</option>
-            <option value="Field">Field</option>
-            <option value="Extra">Extra</option>
-          </select>
+          <label>Umpire Positions Needed</label>
+          <div id="gameUmpireTypes" style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;">
+            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+              <input type="checkbox" value="Plate" /> Plate
+            </label>
+            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+              <input type="checkbox" value="Field" /> Field
+            </label>
+            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+              <input type="checkbox" value="Extra" /> Extra
+            </label>
+          </div>
+          <p class="field-error" id="umpireTypesError"></p>
         </div>
       </div>
 

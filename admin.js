@@ -55,6 +55,14 @@ function setMsg(id, text, type = "info") {
   el.className   = `signup-message ${type}`;
 }
 
+function slotBadge(slot) {
+  const cls = slot.type === "Plate" ? "plate" : slot.type === "Field" ? "field" : "extra";
+  const filled = slot.assignedName
+    ? ` <span style="color:var(--light-text);font-size:0.8rem">→ ${esc(slot.assignedName)}</span>`
+    : "";
+  return `<span class="badge badge-${cls}">${esc(slot.type)}</span>${filled}`;
+}
+
 // ── Pending Approvals ─────────────────────────────────────────────────────────
 
 async function loadPending() {
@@ -111,7 +119,7 @@ async function approveUmpire(uid) {
 }
 
 async function denyUmpire(uid, name) {
-  if (!confirm(`Deny and delete ${name}'s account? This cannot be undone.`)) return;
+  if (!confirm(`Deny ${name}'s account?`)) return;
   try {
     await updateDoc(doc(db, "umpires", uid), { approved: false, denied: true });
     setMsg(`pendingMsg_${uid}`, "Marked as denied.", "warning");
@@ -162,7 +170,7 @@ async function loadRoster() {
 }
 
 async function revokeUmpire(uid, name) {
-  if (!confirm(`Revoke approval for ${name}? They will no longer be able to log in.`)) return;
+  if (!confirm(`Revoke approval for ${name}?`)) return;
   try {
     await updateDoc(doc(db, "umpires", uid), { approved: false });
     loadRoster();
@@ -198,30 +206,36 @@ function renderAdminGames() {
     return;
   }
 
-  tbody.innerHTML = visible.map(g => `
+  tbody.innerHTML = visible.map(g => {
+    const slots = g.umpireSlots || [];
+    const slotHtml = slots.length
+      ? slots.map((s, i) => `
+          <div style="display:flex;align-items:center;gap:6px;${i > 0 ? "margin-top:4px" : ""}">
+            ${slotBadge(s)}
+            ${s.assignedUid && !g.cancelled
+              ? `<button class="btn print-btn unassign-btn" style="font-size:0.75rem;padding:3px 8px"
+                   data-game-id="${esc(g.id)}" data-slot-type="${esc(s.type)}">Unassign</button>`
+              : ""}
+          </div>`).join("")
+      : "—";
+
+    return `
     <tr style="${g.cancelled ? "opacity:0.55" : ""}">
       <td>${esc(fmtDate(g.date))}</td>
       <td>${esc(fmtTime(g.time))}</td>
       <td>${esc(g.city || "—")}</td>
       <td>${esc(g.division || "—")}</td>
-      <td>${esc(g.umpireType || "—")}</td>
+      <td>${esc(g.type || "—")}</td>
       <td>${esc(g.field || "—")}</td>
       <td>${g.payRate ? `$${Number(g.payRate).toFixed(2)}` : "—"}</td>
-      <td>${g.cancelled
-        ? '<span style="color:#ffb4b4">Cancelled</span>'
-        : g.assignedName
-          ? esc(g.assignedName)
-          : '<span style="color:#ffcc80">Open</span>'}
-      </td>
+      <td>${g.cancelled ? '<span style="color:#ffb4b4">Cancelled</span>' : slotHtml}</td>
       <td>
         ${g.cancelled
           ? ""
-          : `<button class="btn print-btn cancel-game-btn" data-game-id="${esc(g.id)}">Cancel</button>`}
-        ${g.assignedUid && !g.cancelled
-          ? `<button class="btn print-btn unassign-btn" data-game-id="${esc(g.id)}" style="margin-top:4px">Unassign</button>`
-          : ""}
+          : `<button class="btn print-btn cancel-game-btn" data-game-id="${esc(g.id)}">Cancel Game</button>`}
       </td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
 }
 
 async function cancelGame(gameId) {
@@ -229,10 +243,7 @@ async function cancelGame(gameId) {
   if (!game) return;
   if (!confirm(`Cancel the game on ${fmtDate(game.date)} at ${game.city}?`)) return;
   try {
-    await updateDoc(doc(db, "games", gameId), {
-      cancelled: true,
-      cancelledAt: serverTimestamp()
-    });
+    await updateDoc(doc(db, "games", gameId), { cancelled: true, cancelledAt: serverTimestamp() });
     const g = allGames.find(g => g.id === gameId);
     if (g) g.cancelled = true;
     renderAdminGames();
@@ -241,14 +252,18 @@ async function cancelGame(gameId) {
   }
 }
 
-async function unassignGame(gameId) {
-  if (!confirm("Remove the umpire from this game?")) return;
+async function unassignSlot(gameId, slotType) {
+  if (!confirm(`Remove the umpire from the ${slotType} slot?`)) return;
   try {
-    await updateDoc(doc(db, "games", gameId), {
-      assignedUid: null, assignedName: null, claimedAt: null
-    });
+    const gameRef = doc(db, "games", gameId);
+    const snap = await getDoc(gameRef);
+    if (!snap.exists()) return;
+    const slots = (snap.data().umpireSlots || []).map(s =>
+      s.type === slotType ? { ...s, assignedUid: null, assignedName: null } : s
+    );
+    await updateDoc(gameRef, { umpireSlots: slots });
     const g = allGames.find(g => g.id === gameId);
-    if (g) { g.assignedUid = null; g.assignedName = null; }
+    if (g) g.umpireSlots = slots;
     renderAdminGames();
   } catch (err) {
     alert(err.message);
@@ -260,26 +275,37 @@ async function unassignGame(gameId) {
 document.getElementById("addGameForm").addEventListener("submit", async function(e) {
   e.preventDefault();
   const btn = document.getElementById("addGameBtn");
+
+  const checkedTypes = [...document.querySelectorAll("#gameUmpireTypes input:checked")].map(cb => cb.value);
+  if (checkedTypes.length === 0) {
+    document.getElementById("umpireTypesError").textContent = "Select at least one umpire position.";
+    return;
+  }
+  document.getElementById("umpireTypesError").textContent = "";
+
   btn.disabled = true;
   setMsg("addGameMessage", "Adding game…", "info");
 
-  const city       = document.getElementById("gameCity").value;
-  const division   = document.getElementById("gameDivision").value;
-  const date       = document.getElementById("gameDate").value;
-  const time       = document.getElementById("gameTime").value;
-  const type       = document.getElementById("gameType").value;
-  const umpireType = document.getElementById("gameUmpireType").value;
-  const field      = document.getElementById("gameField").value.trim();
-  const payRate    = parseFloat(document.getElementById("gamePayRate").value) || 0;
+  const city    = document.getElementById("gameCity").value;
+  const division = document.getElementById("gameDivision").value;
+  const date    = document.getElementById("gameDate").value;
+  const time    = document.getElementById("gameTime").value;
+  const type    = document.getElementById("gameType").value;
+  const field   = document.getElementById("gameField").value.trim();
+  const payRate = parseFloat(document.getElementById("gamePayRate").value) || 0;
+
+  const umpireSlots = checkedTypes.map(t => ({ type: t, assignedUid: null, assignedName: null }));
 
   try {
-    const ref = await addDoc(collection(db, "games"), {
-      city, division, date, time, type, umpireType, field, payRate,
-      cancelled: false, assignedUid: null, assignedName: null,
+    await addDoc(collection(db, "games"), {
+      city, division, date, time, type, field, payRate,
+      umpireSlots,
+      cancelled: false,
       createdAt: serverTimestamp()
     });
     setMsg("addGameMessage", "Game added!", "success");
     this.reset();
+    document.querySelectorAll("#gameUmpireTypes input").forEach(cb => cb.checked = false);
     await loadGames();
   } catch (err) {
     setMsg("addGameMessage", err.message, "error");
@@ -329,31 +355,18 @@ document.getElementById("notifForm").addEventListener("submit", async function(e
   setMsg("notifMessage", "Sending notifications…", "info");
 
   try {
-    // Collect all FCM tokens from notifications collection
-    const snap = await getDocs(collection(db, "notifications"));
-    const tokens = snap.docs.map(d => d.data().fcmToken).filter(Boolean);
-
-    if (tokens.length === 0) {
-      setMsg("notifMessage", "No umpires have notifications enabled yet.", "warning");
-      btn.disabled = false;
-      return;
-    }
-
-    // Send via EmailJS as a proxy notification summary (FCM requires a server key on a backend)
-    // For each token, we'd need a Cloud Function. As a fallback, send an email blast.
     if (typeof emailjs !== "undefined") {
       emailjs.init("H9Z9Qz-HB-PehAQjp");
       const roster = allUmpires.filter(u => u.approved && u.email);
       await Promise.allSettled(roster.map(u =>
         emailjs.send("service_vljauqe", "template_notification", {
-          to_name:  u.name,
-          to_email: u.email,
+          to_name:     u.name,
+          to_email:    u.email,
           notif_title: title,
           notif_body:  body
         })
       ));
     }
-
     setMsg("notifMessage", `Notification sent to ${allUmpires.filter(u => u.approved).length} umpires.`, "success");
     this.reset();
   } catch (err) {
@@ -379,7 +392,7 @@ document.addEventListener("click", e => {
   if (cancelGameBtn) { cancelGame(cancelGameBtn.dataset.gameId); return; }
 
   const unassignBtn = e.target.closest(".unassign-btn");
-  if (unassignBtn) { unassignGame(unassignBtn.dataset.gameId); return; }
+  if (unassignBtn) { unassignSlot(unassignBtn.dataset.gameId, unassignBtn.dataset.slotType); return; }
 
   const filterBtn = e.target.closest(".filter-btn");
   if (filterBtn) {
