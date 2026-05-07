@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin: Games - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=6" />
+  <link rel="stylesheet" href="styles.css?v=7" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app;">
 </head>
 <body>
@@ -92,7 +92,8 @@
 
       <div class="form-row">
         <div class="form-group">
-          <label for="gameField">Field / Location</label>
+          <label for="gameFieldSelect">Field / Location</label>
+          <select id="gameFieldSelect" style="display:none"></select>
           <input type="text" id="gameField" placeholder="e.g. NH-North, East" />
         </div>
       </div>
@@ -100,29 +101,18 @@
       <div class="form-row">
         <div class="form-group">
           <label>Umpire Positions &amp; Pay</label>
-          <div id="gameUmpireTypes" style="margin-top:8px">
-            <div style="display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:6px 10px">
-              <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
-                <input type="checkbox" value="Plate" /> Plate
-              </label>
-              <span></span>
-              <input type="number" class="slot-pay-input" data-slot-type="Plate"
-                min="0" step="0.01" placeholder="$" style="width:70px;padding:5px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" disabled />
+          <div id="gameUmpireTypes" class="slot-check-table">
+            <label><input type="checkbox" value="Plate" /> Plate</label>
+            <span></span>
+            <input type="number" class="slot-pay-input" data-slot-type="Plate" min="0" step="0.01" placeholder="$" disabled />
 
-              <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
-                <input type="checkbox" value="Field" /> Field
-              </label>
-              <span></span>
-              <input type="number" class="slot-pay-input" data-slot-type="Field"
-                min="0" step="0.01" placeholder="$" style="width:70px;padding:5px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" disabled />
+            <label><input type="checkbox" value="Field" /> Field</label>
+            <span></span>
+            <input type="number" class="slot-pay-input" data-slot-type="Field" min="0" step="0.01" placeholder="$" disabled />
 
-              <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
-                <input type="checkbox" value="Extra" /> Extra
-              </label>
-              <span></span>
-              <input type="number" class="slot-pay-input" data-slot-type="Extra"
-                min="0" step="0.01" placeholder="$" style="width:70px;padding:5px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" disabled />
-            </div>
+            <label><input type="checkbox" value="Extra" /> Extra</label>
+            <span></span>
+            <input type="number" class="slot-pay-input" data-slot-type="Extra" min="0" step="0.01" placeholder="$" disabled />
           </div>
           <p class="field-error" id="umpireTypesError"></p>
         </div>
@@ -259,7 +249,8 @@
 
       <div class="form-row">
         <div class="form-group">
-          <label for="editGameField">Field / Location</label>
+          <label for="editGameFieldSelect">Field / Location</label>
+          <select id="editGameFieldSelect" style="display:none"></select>
           <input type="text" id="editGameField" placeholder="e.g. NH-North" />
         </div>
       </div>
@@ -286,7 +277,7 @@
     </div>
   </div>
 
-  <script type="module" src="auth.js?v=6"></script>
-  <script type="module" src="admin-games.js?v=6"></script>
+  <script type="module" src="auth.js?v=7"></script>
+  <script type="module" src="admin-games.js?v=7"></script>
 </body>
 </html>

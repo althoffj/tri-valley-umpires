@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin: Config - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=6" />
+  <link rel="stylesheet" href="styles.css?v=7" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app;">
 </head>
 <body>
@@ -58,16 +58,10 @@
       <div class="document-note" style="margin:0 0 16px">
         <p style="margin:0">These slot types are automatically assigned to games imported from the city schedule.</p>
       </div>
-      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:8px">
-        <label style="font-weight:normal;display:flex;align-items:center;gap:8px;margin:0;font-size:1rem">
-          <input type="checkbox" id="defaultSlotPlate" value="Plate" /> Plate
-        </label>
-        <label style="font-weight:normal;display:flex;align-items:center;gap:8px;margin:0;font-size:1rem">
-          <input type="checkbox" id="defaultSlotField" value="Field" /> Field
-        </label>
-        <label style="font-weight:normal;display:flex;align-items:center;gap:8px;margin:0;font-size:1rem">
-          <input type="checkbox" id="defaultSlotExtra" value="Extra" /> Extra
-        </label>
+      <div class="check-list">
+        <label><input type="checkbox" id="defaultSlotPlate" value="Plate" /> Plate</label>
+        <label><input type="checkbox" id="defaultSlotField" value="Field" /> Field</label>
+        <label><input type="checkbox" id="defaultSlotExtra" value="Extra" /> Extra</label>
       </div>
       <div class="page-actions" style="margin-top:16px">
         <button type="submit" class="btn">Save Default Slot Types</button>
@@ -133,7 +127,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-  <script type="module" src="auth.js?v=6"></script>
-  <script type="module" src="admin-config.js?v=6"></script>
+  <script type="module" src="auth.js?v=7"></script>
+  <script type="module" src="admin-config.js?v=7"></script>
 </body>
 </html>

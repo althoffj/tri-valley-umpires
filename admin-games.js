@@ -20,9 +20,10 @@ import {
   where
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-let allGames     = [];
-let gameFilter   = "upcoming";
-let currentRates = { plate: 0, field: 0, extra: 0 };
+let allGames      = [];
+let gameFilter    = "upcoming";
+let currentRates  = { plate: 0, field: 0, extra: 0 };
+let facilitiesData = []; // [{ id, name, fields:[{name,notes}] }]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,19 +71,66 @@ function slotBadge(slot) {
   return `<span class="badge badge-${cls}">${esc(slot.type)}</span>${pay}${filled}`;
 }
 
-// ── Facilities select population ──────────────────────────────────────────────
+// ── Facilities select population + field cascade ──────────────────────────────
 
 async function loadFacilitiesIntoSelects() {
   try {
     const snap = await getDocs(collection(db, "facilities"));
-    const options = snap.docs.map(d =>
-      `<option value="${esc(d.id)}">${esc(d.data().name)}</option>`
+    facilitiesData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const options = facilitiesData.map(f =>
+      `<option value="${esc(f.id)}">${esc(f.name)}</option>`
     ).join("");
     const addSel  = document.getElementById("gameFacility");
     const editSel = document.getElementById("editGameFacility");
     if (addSel)  addSel.innerHTML  = `<option value="">-- None / Other --</option>${options}`;
     if (editSel) editSel.innerHTML = `<option value="">-- None / Other --</option>${options}`;
+
+    // Wire cascade listeners
+    addSel?.addEventListener("change",  () => cascadeFields("gameFacility",     "gameFieldSelect",     "gameField"));
+    editSel?.addEventListener("change", () => cascadeFields("editGameFacility", "editGameFieldSelect", "editGameField"));
   } catch (_) {}
+}
+
+function cascadeFields(facSelId, fieldSelId, fieldInputId) {
+  const facSel     = document.getElementById(facSelId);
+  const fieldSel   = document.getElementById(fieldSelId);
+  const fieldInput = document.getElementById(fieldInputId);
+  if (!facSel || !fieldSel || !fieldInput) return;
+
+  const fac    = facilitiesData.find(f => f.id === facSel.value);
+  const fields = (fac?.fields || []).filter(f => f.name);
+
+  if (fields.length > 0) {
+    fieldSel.innerHTML =
+      `<option value="">-- Select Field --</option>` +
+      fields.map(f => `<option value="${esc(f.name)}">${esc(f.name)}</option>`).join("") +
+      `<option value="__other__">Other / Enter manually…</option>`;
+    fieldSel.style.display = "";
+    fieldInput.style.display = "none";
+    fieldInput.value = "";
+
+    fieldSel.onchange = () => {
+      if (fieldSel.value === "__other__") {
+        fieldInput.style.display = "";
+        fieldInput.focus();
+      } else {
+        fieldInput.style.display = "none";
+        fieldInput.value = "";
+      }
+    };
+  } else {
+    fieldSel.style.display = "none";
+    fieldInput.style.display = "";
+  }
+}
+
+function getFieldValue(fieldSelId, fieldInputId) {
+  const sel   = document.getElementById(fieldSelId);
+  const input = document.getElementById(fieldInputId);
+  if (sel && sel.style.display !== "none" && sel.value && sel.value !== "__other__") {
+    return sel.value;
+  }
+  return input?.value.trim() || "";
 }
 
 // ── Games ─────────────────────────────────────────────────────────────────────
@@ -210,13 +258,29 @@ function openEditModal(gameId) {
   document.getElementById("editGameDate").value      = game.date || "";
   document.getElementById("editGameTime").value      = game.time || "";
   document.getElementById("editGameType").value      = game.type || "Regular";
-  document.getElementById("editGameField").value     = game.field || "";
   document.getElementById("editHomeTeam").value      = game.homeTeam || "";
   document.getElementById("editAwayTeam").value      = game.awayTeam || "";
 
-  // Set facility select
+  // Set facility select and trigger field cascade
   const editFacSel = document.getElementById("editGameFacility");
-  if (editFacSel) editFacSel.value = game.facilityId || "";
+  if (editFacSel) {
+    editFacSel.value = game.facilityId || "";
+    cascadeFields("editGameFacility", "editGameFieldSelect", "editGameField");
+    // After cascade, restore saved field value into the active control
+    const fieldSel = document.getElementById("editGameFieldSelect");
+    if (fieldSel && fieldSel.style.display !== "none") {
+      const matchOpt = [...fieldSel.options].find(o => o.value === (game.field || ""));
+      if (matchOpt) {
+        fieldSel.value = game.field;
+      } else if (game.field) {
+        fieldSel.value = "__other__";
+        const fi = document.getElementById("editGameField");
+        if (fi) { fi.style.display = ""; fi.value = game.field; }
+      }
+    } else {
+      document.getElementById("editGameField").value = game.field || "";
+    }
+  }
 
   // Render slot-type checkboxes + pay inputs
   const slotsDiv  = document.getElementById("editSlotPays");
@@ -268,7 +332,7 @@ async function saveGameEdit() {
       date:       document.getElementById("editGameDate").value,
       time:       document.getElementById("editGameTime").value,
       type:       document.getElementById("editGameType").value,
-      field:      document.getElementById("editGameField").value.trim(),
+      field:      getFieldValue("editGameFieldSelect", "editGameField"),
       homeTeam:   document.getElementById("editHomeTeam").value.trim(),
       awayTeam:   document.getElementById("editAwayTeam").value.trim(),
       facilityId: facilityId,
@@ -333,7 +397,7 @@ document.getElementById("addGameForm").addEventListener("submit", async function
   const date       = document.getElementById("gameDate").value;
   const time       = document.getElementById("gameTime").value;
   const type       = document.getElementById("gameType").value;
-  const field      = document.getElementById("gameField").value.trim();
+  const field      = getFieldValue("gameFieldSelect", "gameField");
   const facilityId = document.getElementById("gameFacility")?.value || "";
 
   // Build slots with per-slot pay from inline inputs
@@ -353,7 +417,12 @@ document.getElementById("addGameForm").addEventListener("submit", async function
     });
     setMsg("addGameMessage", "Game added!", "success");
     this.reset();
-    document.querySelectorAll("#gameUmpireTypes input").forEach(cb => cb.checked = false);
+    // Reset field cascade back to text input
+    const fieldSel = document.getElementById("gameFieldSelect");
+    if (fieldSel) fieldSel.style.display = "none";
+    const fieldInp = document.getElementById("gameField");
+    if (fieldInp) fieldInp.style.display = "";
+    document.querySelectorAll("#gameUmpireTypes input[type=checkbox]").forEach(cb => cb.checked = false);
     document.querySelectorAll(".slot-pay-input").forEach(inp => { inp.disabled = true; inp.value = ""; });
     await loadGames();
   } catch (err) {

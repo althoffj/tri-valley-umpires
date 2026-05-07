@@ -302,13 +302,13 @@ label {
 
 input {
   width: 100%;
-  padding: 14px;
+  padding: 10px 12px;
   border: 1px solid #555;
   border-radius: 6px;
   background: var(--field);
   color: #eee;
-  font-size: 16px;
-  transition: all 0.2s;
+  font-size: 0.95rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
   box-sizing: border-box;
 }
 
@@ -316,6 +316,50 @@ input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(96, 25, 41, 0.3);
+}
+
+/* Checkboxes and radios must not take full width */
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  min-width: unset;
+  padding: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+/* Select — matches input style */
+select {
+  width: 100%;
+  padding: 10px 36px 10px 12px;
+  border: 1px solid #555;
+  border-radius: 6px;
+  background: var(--field);
+  color: #eee;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(96, 25, 41, 0.3);
+}
+
+select option {
+  background: #2a2a2a;
+  color: #eee;
 }
 
 .parent-section {
@@ -837,4 +881,60 @@ th {
   opacity: 0.7;
   width: 100%;
   text-align: left;
+}
+
+/* ── Checkbox list — vertical, one item per line ────────────────────────────── */
+
+.check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.check-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: normal;
+  margin: 0;
+  cursor: pointer;
+  color: var(--text);
+}
+
+/* ── Slot-check table — 3-col grid: checkbox+label | info | pay input ────────── */
+
+.slot-check-table {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.slot-check-table label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: normal;
+  margin: 0;
+  cursor: pointer;
+}
+
+.slot-pay-input,
+.edit-slot-pay {
+  width: 72px;
+  padding: 5px 8px;
+  background: var(--field);
+  color: var(--text);
+  border: 1px solid #555;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+.slot-pay-input:disabled,
+.edit-slot-pay:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
