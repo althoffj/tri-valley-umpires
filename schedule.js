@@ -15,6 +15,7 @@ import {
   getDocs,
   getDoc,
   runTransaction,
+  updateDoc,
   doc,
   query,
   orderBy,
@@ -133,6 +134,122 @@ function renderCount() {
     : `${filledSlots} of ${totalSlots} slot${totalSlots !== 1 ? "s" : ""} filled — ${openSlotCount} still available`;
 }
 
+// ── Game Day bar ──────────────────────────────────────────────────────────────
+
+let facilitiesCache = null;
+
+async function getFacilities() {
+  if (facilitiesCache) return facilitiesCache;
+  try {
+    const snap = await getDocs(collection(db, "facilities"));
+    facilitiesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (_) { facilitiesCache = []; }
+  return facilitiesCache;
+}
+
+function matchFacility(facilities, cityName) {
+  if (!cityName || !facilities.length) return null;
+  // Match on any word > 3 chars from the game city name against facility name
+  const words = cityName.split(/\s+/).filter(w => w.length > 3);
+  return facilities.find(f =>
+    words.some(w => f.name?.toLowerCase().includes(w.toLowerCase()))
+  ) || null;
+}
+
+async function checkIn(gameId, slotType) {
+  const user = getCurrentUser();
+  if (!user) return;
+  const btn = document.querySelector(`.check-in-btn[data-game-id="${gameId}"][data-slot-type="${slotType}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+  try {
+    const gameRef = doc(db, "games", gameId);
+    const snap    = await getDoc(gameRef);
+    if (!snap.exists()) throw new Error("Game not found.");
+    const slots = (snap.data().umpireSlots || []).map(s =>
+      (s.type === slotType && s.assignedUid === user.uid)
+        ? { ...s, checkedIn: true, checkedInAt: new Date().toISOString() }
+        : s
+    );
+    await updateDoc(gameRef, { umpireSlots: slots });
+    const g = games.find(g => g.id === gameId);
+    if (g) g.umpireSlots = slots;
+    if (btn) { btn.textContent = "✓ Checked In"; btn.className = "btn check-in-btn"; }
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = "Check In"; }
+    alert(err.message);
+  }
+}
+
+async function showPartnerInfo(uid, name, anchorBtn) {
+  // Show inline below the button
+  const existing = anchorBtn.parentElement.querySelector(".partner-info");
+  if (existing) { existing.remove(); return; }
+  try {
+    const snap = await getDoc(doc(db, "umpires", uid));
+    const phone = snap.exists() ? (snap.data().phone || "") : "";
+    const info  = document.createElement("span");
+    info.className   = "partner-info";
+    info.style.cssText = "font-size:0.82rem;color:#ccc;padding:4px 10px;background:rgba(255,255,255,0.08);border-radius:6px;white-space:nowrap";
+    info.textContent = phone ? `${name} · ${phone}` : name || "No info";
+    anchorBtn.insertAdjacentElement("afterend", info);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function renderGameDayBar() {
+  const bar = document.getElementById("gameDayBar");
+  if (!bar) return;
+
+  const uid = getCurrentUser()?.uid;
+  if (!isLoggedIn() || !isApproved() || !uid) { bar.style.display = "none"; return; }
+
+  const today      = todayISO();
+  const todayGames = games.filter(g =>
+    g.date === today && !g.cancelled && getSlots(g).some(s => s.assignedUid === uid)
+  );
+
+  if (todayGames.length === 0) { bar.style.display = "none"; return; }
+
+  const facilities = await getFacilities();
+
+  bar.style.display = "";
+  bar.innerHTML = todayGames.map(game => {
+    const mySlot      = getSlots(game).find(s => s.assignedUid === uid);
+    const partnerSlot = getSlots(game).find(s => s.assignedUid && s.assignedUid !== uid);
+    const facility    = matchFacility(facilities, game.city);
+    const mapsUrl     = facility?.googleMapsUrl
+      || `https://maps.google.com/?q=${encodeURIComponent(`${game.field || ""} ${game.city || ""}`)}`;
+    const checkedIn   = mySlot?.checkedIn === true;
+    const typeCls     = mySlot?.type === "Plate" ? "plate" : mySlot?.type === "Field" ? "field" : "extra";
+
+    return `
+    <div class="game-day-card" data-game-id="${esc(game.id)}">
+      <div class="game-day-title">Game Day</div>
+      <div class="game-day-info">
+        <strong>${esc(game.city)}</strong>
+        <span class="badge badge-${typeCls}">${esc(mySlot?.type || "")}</span>
+        &mdash; ${esc(game.field || "")} &mdash; ${esc(game.time || "TBD")}
+      </div>
+      <div class="game-day-actions">
+        <a href="${esc(mapsUrl)}" class="btn" target="_blank" rel="noopener">Directions</a>
+        ${partnerSlot
+          ? `<button class="btn print-btn partner-btn"
+               data-uid="${esc(partnerSlot.assignedUid)}"
+               data-name="${esc(partnerSlot.assignedName || "")}">Partner: ${esc(partnerSlot.assignedName || "?")}</button>`
+          : `<button class="btn print-btn" disabled>No partner assigned</button>`
+        }
+        <a href="field-issues.html" class="btn print-btn">Report Issue</a>
+        <button class="btn ${checkedIn ? "" : "print-btn"} check-in-btn"
+          data-game-id="${esc(game.id)}" data-slot-type="${esc(mySlot?.type || "")}"
+          ${checkedIn ? "disabled" : ""}>
+          ${checkedIn ? "✓ Checked In" : "Check In"}
+        </button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
 // ── Row rendering ─────────────────────────────────────────────────────────────
 
 function buildTypesCell(game) {
@@ -229,6 +346,7 @@ function renderGameRows() {
 
   renderCount();
   renderPaySummary();
+  renderGameDayBar();
 }
 
 // ── Load from Firestore ───────────────────────────────────────────────────────
@@ -479,6 +597,19 @@ document.addEventListener("click", e => {
       b.classList.toggle("filter-active", b.dataset.filter === activeFilter)
     );
     renderGameRows();
+    return;
+  }
+
+  const checkInBtn = e.target.closest(".check-in-btn");
+  if (checkInBtn && !checkInBtn.disabled) {
+    checkIn(checkInBtn.dataset.gameId, checkInBtn.dataset.slotType);
+    return;
+  }
+
+  const partnerBtn = e.target.closest(".partner-btn");
+  if (partnerBtn) {
+    showPartnerInfo(partnerBtn.dataset.uid, partnerBtn.dataset.name, partnerBtn);
+    return;
   }
 });
 

@@ -167,6 +167,40 @@ function wirePayrollFilters() {
     document.getElementById("payrollTo").value   = "";
     renderPayrollTable();
   });
+  document.getElementById("exportCsvBtn")?.addEventListener("click", exportCSV);
+}
+
+function exportCSV() {
+  const rows = payrollRows.filter(r => {
+    if (payrollFromFilter && r.date < payrollFromFilter) return false;
+    if (payrollToFilter   && r.date > payrollToFilter)   return false;
+    return true;
+  });
+
+  const headers = ["Umpire", "Date", "City", "Division", "Slot", "Pay", "Paid"];
+  const lines = [
+    headers.join(","),
+    ...rows.map(r => [
+      `"${r.umpireName.replace(/"/g, '""')}"`,
+      fmtDate(r.date),
+      `"${r.city.replace(/"/g, '""')}"`,
+      `"${r.division.replace(/"/g, '""')}"`,
+      r.slotType,
+      r.pay.toFixed(2),
+      r.paid ? "Yes" : "No"
+    ].join(","))
+  ];
+
+  const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  const today = new Date().toISOString().slice(0, 10);
+  a.href     = url;
+  a.download = `payroll-${today}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ── Umpire Requests ───────────────────────────────────────────────────────────
@@ -303,6 +337,21 @@ async function loadIncidents() {
           ${gameLabel ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Game:</span> ${esc(gameLabel)}</p>` : ""}
           ${r.involvedParties ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Involved:</span> ${esc(r.involvedParties)}</p>` : ""}
           <p style="margin:8px 0 0;white-space:pre-wrap">${esc(r.description ?? "")}</p>
+          ${(r.attachments ?? []).length ? `
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+            ${(r.attachments).map(a => {
+              const isImage = a.type?.startsWith("image/");
+              return isImage
+                ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">
+                     <img src="${esc(a.url)}" alt="${esc(a.name)}"
+                       style="max-width:120px;max-height:90px;border-radius:6px;border:1px solid #444;object-fit:cover" />
+                   </a>`
+                : `<a href="${esc(a.url)}" target="_blank" rel="noopener"
+                     style="font-size:0.82rem;color:#7ec8f7;display:flex;align-items:center;gap:4px">
+                     📎 ${esc(a.name)}
+                   </a>`;
+            }).join("")}
+          </div>` : ""}
         </div>`;
     }).join("");
   } catch (err) {

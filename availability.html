@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>My Availability - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>My Availability</h1>
+  </div>
+
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="schedule.html">Schedule &amp; Signups</a>
+    <a href="fields.html" data-auth-approved style="display:none">Fields</a>
+    <a href="availability.html" data-auth-approved style="display:none">Availability</a>
+    <a href="incident.html" data-auth-approved style="display:none">Incident Report</a>
+    <a href="earnings.html" data-auth-approved style="display:none">My Earnings</a>
+    <a href="field-issues.html" data-auth-approved style="display:none">Field Issues</a>
+    <a href="request-umpire.html">Request Umpire</a>
+  </nav>
+
+  <!-- Approved umpires only -->
+  <div class="container" id="availContent" data-auth-approved style="display:none">
+
+    <div class="document-note" style="margin-bottom:24px">
+      <p style="margin:0">Mark dates when you are <strong>not available</strong> to umpire. Admins see this when assigning games — it is a guide, not a hard block. Click any day to toggle it.</p>
+    </div>
+
+    <!-- Month navigation -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <button class="btn print-btn" id="prevMonthBtn" style="padding:6px 16px">&#8249;</button>
+      <span id="monthLabel" style="font-size:1.15rem;font-weight:bold;color:white"></span>
+      <button class="btn print-btn" id="nextMonthBtn" style="padding:6px 16px">&#8250;</button>
+    </div>
+
+    <!-- Calendar grid -->
+    <div id="calGrid" class="avail-grid"></div>
+
+    <!-- Legend + Save -->
+    <div style="display:flex;align-items:center;gap:20px;margin-top:20px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--light-text)">
+        <span class="avail-day-demo"></span> Available
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--light-text)">
+        <span class="avail-day-demo avail-day-demo--off"></span> Unavailable
+      </div>
+      <div style="margin-left:auto">
+        <button class="btn" id="saveAvailBtn">Save Changes</button>
+      </div>
+    </div>
+    <p id="availMsg" class="signup-message" style="margin-top:12px;min-height:1.4em" aria-live="polite"></p>
+
+  </div>
+
+  <!-- Not approved fallback -->
+  <div class="container" id="availGuestMsg" style="display:none">
+    <div class="document-note">
+      <p>You must be a signed-in, approved umpire to manage availability. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=8"></script>
+  <script type="module" src="availability.js?v=1"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=1"></script>
+</body>
+</html>

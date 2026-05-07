@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
   <title>Admin - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=7" />
+  <link rel="stylesheet" href="styles.css?v=8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app;">
 </head>
 <body>
@@ -52,6 +54,27 @@
           <tr><td colspan="6" style="color:var(--light-text);text-align:center">Loading roster…</td></tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- ── Announcements (super admins only) ────────────────────────────── -->
+    <div id="announcementsSection" style="display:none">
+      <h2>Announcements</h2>
+      <div class="document-note">
+        <p>Post announcements visible to all approved umpires on the home page. Active announcements appear at the top of the home page. Mark inactive to hide without deleting.</p>
+      </div>
+      <form id="addAnnouncementForm" class="signup-form" style="margin-bottom:24px">
+        <label for="announcementTitle">Title</label>
+        <input type="text" id="announcementTitle" placeholder="Important update" maxlength="100" required />
+        <label for="announcementBody">Message</label>
+        <textarea id="announcementBody" rows="3" placeholder="Details visible to all approved umpires…" maxlength="500" required style="resize:vertical;min-height:80px"></textarea>
+        <div class="page-actions" style="margin-top:12px">
+          <button type="submit" class="btn">Post Announcement</button>
+        </div>
+        <p id="announcementPostMsg" class="signup-message" aria-live="polite"></p>
+      </form>
+      <div id="announcementsList">
+        <p style="color:var(--light-text)">Loading announcements…</p>
+      </div>
     </div>
 
     <!-- ── Admin Users (super admins only) ──────────────────────────────── -->
@@ -126,7 +149,9 @@
     </div>
   </div>
 
-  <script type="module" src="auth.js?v=7"></script>
+  <script type="module" src="auth.js?v=8"></script>
   <script type="module" src="admin.js?v=8"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=1"></script>
 </body>
 </html>

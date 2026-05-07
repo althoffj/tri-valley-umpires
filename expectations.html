@@ -3,8 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
     <title>Umpire Expectations - Tri-Valley Baseball</title>
-    <link rel="stylesheet" href="styles.css?v=7" />
+    <link rel="stylesheet" href="styles.css?v=8" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://script.google.com https://challenges.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://challenges.cloudflare.com; connect-src 'self' https://script.google.com;">
     <style>
       .expectations-content h2 {
@@ -220,6 +222,8 @@
       </p>
     </div>
 
-    <script type="module" src="auth.js?v=7"></script>
-  </body>
+    <script type="module" src="auth.js?v=8"></script>
+    <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=1"></script>
+</body>
 </html>

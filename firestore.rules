@@ -50,6 +50,12 @@ service cloud.firestore {
       allow read:        if isAdmin();
     }
 
+    // Umpire availability: own doc read/write; admins can read for assignment planning
+    match /availability/{uid} {
+      allow read, write: if request.auth.uid == uid;
+      allow read:        if isAdmin();
+    }
+
     // Incident reports: approved umpires can create; only admins can read
     match /incidentReports/{reportId} {
       allow create: if isApproved();
@@ -73,6 +79,12 @@ service cloud.firestore {
       allow read:   if isApproved() || isAdmin();
       allow create: if isApproved();
       allow update, delete: if isAdmin();
+    }
+
+    // Announcements: approved umpires can read; only admins can write
+    match /announcements/{announcementId} {
+      allow read: if isApproved() || isAdmin();
+      allow write: if isAdmin();
     }
   }
 }

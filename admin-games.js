@@ -68,7 +68,13 @@ function slotBadge(slot) {
     ? ` <span style="color:var(--light-text);font-size:0.78rem">$${Number(slot.payRate).toFixed(0)}</span>` : "";
   const filled = slot.assignedName
     ? ` <span style="color:var(--light-text);font-size:0.8rem">→ ${esc(slot.assignedName)}</span>` : "";
-  return `<span class="badge badge-${cls}">${esc(slot.type)}</span>${pay}${filled}`;
+  const checkinBadge = slot.assignedUid
+    ? slot.checkedIn
+      ? ` <span style="font-size:0.72rem;background:#17351f;color:#b8f2c4;border-radius:4px;padding:1px 6px"
+             title="${slot.checkedInAt ? "Checked in " + new Date(slot.checkedInAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}) : "Checked in"}">✓ In</span>`
+      : ` <span style="font-size:0.72rem;background:#3a2800;color:#ffcc80;border-radius:4px;padding:1px 6px">Not checked in</span>`
+    : "";
+  return `<span class="badge badge-${cls}">${esc(slot.type)}</span>${pay}${filled}${checkinBadge}`;
 }
 
 // ── Facilities select population + field cascade ──────────────────────────────
@@ -382,8 +388,9 @@ async function saveGameEdit() {
 
 // ── Assign umpire modal ───────────────────────────────────────────────────────
 
-let approvedUmpires = []; // { uid, name, email }
-let assignTarget    = null; // { gameId, slotType }
+let approvedUmpires   = []; // { uid, name, email }
+let umpireUnavailable = {}; // { [uid]: Set<string> } — loaded per assign-modal open
+let assignTarget      = null; // { gameId, slotType }
 
 async function loadApprovedUmpires() {
   if (approvedUmpires.length) return;
@@ -399,10 +406,24 @@ async function loadApprovedUmpires() {
   }
 }
 
+async function loadAllAvailability() {
+  try {
+    const snap = await getDocs(collection(db, "availability"));
+    umpireUnavailable = {};
+    snap.forEach(d => {
+      umpireUnavailable[d.id] = new Set(d.data().unavailableDates || []);
+    });
+  } catch (err) {
+    console.error("loadAllAvailability:", err);
+    umpireUnavailable = {};
+  }
+}
+
 function renderAssignList(filter = "") {
-  const list  = document.getElementById("assignUmpireList");
-  const lower = filter.toLowerCase();
-  const shown = approvedUmpires.filter(u =>
+  const list    = document.getElementById("assignUmpireList");
+  const lower   = filter.toLowerCase();
+  const gameDate = assignTarget?.gameDate || "";
+  const shown   = approvedUmpires.filter(u =>
     !filter || u.name.toLowerCase().includes(lower) || u.email.toLowerCase().includes(lower)
   );
 
@@ -411,20 +432,26 @@ function renderAssignList(filter = "") {
     return;
   }
 
-  list.innerHTML = shown.map(u => `
+  list.innerHTML = shown.map(u => {
+    const unavail  = gameDate && umpireUnavailable[u.uid]?.has(gameDate);
+    const warning  = unavail
+      ? `<span style="font-size:0.75rem;color:#fca;background:#5a2000;border-radius:4px;padding:2px 7px;margin-left:8px">Unavailable</span>`
+      : "";
+    return `
     <div class="assign-umpire-row" data-uid="${esc(u.uid)}" data-name="${esc(u.name)}"
       style="padding:10px 16px;cursor:pointer;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center">
       <div>
-        <div style="font-weight:bold">${esc(u.name)}</div>
+        <div style="font-weight:bold;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${esc(u.name)}${warning}</div>
         ${u.email ? `<div style="font-size:0.8rem;color:var(--light-text)">${esc(u.email)}</div>` : ""}
       </div>
       <button class="btn print-btn" style="font-size:0.8rem;padding:4px 12px;flex-shrink:0">Assign</button>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 async function openAssignModal(gameId, slotType) {
-  assignTarget = { gameId, slotType };
   const game = allGames.find(g => g.id === gameId);
+  assignTarget = { gameId, slotType, gameDate: game?.date || "" };
   const label = document.getElementById("assignSlotLabel");
   if (label && game) {
     label.textContent = `${slotType} slot — ${game.city || ""} ${fmtDate(game.date)} ${fmtTime(game.time)}`;
@@ -432,7 +459,7 @@ async function openAssignModal(gameId, slotType) {
   document.getElementById("assignSearch").value = "";
   document.getElementById("assignMessage").textContent = "";
 
-  await loadApprovedUmpires();
+  await Promise.all([loadApprovedUmpires(), loadAllAvailability()]);
   renderAssignList();
   document.getElementById("assignModal").style.display = "flex";
   document.getElementById("assignSearch").focus();

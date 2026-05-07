@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
   <title>Request an Umpire - Tri-Valley Baseball</title>
-  <link rel="stylesheet" href="styles.css?v=7" />
+  <link rel="stylesheet" href="styles.css?v=8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://api.emailjs.com;">
 </head>
 <body>
@@ -21,7 +23,9 @@
     <a href="pregame-meeting.html">Plate Meeting</a>
     <a href="schedule.html">Schedule &amp; Signups</a>
     <a href="fields.html" data-auth-approved style="display:none">Fields</a>
+    <a href="availability.html" data-auth-approved style="display:none">Availability</a>
     <a href="incident.html" data-auth-approved style="display:none">Incident Report</a>
+    <a href="earnings.html" data-auth-approved style="display:none">My Earnings</a>
       <a href="field-issues.html" data-auth-approved style="display:none">Field Issues</a>
     <a href="form.html" data-auth-guest>Acknowledgment</a>
     <a href="request-umpire.html">Request Umpire</a>
@@ -162,7 +166,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-  <script type="module" src="auth.js?v=7"></script>
+  <script type="module" src="auth.js?v=8"></script>
   <script type="module" src="request-umpire.js?v=8"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=1"></script>
 </body>
 </html>

@@ -1089,3 +1089,181 @@ th {
 
 .perm-allow { color: #8fc; }
 .perm-deny  { color: #f88; }
+
+/* ── Availability calendar ───────────────────────────────────────────────── */
+
+.avail-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.avail-header {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: var(--light-text);
+  padding: 4px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.avail-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 500;
+  background: #2a2a2a;
+  color: var(--text);
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s;
+  user-select: none;
+}
+
+.avail-day:hover:not(.avail-day--filler):not(.avail-day--past) {
+  border-color: var(--accent);
+}
+
+.avail-day--filler {
+  background: transparent;
+  cursor: default;
+}
+
+.avail-day--past {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.avail-day--today {
+  border-color: #666;
+  font-weight: bold;
+}
+
+.avail-day--off {
+  background: #6a1a1a;
+  color: #fca;
+  border-color: #a03030;
+}
+
+.avail-day--off:hover:not(.avail-day--past) {
+  background: #7a2020;
+}
+
+/* Legend demo swatches */
+.avail-day-demo {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  vertical-align: middle;
+}
+
+.avail-day-demo--off {
+  background: #6a1a1a;
+  border-color: #a03030;
+}
+
+/* ── Game Day bar ────────────────────────────────────────────────────────── */
+
+#gameDayBar {
+  margin-bottom: 20px;
+}
+
+.game-day-card {
+  background: #1a3320;
+  border: 1px solid #2d6040;
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.game-day-card + .game-day-card {
+  margin-top: 12px;
+}
+
+.game-day-title {
+  font-size: 0.72rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6dbf8a;
+  margin-bottom: 6px;
+}
+
+.game-day-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  font-size: 0.95rem;
+}
+
+.game-day-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── Mobile bottom tabs ──────────────────────────────────────────────────── */
+
+.mobile-tabs {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  body {
+    padding-bottom: 72px;
+  }
+
+  .mobile-tabs {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: #111;
+    border-top: 1px solid #2a2a2a;
+    z-index: 900;
+    safe-area-inset-bottom: env(safe-area-inset-bottom);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+.mobile-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: #666;
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-top: 2px solid transparent;
+  transition: color 0.12s, border-color 0.12s;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-tab:hover {
+  color: #aaa;
+}
+
+.mobile-tab.active {
+  color: #d4737c;
+  border-top-color: var(--accent);
+}

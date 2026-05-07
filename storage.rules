@@ -1,0 +1,21 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Incident report attachments:
+    // - The umpire who owns the report (uid segment) can upload
+    // - Admins can read all attachments
+    // - The owning umpire can read their own uploads
+    match /incidentReports/{uid}/{reportId}/{filename} {
+      allow write: if request.auth != null && request.auth.uid == uid
+        && request.resource.size <= 5 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/pdf');
+
+      allow read: if request.auth != null
+        && (request.auth.uid == uid
+            || firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)));
+    }
+
+  }
+}

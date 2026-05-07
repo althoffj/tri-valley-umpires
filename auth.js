@@ -1,5 +1,6 @@
 // auth.js — Firebase Authentication + session management + hamburger auth UI
-import { auth, db } from "./firebase.js";
+import { auth, db, messaging } from "./firebase.js";
+import { isPWAMode, isMobileDevice, isIOS, canInstall, triggerInstall } from "./pwa.js";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -9,8 +10,13 @@ import {
 import {
   doc,
   getDoc,
+  setDoc,
   updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getToken } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
+
+// FCM VAPID key — get from Firebase Console → Project Settings → Cloud Messaging → Web Push certificates
+const VAPID_KEY = "BL1MIZe0gFZgqyejUIykGfqeKTk6cG19mGL_T9VCkSpeht2BhX9hq_-L1XQVQrh4jZZ3wAoCz7_RgKNVIwzUM8g";
 
 // Module-level state — populated by onAuthStateChanged
 let currentUser    = null;
@@ -94,6 +100,20 @@ export async function checkIsAdmin(uid) {
   return snap.exists();
 }
 
+export async function requestNotificationPermission() {
+  if (!messaging) return "unsupported";
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return "denied";
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+    if (!token) return "no-token";
+    await setDoc(doc(db, "notifications", currentUser.uid), { token, updatedAt: new Date().toISOString() });
+    return "granted";
+  } catch {
+    return "error";
+  }
+}
+
 // ── DOM gating ───────────────────────────────────────────────────────────────
 
 export function applyAuthGate() {
@@ -135,6 +155,60 @@ function closeDropdown() {
   document.getElementById("authOverlay")?.classList.remove("open");
 }
 
+async function updateNotifButton() {
+  const btn = document.getElementById("hmNotifBtn");
+  if (!btn) return;
+
+  // Hide if messaging not supported or not signed in
+  if (!messaging || !isLoggedIn()) {
+    btn.style.display = "none";
+    return;
+  }
+
+  const perm = Notification?.permission;
+  if (perm === "denied") {
+    btn.style.display = "";
+    btn.textContent   = "Notifications Blocked";
+    btn.disabled      = true;
+    return;
+  }
+
+  // Check if token already saved
+  try {
+    const snap = await getDoc(doc(db, "notifications", currentUser.uid));
+    if (snap.exists() && snap.data().token) {
+      btn.style.display = "";
+      btn.textContent   = "Notifications Enabled ✓";
+      btn.disabled      = true;
+      return;
+    }
+  } catch { /* ignore */ }
+
+  btn.style.display = "";
+  btn.textContent   = "Enable Notifications";
+  btn.disabled      = false;
+}
+
+function updateInstallButton() {
+  const installBtn = document.getElementById("hmInstallBtn");
+  const iosMsg     = document.getElementById("hmIOSInstallMsg");
+  if (!installBtn || !iosMsg) return;
+
+  if (!isLoggedIn() || !canInstall()) {
+    installBtn.style.display = "none";
+    iosMsg.style.display     = "none";
+    return;
+  }
+
+  if (isIOS()) {
+    installBtn.style.display = "none";
+    iosMsg.style.display     = "";
+  } else {
+    installBtn.style.display = "";
+    iosMsg.style.display     = "none";
+  }
+}
+
 function updateDropdownState() {
   const dropdown = document.getElementById("authDropdown");
   if (!dropdown) return;
@@ -160,6 +234,8 @@ function updateDropdownState() {
     const calLink = document.getElementById("hmCalendarLink");
     if (calLink) calLink.style.display = "none";
   }
+  updateInstallButton();
+  updateNotifButton();
 }
 
 function initAuthUI() {
@@ -233,6 +309,11 @@ function initAuthUI() {
         <div style="display:flex;flex-direction:column;gap:8px">
           <a id="hmAdminLink" href="admin.html" class="btn print-btn" style="width:100%;display:none;text-align:center">Admin Panel</a>
           <a id="hmCalendarLink" href="calendar.html" class="btn print-btn" style="width:100%;display:none;text-align:center">Calendar</a>
+          <button type="button" class="btn print-btn" id="hmInstallBtn" style="width:100%;display:none">Install App</button>
+          <div id="hmIOSInstallMsg" style="display:none;font-size:0.82rem;color:#ccc;padding:8px 10px;background:rgba(255,255,255,0.07);border-radius:8px;line-height:1.5;text-align:center">
+            Tap <strong>Share</strong> (&#8679;) then <strong>"Add to Home Screen"</strong> to install.
+          </div>
+          <button type="button" class="btn print-btn" id="hmNotifBtn" style="width:100%;display:none">Enable Notifications</button>
           <button type="button" class="btn print-btn" id="hmEditProfileBtn" style="width:100%">Edit Profile</button>
           <button type="button" class="btn print-btn" id="hmLogoutBtn" style="width:100%">Sign Out</button>
         </div>
@@ -345,6 +426,32 @@ function initAuthUI() {
       btn.disabled = false;
     }
   });
+
+  // Enable Notifications button
+  document.getElementById("hmNotifBtn")?.addEventListener("click", async () => {
+    const btn = document.getElementById("hmNotifBtn");
+    btn.disabled    = true;
+    btn.textContent = "Requesting…";
+    const result = await requestNotificationPermission();
+    if (result === "granted") {
+      btn.textContent = "Notifications Enabled ✓";
+    } else if (result === "denied") {
+      btn.textContent = "Notifications Blocked";
+    } else {
+      btn.textContent = "Enable Notifications";
+      btn.disabled    = false;
+    }
+  });
+
+  // Install App button (Android/Chrome)
+  document.getElementById("hmInstallBtn")?.addEventListener("click", async () => {
+    const accepted = await triggerInstall();
+    if (accepted) updateInstallButton();
+  });
+
+  // Re-evaluate install button visibility when prompt becomes available or fires
+  window.addEventListener("pwa-install-available", updateInstallButton);
+  window.addEventListener("pwa-installed", updateInstallButton);
 
   // Sign out
   document.getElementById("hmLogoutBtn")?.addEventListener("click", async () => {

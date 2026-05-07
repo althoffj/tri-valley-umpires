@@ -1,8 +1,9 @@
 const { onSchedule }                  = require("firebase-functions/v2/scheduler");
 const { onCall, HttpsError }          = require("firebase-functions/v2/https");
 const { onDocumentWritten }           = require("firebase-functions/v2/firestore");
-const { initializeApp }        = require("firebase-admin/app");
-const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { initializeApp }               = require("firebase-admin/app");
+const { getFirestore, FieldValue }    = require("firebase-admin/firestore");
+const { getMessaging }                = require("firebase-admin/messaging");
 const https = require("https");
 
 initializeApp();
@@ -455,6 +456,44 @@ exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
     hooks.jeff  ? postSlack(hooks.jeff,  msg) : null,
     channel     ? postSlack(channel,     msg) : null
   ].filter(Boolean));
+});
+
+// ── FCM broadcast ─────────────────────────────────────────────────────────────
+
+const CORS = ["https://tri-valley-baseball-umpires.web.app", "https://tri-valley-baseball-umpires.firebaseapp.com"];
+
+exports.sendBroadcast = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in.");
+  const db       = getFirestore();
+  const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { title, body } = request.data || {};
+  if (!title || !body) throw new HttpsError("invalid-argument", "title and body are required.");
+
+  const tokensSnap = await db.collection("notifications").get();
+  const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
+  if (tokens.length === 0) return { sent: 0, failed: 0 };
+
+  const result = await getMessaging().sendEachForMulticast({
+    tokens,
+    notification: { title, body },
+    webpush: { fcmOptions: { link: "https://tri-valley-baseball-umpires.web.app/" } }
+  });
+
+  // Remove stale tokens (unregistered or invalid)
+  const stale = result.responses
+    .map((r, i) => r.error ? tokens[i] : null)
+    .filter(Boolean);
+  if (stale.length > 0) {
+    const batch = db.batch();
+    for (const snap of tokensSnap.docs) {
+      if (stale.includes(snap.data().token)) batch.delete(snap.ref);
+    }
+    await batch.commit();
+  }
+
+  return { sent: result.successCount, failed: result.failureCount };
 });
 
 // ── Phase 12: day-of reminders at 7 AM ───────────────────────────────────────

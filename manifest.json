@@ -1,0 +1,26 @@
+{
+  "name": "Tri-Valley Baseball Umpires",
+  "short_name": "TVU Umpires",
+  "description": "Umpire portal for Tri-Valley Baseball Association — schedule, assignments, and field operations.",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#601929",
+  "orientation": "portrait-primary",
+  "categories": ["sports", "productivity"],
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

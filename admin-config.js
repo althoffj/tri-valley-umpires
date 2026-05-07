@@ -1,16 +1,15 @@
 // admin-config.js — Pay rates, default slot types, Slack webhooks, push notifications
-import { db } from "./firebase.js";
+import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
 import {
-  collection,
-  getDocs,
   getDoc,
   doc,
-  setDoc,
-  updateDoc,
-  query,
-  orderBy
+  setDoc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+  getFunctions,
+  httpsCallable
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -134,6 +133,8 @@ document.getElementById("slackWebhooksForm").addEventListener("submit", async fu
 
 // ── Push Notifications ────────────────────────────────────────────────────────
 
+const sendBroadcastFn = httpsCallable(getFunctions(app), "sendBroadcast");
+
 document.getElementById("notifForm").addEventListener("submit", async function(e) {
   e.preventDefault();
   const btn   = document.getElementById("sendNotifBtn");
@@ -141,28 +142,18 @@ document.getElementById("notifForm").addEventListener("submit", async function(e
   const body  = document.getElementById("notifBody").value.trim();
 
   btn.disabled = true;
-  setMsg("notifMessage", "Sending notifications…", "info");
+  setMsg("notifMessage", "Sending…", "info");
 
   try {
-    // Load approved umpires for email notifications
-    const snap = await getDocs(query(collection(db, "umpires"), orderBy("lastName")));
-    const approved = snap.docs.map(d => d.data()).filter(u => u.approved && u.email);
-
-    if (typeof emailjs !== "undefined") {
-      emailjs.init("H9Z9Qz-HB-PehAQjp");
-      await Promise.allSettled(approved.map(u =>
-        emailjs.send("service_vljauqe", "template_notification", {
-          to_name:     u.name,
-          to_email:    u.email,
-          notif_title: title,
-          notif_body:  body
-        })
-      ));
-    }
-    setMsg("notifMessage", `Notification sent to ${approved.length} umpire${approved.length !== 1 ? "s" : ""}.`, "success");
+    const result = await sendBroadcastFn({ title, body });
+    const { sent = 0, failed = 0 } = result.data;
+    const msg = sent === 0
+      ? "No umpires have notifications enabled yet."
+      : `Sent to ${sent} umpire${sent !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed)` : ""}.`;
+    setMsg("notifMessage", msg, "success");
     this.reset();
   } catch (err) {
-    setMsg("notifMessage", err.message, "error");
+    setMsg("notifMessage", err.message || "Failed to send notification.", "error");
   } finally {
     btn.disabled = false;
   }

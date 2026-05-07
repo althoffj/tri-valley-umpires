@@ -14,6 +14,28 @@ import {
   where
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+async function loadAnnouncements() {
+  const banner = document.getElementById("announcementBanner");
+  if (!banner) return;
+  try {
+    const snap = await getDocs(
+      query(collection(db, "announcements"), orderBy("createdAt", "desc"))
+    );
+    const active = snap.docs.filter(d => d.data().active);
+    if (!active.length) { banner.style.display = "none"; return; }
+    banner.style.display = "";
+    banner.innerHTML = active.map(d => {
+      const a = d.data();
+      return `<div class="document-note" style="border-left-color:#7ec8f7;margin-bottom:12px">
+        <strong style="color:white;display:block;margin-bottom:4px">${a.title ?? ""}</strong>
+        <p style="margin:0;white-space:pre-wrap">${a.body ?? ""}</p>
+      </div>`;
+    }).join("");
+  } catch (_) {
+    banner.style.display = "none";
+  }
+}
+
 function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -126,4 +148,7 @@ async function loadAgenda(user) {
   }
 }
 
-onAuthStateChanged(auth, user => loadAgenda(user));
+onAuthStateChanged(auth, user => {
+  loadAgenda(user);
+  if (user) loadAnnouncements();
+});

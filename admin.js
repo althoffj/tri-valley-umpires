@@ -9,6 +9,8 @@ import {
   updateDoc,
   setDoc,
   deleteDoc,
+  addDoc,
+  serverTimestamp,
   query,
   orderBy,
   where
@@ -50,6 +52,101 @@ function isSuperAdmin() {
   if (currentAdminDoc.superAdmin === true) return true;
   const roles = currentAdminDoc.roles || [];
   return roles.length === 0; // empty roles = super admin
+}
+
+// ── Announcements ─────────────────────────────────────────────────────────────
+
+async function loadAnnouncements() {
+  const listEl = document.getElementById("announcementsList");
+  if (!listEl) return;
+
+  try {
+    const snap = await getDocs(
+      query(collection(db, "announcements"), orderBy("createdAt", "desc"))
+    );
+
+    if (snap.empty) {
+      listEl.innerHTML = '<p style="color:var(--light-text)">No announcements yet.</p>';
+      return;
+    }
+
+    listEl.innerHTML = snap.docs.map(d => {
+      const a  = d.data();
+      const id = d.id;
+      const date = a.createdAt?.toDate
+        ? a.createdAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+        : "—";
+      const activeBadge = a.active
+        ? '<span class="badge" style="background:#17351f;color:#b8f2c4">Active</span>'
+        : '<span class="badge" style="background:#333;color:#999">Inactive</span>';
+
+      return `
+        <div class="document-note" style="border-left-color:${a.active ? "#7ec8f7" : "#555"};margin-bottom:12px" data-ann-id="${esc(id)}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+            <strong style="color:white">${esc(a.title ?? "")}</strong>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              ${activeBadge}
+              <span style="color:var(--light-text);font-size:0.8rem">${date}</span>
+            </div>
+          </div>
+          <p style="margin:0 0 10px;white-space:pre-wrap">${esc(a.body ?? "")}</p>
+          <div class="page-actions" style="margin:0">
+            <button class="btn print-btn ann-toggle-btn" data-id="${esc(id)}" data-active="${a.active ? "1" : "0"}"
+              style="font-size:0.8rem;padding:4px 12px">${a.active ? "Deactivate" : "Activate"}</button>
+            <button class="btn ann-delete-btn" data-id="${esc(id)}"
+              style="font-size:0.8rem;padding:4px 12px;background:#5a1a1a">Delete</button>
+          </div>
+        </div>`;
+    }).join("");
+  } catch (err) {
+    console.error(err);
+    listEl.innerHTML = '<p style="color:#ffb4b4">Error loading announcements.</p>';
+  }
+}
+
+document.getElementById("addAnnouncementForm")?.addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const title = document.getElementById("announcementTitle").value.trim();
+  const body  = document.getElementById("announcementBody").value.trim();
+  const btn   = this.querySelector("button[type='submit']");
+  btn.disabled = true;
+  setMsg("announcementPostMsg", "Posting…", "info");
+
+  try {
+    await addDoc(collection(db, "announcements"), {
+      title,
+      body,
+      active: true,
+      createdAt: serverTimestamp(),
+      createdBy: getCurrentUser()?.uid ?? ""
+    });
+    setMsg("announcementPostMsg", "Announcement posted.", "success");
+    this.reset();
+    await loadAnnouncements();
+  } catch (err) {
+    setMsg("announcementPostMsg", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function toggleAnnouncement(id, currentlyActive) {
+  try {
+    await updateDoc(doc(db, "announcements", id), { active: !currentlyActive });
+    await loadAnnouncements();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function deleteAnnouncement(id) {
+  if (!confirm("Delete this announcement? This cannot be undone.")) return;
+  try {
+    await deleteDoc(doc(db, "announcements", id));
+    await loadAnnouncements();
+  } catch (err) {
+    alert(err.message);
+  }
 }
 
 // ── Pending Approvals ─────────────────────────────────────────────────────────
@@ -549,6 +646,12 @@ document.addEventListener("click", e => {
   const deleteAdminBtn = e.target.closest(".delete-admin-btn");
   if (deleteAdminBtn) { removeAdmin(deleteAdminBtn.dataset.uid); return; }
 
+  const annToggle = e.target.closest(".ann-toggle-btn");
+  if (annToggle) { toggleAnnouncement(annToggle.dataset.id, annToggle.dataset.active === "1"); return; }
+
+  const annDelete = e.target.closest(".ann-delete-btn");
+  if (annDelete) { deleteAnnouncement(annDelete.dataset.id); return; }
+
   if (e.target.id === "savePermBtn")   { savePermissions(); return; }
   if (e.target.id === "cancelPermBtn") { document.getElementById("editPermModal").style.display = "none"; return; }
   if (e.target === document.getElementById("editPermModal"))
@@ -572,7 +675,9 @@ authReadyPromise.then(async () => {
   loadRoster();
 
   if (isSuperAdmin()) {
+    document.getElementById("announcementsSection").style.display = "";
     document.getElementById("adminUsersSection").style.display = "";
+    loadAnnouncements();
     loadAdminUsers();
     renderAddPermCards();
   }
