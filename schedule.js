@@ -145,10 +145,15 @@ function buildStatusCell(game) {
   if (game.cancelled) return '<span style="color:#ffb4b4">Cancelled</span>';
   const slots = getSlots(game);
   if (!slots.length) return "—";
-  const filled = slots.filter(s => s.assignedUid).length;
-  if (filled === 0) return "Needs umpire";
-  if (filled === slots.length) return `Filled (${slots.map(s => esc(s.assignedName || "")).join(", ")})`;
-  return `${filled} of ${slots.length} slots filled`;
+  return slots.map(s => {
+    const cls = s.type === "Plate" ? "plate" : s.type === "Field" ? "field" : "extra";
+    const badge = `<span class="badge badge-${cls}">${esc(s.type)}</span>`;
+    if (s.assignedName) {
+      const pay = s.payRate != null ? ` <span style="color:var(--light-text);font-size:0.78rem">$${Number(s.payRate).toFixed(0)}</span>` : "";
+      return `<div style="margin-bottom:2px">${badge} ${esc(s.assignedName)}${pay}</div>`;
+    }
+    return `<div style="margin-bottom:2px">${badge} <span style="color:#ffcc80;font-size:0.85rem">Open</span></div>`;
+  }).join("");
 }
 
 function buildStatusClass(game) {
@@ -171,28 +176,27 @@ function buildActionCell(game) {
   const loggedIn = isLoggedIn() && isApproved();
   const alreadyOnGame = uid && slots.some(s => s.assignedUid === uid);
 
-  return slots.map(slot => {
+  return `<div style="display:flex;flex-direction:column;gap:4px">${slots.map(slot => {
+    const label = esc(slot.type);
     if (slot.assignedUid === uid) {
       return `<button type="button" class="btn print-btn cancel-btn"
-        data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}"
-        style="margin:2px 0">Cancel ${esc(slot.type)}</button>`;
+        data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}">
+        Cancel — ${label} (you)</button>`;
     }
     if (slot.assignedUid) {
-      return `<button type="button" class="btn locked-btn" disabled
-        style="margin:2px 0">${esc(slot.type)} Filled</button>`;
+      return `<button type="button" class="btn locked-btn" disabled>${label}: ${esc(slot.assignedName || "Filled")}</button>`;
     }
     if (!loggedIn) {
-      return `<a href="index.html" class="btn print-btn"
-        style="margin:2px 0">Log in to sign up</a>`;
+      return `<a href="index.html" class="btn print-btn">Sign up: ${label}</a>`;
     }
     if (alreadyOnGame) {
       return `<button type="button" class="btn locked-btn" disabled
-        style="margin:2px 0" title="You already have a slot on this game">${esc(slot.type)} —</button>`;
+        title="You already have a slot on this game">${label} — already on this game</button>`;
     }
     return `<button type="button" class="btn signup-btn"
-      data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}"
-      style="margin:2px 0">Sign up · ${esc(slot.type)}</button>`;
-  }).join("");
+      data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}">
+      Sign up: ${label}</button>`;
+  }).join("")}</div>`;
 }
 
 function renderGameRows() {

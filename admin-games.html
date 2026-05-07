@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin: Games - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=6" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="schedule.html">Schedule &amp; Signups</a>
+    <a href="request-umpire.html">Request Umpire</a>
+  </nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html" class="admin-subnav-active">Games</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-config.html">Config</a>
+    </nav>
+
+    <!-- ── Sync Games from Calendars ────────────────────────────────────── -->
+    <h2>Sync Games from Calendars</h2>
+    <div class="document-note">
+      <p>Scans the 10U and 12U team calendars for home games played in Crooks, SD or Colton, SD and adds them to the game list. Already-imported games are skipped. Each imported game defaults to the configured default slot types.</p>
+    </div>
+    <div class="page-actions">
+      <button type="button" class="btn" id="syncCalBtn">Sync from Calendars</button>
+      <button type="button" class="btn print-btn" id="importScheduleBtn">Import City Schedule (May)</button>
+    </div>
+    <p id="syncCalMessage" class="signup-message" aria-live="polite"></p>
+
+    <!-- ── Add Game ───────────────────────────────────────────────────────── -->
+    <h2>Add Game</h2>
+    <form id="addGameForm" class="signup-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="gameCity">City / League</label>
+          <select id="gameCity" required>
+            <option value="">-- Select --</option>
+            <option value="City of Crooks">City of Crooks</option>
+            <option value="City of Colton">City of Colton</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="gameDivision">Division</label>
+          <select id="gameDivision" required>
+            <option value="">-- Select --</option>
+            <option value="10U">10U</option>
+            <option value="12U">12U</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="gameDate">Date</label>
+          <input type="date" id="gameDate" required />
+        </div>
+        <div class="form-group">
+          <label for="gameTime">Time</label>
+          <input type="time" id="gameTime" required />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="gameType">Game Type</label>
+          <select id="gameType" required>
+            <option value="Regular">Regular</option>
+            <option value="Playoff">Playoff</option>
+            <option value="Tournament">Tournament</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="gameFacility">Facility</label>
+          <select id="gameFacility">
+            <option value="">-- None / Other --</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="gameField">Field / Location</label>
+          <input type="text" id="gameField" placeholder="e.g. NH-North, East" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Umpire Positions &amp; Pay</label>
+          <div id="gameUmpireTypes" style="margin-top:8px">
+            <div style="display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:6px 10px">
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+                <input type="checkbox" value="Plate" /> Plate
+              </label>
+              <span></span>
+              <input type="number" class="slot-pay-input" data-slot-type="Plate"
+                min="0" step="0.01" placeholder="$" style="width:70px;padding:5px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" disabled />
+
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+                <input type="checkbox" value="Field" /> Field
+              </label>
+              <span></span>
+              <input type="number" class="slot-pay-input" data-slot-type="Field"
+                min="0" step="0.01" placeholder="$" style="width:70px;padding:5px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" disabled />
+
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+                <input type="checkbox" value="Extra" /> Extra
+              </label>
+              <span></span>
+              <input type="number" class="slot-pay-input" data-slot-type="Extra"
+                min="0" step="0.01" placeholder="$" style="width:70px;padding:5px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" disabled />
+            </div>
+          </div>
+          <p class="field-error" id="umpireTypesError"></p>
+        </div>
+      </div>
+
+      <div class="page-actions" style="margin-top:16px">
+        <button type="submit" class="btn" id="addGameBtn">Add Game</button>
+      </div>
+      <p id="addGameMessage" class="signup-message" aria-live="polite"></p>
+    </form>
+
+    <!-- ── Game List ──────────────────────────────────────────────────────── -->
+    <h2>All Games</h2>
+    <div class="page-actions">
+      <button type="button" class="btn filter-btn filter-active" data-filter="upcoming">Upcoming</button>
+      <button type="button" class="btn print-btn filter-btn" data-filter="all">All</button>
+    </div>
+    <div class="schedule-section">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Time</th>
+            <th>City / Teams</th>
+            <th>Div</th>
+            <th>Type</th>
+            <th>Field</th>
+            <th>Umpires</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="adminGameBody">
+          <tr><td colspan="8" style="color:var(--light-text);text-align:center">Loading games…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Team Calendars ────────────────────────────────────────────────── -->
+    <h2>Team Calendars</h2>
+    <div class="document-note">
+      <p>Add each Tri-Valley team with its GameChanger iCal URL. Umpires who play for a team will see a conflict warning when signing up for a game on the same date as their team's game.</p>
+      <p style="margin-bottom:0">Find the iCal URL in GameChanger: <strong>Team → Schedule → Subscribe to Calendar → Copy Link</strong>.</p>
+    </div>
+
+    <div id="teamCalendarList" style="margin-bottom:16px"></div>
+
+    <form id="addTeamForm" class="signup-form" style="margin-bottom:0">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="teamName">Team Name</label>
+          <input type="text" id="teamName" placeholder="e.g. Crooks 12U Blue" required />
+        </div>
+        <div class="form-group">
+          <label for="teamIcsUrl">GameChanger iCal URL</label>
+          <input type="url" id="teamIcsUrl" placeholder="https://gc.com/..." required />
+        </div>
+      </div>
+      <div class="page-actions" style="margin-top:12px">
+        <button type="submit" class="btn" id="addTeamBtn">Add Team</button>
+      </div>
+      <p id="addTeamMessage" class="signup-message" aria-live="polite"></p>
+    </form>
+
+  </div>
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+    </p>
+  </div>
+
+  <!-- ── Edit Game Modal ──────────────────────────────────────────────────── -->
+  <div id="editGameModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:32px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto">
+      <h2 style="margin-top:0">Edit Game</h2>
+      <input type="hidden" id="editGameId" />
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editGameCity">City / League</label>
+          <select id="editGameCity">
+            <option value="City of Crooks">City of Crooks</option>
+            <option value="City of Colton">City of Colton</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="editGameDivision">Division</label>
+          <select id="editGameDivision">
+            <option value="10U">10U</option>
+            <option value="12U">12U</option>
+            <option value="14U">14U</option>
+            <option value="HS JV">HS JV</option>
+            <option value="HS Varsity">HS Varsity</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editGameDate">Date</label>
+          <input type="date" id="editGameDate" />
+        </div>
+        <div class="form-group">
+          <label for="editGameTime">Time</label>
+          <input type="time" id="editGameTime" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editGameType">Game Type</label>
+          <select id="editGameType">
+            <option value="Regular">Regular</option>
+            <option value="Playoff">Playoff</option>
+            <option value="Tournament">Tournament</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="editGameFacility">Facility</label>
+          <select id="editGameFacility">
+            <option value="">-- None / Other --</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editGameField">Field / Location</label>
+          <input type="text" id="editGameField" placeholder="e.g. NH-North" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editHomeTeam">Home Team</label>
+          <input type="text" id="editHomeTeam" placeholder="e.g. Crooks 12U Blue" />
+        </div>
+        <div class="form-group">
+          <label for="editAwayTeam">Away Team</label>
+          <input type="text" id="editAwayTeam" placeholder="e.g. Mitchell 12U" />
+        </div>
+      </div>
+
+      <label>Umpire Slots &amp; Pay</label>
+      <div id="editSlotPays" style="margin-top:8px;margin-bottom:16px"></div>
+
+      <div class="page-actions">
+        <button type="button" class="btn" id="saveEditGameBtn">Save Changes</button>
+        <button type="button" class="btn print-btn" id="cancelEditGameBtn">Cancel</button>
+      </div>
+      <p id="editGameMessage" class="signup-message" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <script type="module" src="auth.js?v=6"></script>
+  <script type="module" src="admin-games.js?v=6"></script>
+</body>
+</html>

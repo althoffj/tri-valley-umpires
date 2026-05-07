@@ -644,6 +644,40 @@ th {
   }
 }
 
+/* ── Admin subnav ─────────────────────────────────────────────────────────── */
+.admin-subnav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.admin-subnav a {
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--card-bg, #2b2b2b);
+  color: var(--light-text);
+  text-decoration: none;
+  font-size: 0.88rem;
+  border: 1px solid var(--border);
+}
+.admin-subnav a:hover { background: var(--field); color: var(--text); }
+.admin-subnav-active { background: var(--accent) !important; color: white !important; border-color: var(--accent) !important; }
+
+/* Facility cards */
+.facility-card {
+  background: #1f1f1f;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.facility-card h3 { margin: 0 0 6px; color: white; }
+.facility-fields-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.facility-fields-list li { padding: 4px 0; border-bottom: 1px solid #333; font-size: 0.9rem; }
+.facility-fields-list li:last-child { border-bottom: none; }
+
 /* ── Calendar ─────────────────────────────────────────────────────────────── */
 .cal-month-grid {
   display: grid;
@@ -758,4 +792,49 @@ th {
     min-height: 50px;
     padding: 3px 2px;
   }
+}
+
+/* ── Admin subnav ──────────────────────────────────────────────────────────── */
+
+.admin-subnav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-subnav a {
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--light-text);
+  text-decoration: none;
+  font-size: 0.88rem;
+  border: 1px solid var(--border);
+  transition: background 0.15s, color 0.15s;
+}
+
+.admin-subnav a:hover { background: var(--field); color: var(--text); }
+
+.admin-subnav-active {
+  background: var(--accent) !important;
+  color: white !important;
+  border-color: var(--accent) !important;
+}
+
+/* ── Locked / filled slot button ───────────────────────────────────────────── */
+
+.locked-btn {
+  background: var(--card-bg);
+  color: var(--light-text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.875rem;
+  cursor: not-allowed;
+  opacity: 0.7;
+  width: 100%;
+  text-align: left;
 }

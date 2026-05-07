@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Calendar - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=5" />
+  <link rel="stylesheet" href="styles.css?v=6" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com;">
 </head>
 <body>
@@ -30,7 +30,7 @@
   <div class="container">
 
     <!-- View tabs + nav -->
-    <div class="page-actions" style="justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+    <div class="page-actions" style="justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px">
       <div style="display:flex;gap:8px">
         <button class="btn cal-tab-btn filter-active" data-view="month">Month</button>
         <button class="btn print-btn cal-tab-btn" data-view="week">Week</button>
@@ -42,6 +42,10 @@
         <button class="btn print-btn" id="calNext">&rarr;</button>
         <button class="btn print-btn" id="calToday">Today</button>
       </div>
+    </div>
+    <!-- My Games filter — shown only to signed-in users -->
+    <div style="margin-bottom:16px" id="calMyGamesRow" style="display:none">
+      <button class="btn print-btn" id="calMyGamesBtn" data-auth-required style="display:none">All Games</button>
     </div>
 
     <!-- Calendar display area -->
@@ -61,7 +65,7 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=5"></script>
-  <script type="module" src="calendar.js?v=5"></script>
+  <script type="module" src="auth.js?v=6"></script>
+  <script type="module" src="calendar.js?v=6"></script>
 </body>
 </html>

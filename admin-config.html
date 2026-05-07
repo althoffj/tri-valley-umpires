@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin: Config - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=6" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="schedule.html">Schedule &amp; Signups</a>
+    <a href="request-umpire.html">Request Umpire</a>
+  </nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html">Games</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-config.html" class="admin-subnav-active">Config</a>
+    </nav>
+
+    <!-- ── Default Pay Rates ─────────────────────────────────────────────── -->
+    <h2>Default Pay Rates</h2>
+    <form id="payRatesForm" class="signup-form">
+      <div class="form-row">
+        <div class="form-group form-group--sm">
+          <label for="ratePlate">Plate ($)</label>
+          <input type="number" id="ratePlate" min="0" step="0.01" placeholder="40" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="rateField">Field ($)</label>
+          <input type="number" id="rateField" min="0" step="0.01" placeholder="30" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="rateExtra">Extra ($)</label>
+          <input type="number" id="rateExtra" min="0" step="0.01" placeholder="25" />
+        </div>
+      </div>
+      <div class="page-actions" style="margin-top:16px">
+        <button type="submit" class="btn">Save Pay Rates</button>
+      </div>
+      <p id="payRatesMessage" class="signup-message" aria-live="polite"></p>
+    </form>
+
+    <!-- ── Default Umpire Slot Types ─────────────────────────────────────── -->
+    <h2>Default Umpire Slot Types</h2>
+    <form id="defaultSlotTypesForm" class="signup-form">
+      <div class="document-note" style="margin:0 0 16px">
+        <p style="margin:0">These slot types are automatically assigned to games imported from the city schedule.</p>
+      </div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:8px">
+        <label style="font-weight:normal;display:flex;align-items:center;gap:8px;margin:0;font-size:1rem">
+          <input type="checkbox" id="defaultSlotPlate" value="Plate" /> Plate
+        </label>
+        <label style="font-weight:normal;display:flex;align-items:center;gap:8px;margin:0;font-size:1rem">
+          <input type="checkbox" id="defaultSlotField" value="Field" /> Field
+        </label>
+        <label style="font-weight:normal;display:flex;align-items:center;gap:8px;margin:0;font-size:1rem">
+          <input type="checkbox" id="defaultSlotExtra" value="Extra" /> Extra
+        </label>
+      </div>
+      <div class="page-actions" style="margin-top:16px">
+        <button type="submit" class="btn">Save Default Slot Types</button>
+      </div>
+      <p id="defaultSlotTypesMessage" class="signup-message" aria-live="polite"></p>
+    </form>
+
+    <!-- ── Slack Webhooks ────────────────────────────────────────────────── -->
+    <h2>Slack Webhooks</h2>
+    <div class="document-note">
+      <p>Paste incoming webhook URLs to receive Slack notifications when games are added, updated, or cancelled, and day-of reminders at 7&nbsp;AM. Leave blank to disable a channel.</p>
+      <p style="margin-bottom:0">Create webhooks in Slack: <strong>Apps → Incoming Webhooks → Add New Webhook to Workspace</strong>.</p>
+    </div>
+    <form id="slackWebhooksForm" class="signup-form">
+      <label for="slackJeff">Jeff (direct DM webhook)</label>
+      <input type="url" id="slackJeff" placeholder="https://hooks.slack.com/services/…" />
+
+      <label for="slack10u">10U Channel webhook</label>
+      <input type="url" id="slack10u" placeholder="https://hooks.slack.com/services/…" />
+
+      <label for="slack12u">12U Channel webhook</label>
+      <input type="url" id="slack12u" placeholder="https://hooks.slack.com/services/…" />
+
+      <div class="page-actions" style="margin-top:16px">
+        <button type="submit" class="btn">Save Webhooks</button>
+      </div>
+      <p id="slackWebhooksMessage" class="signup-message" aria-live="polite"></p>
+    </form>
+
+    <!-- ── Push Notifications ────────────────────────────────────────────── -->
+    <h2>Send Notification</h2>
+    <div class="document-note">
+      <p>Send a push notification to all umpires who have enabled notifications in their browser. Notifications appear even when the site is not open.</p>
+    </div>
+    <form id="notifForm" class="signup-form">
+      <label for="notifTitle">Title</label>
+      <input type="text" id="notifTitle" placeholder="New game added" maxlength="80" required />
+
+      <label for="notifBody">Message</label>
+      <input type="text" id="notifBody" placeholder="A new game has been added to the schedule. Check it out!" maxlength="200" required />
+
+      <div class="page-actions" style="margin-top:16px">
+        <button type="submit" class="btn" id="sendNotifBtn">Send Notification</button>
+      </div>
+      <p id="notifMessage" class="signup-message" aria-live="polite"></p>
+    </form>
+
+  </div>
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+    </p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script type="module" src="auth.js?v=6"></script>
+  <script type="module" src="admin-config.js?v=6"></script>
+</body>
+</html>

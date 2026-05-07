@@ -3,22 +3,20 @@ import { db, auth } from "./firebase.js";
 import { isApproved, getCurrentUser } from "./auth.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
-  collection, getDocs, query, orderBy, where
+  collection, getDocs, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let allGames  = [];   // all fetched game docs
-let view      = "month";
-let cursor    = new Date(); // anchor date for current view
+let allGames    = [];
+let view        = "month";
+let cursor      = new Date();
 cursor.setHours(0,0,0,0);
-let currentUid = null;
+let currentUid  = null;
+let showMineOnly = false;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function todayISO() {
-  const d = new Date();
-  return isoOf(d);
-}
+function todayISO() { return isoOf(new Date()); }
 
 function isoOf(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -36,38 +34,62 @@ function esc(v) {
     .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 }
 
-function gamesOnDate(iso) {
-  return allGames.filter(g => g.date === iso);
+function isMyGame(g) {
+  return !!(currentUid && (g.umpireSlots ?? []).some(s => s.assignedUid === currentUid));
 }
 
-function isMyGame(g) {
-  return currentUid && (g.umpireSlots ?? []).some(s => s.assignedUid === currentUid);
+function visibleGames() {
+  return showMineOnly ? allGames.filter(isMyGame) : allGames;
+}
+
+function gamesOnDate(iso) {
+  return visibleGames().filter(g => g.date === iso);
 }
 
 // ── Game card (shared across views) ──────────────────────────────────────────
 
+function slotLine(s) {
+  const cls = s.type === "Plate" ? "plate" : s.type === "Field" ? "field" : "extra";
+  const name = s.assignedName
+    ? `<span style="color:var(--light-text);font-size:0.78rem"> → ${esc(s.assignedName)}</span>`
+    : `<span style="color:#ffcc80;font-size:0.78rem"> Open</span>`;
+  return `<span class="badge badge-${cls}">${s.type}</span>${name}`;
+}
+
 function gameCard(g, compact = false) {
-  const mine = isMyGame(g);
-  const slots = (g.umpireSlots ?? []).map(s =>
-    `<span class="badge badge-${s.type.toLowerCase()}">${s.type}</span>`
-  ).join(" ");
-  const teams = [g.homeTeam, g.awayTeam].filter(Boolean).join(" vs ");
+  const mine   = isMyGame(g);
+  const slots  = g.umpireSlots ?? [];
+  const teams  = [g.homeTeam, g.awayTeam].filter(Boolean).join(" vs ");
   const border = mine ? "#b8f2c4" : "var(--accent)";
 
   if (compact) {
     return `<div class="cal-card${mine ? " cal-card-mine" : ""}" style="border-left-color:${border}">
       <span style="font-size:0.75rem;color:var(--light-text)">${fmtTime(g.time)}</span>
       <span style="font-weight:bold;font-size:0.8rem;color:white"> ${esc(g.city ?? "")} ${esc(g.division ?? "")}</span>
+      ${mine ? `<span style="font-size:0.72rem;color:#b8f2c4"> ★</span>` : ""}
     </div>`;
   }
+
+  // Slot rows: show each slot with assigned umpire or "Open"
+  const slotRows = slots.length
+    ? `<div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">${slots.map(slotLine).join("")}</div>`
+    : `<div style="margin-top:4px;font-size:0.78rem;color:#ffcc80">No umpire slots</div>`;
+
+  // Per-slot pay override (show if any slot has a payRate)
+  const payLines = slots.filter(s => s.payRate != null && s.assignedName).map(s =>
+    `<span style="font-size:0.78rem;color:var(--light-text)">${esc(s.type)}: $${Number(s.payRate).toFixed(0)}</span>`
+  );
+  const payDisplay = payLines.length
+    ? `<div style="margin-top:2px">${payLines.join("  ")}</div>` : "";
 
   return `<div class="cal-card${mine ? " cal-card-mine" : ""}" style="border-left-color:${border};margin-bottom:10px">
     <div style="font-size:0.82rem;color:var(--light-text)">${fmtTime(g.time)}${g.field ? " · " + esc(g.field) : ""}</div>
     <div style="font-weight:bold;color:white">${esc(g.city ?? "")} <span style="color:var(--light-text)">${esc(g.division ?? "")}</span></div>
     ${teams ? `<div style="font-size:0.85rem;color:var(--light-text)">${esc(teams)}</div>` : ""}
-    <div style="margin-top:4px">${slots || '<span style="font-size:0.78rem;color:#ffcc80">Open</span>'}</div>
-    ${mine ? `<div style="font-size:0.78rem;color:#b8f2c4">Your game</div>` : ""}
-    <a href="schedule.html" style="font-size:0.78rem">Sign up / details &rarr;</a>
+    ${slotRows}
+    ${payDisplay}
+    ${mine ? `<div style="font-size:0.78rem;color:#b8f2c4;margin-top:2px">★ Your game</div>` : ""}
+    <a href="schedule.html" style="font-size:0.78rem;display:inline-block;margin-top:4px">Sign up / details &rarr;</a>
   </div>`;
 }
 
@@ -78,32 +100,26 @@ function renderMonth() {
   const month = cursor.getMonth();
   const today = todayISO();
 
-  const label = cursor.toLocaleDateString("en-US", { month:"long", year:"numeric" });
-  document.getElementById("calLabel").textContent = label;
+  document.getElementById("calLabel").textContent =
+    cursor.toLocaleDateString("en-US", { month:"long", year:"numeric" });
 
   const firstDay  = new Date(year, month, 1);
   const lastDay   = new Date(year, month+1, 0);
-  const startDOW  = firstDay.getDay(); // 0=Sun
+  const startDOW  = firstDay.getDay();
   const totalDays = lastDay.getDate();
 
   let html = `<div class="cal-month-grid">
-    <div class="cal-dow-header">Sun</div>
-    <div class="cal-dow-header">Mon</div>
-    <div class="cal-dow-header">Tue</div>
-    <div class="cal-dow-header">Wed</div>
-    <div class="cal-dow-header">Thu</div>
-    <div class="cal-dow-header">Fri</div>
+    <div class="cal-dow-header">Sun</div><div class="cal-dow-header">Mon</div>
+    <div class="cal-dow-header">Tue</div><div class="cal-dow-header">Wed</div>
+    <div class="cal-dow-header">Thu</div><div class="cal-dow-header">Fri</div>
     <div class="cal-dow-header">Sat</div>`;
 
-  // Leading blank cells
   for (let i = 0; i < startDOW; i++) html += `<div class="cal-month-cell cal-other-month"></div>`;
 
   for (let d = 1; d <= totalDays; d++) {
-    const iso    = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    const games  = gamesOnDate(iso);
+    const iso     = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    const games   = gamesOnDate(iso);
     const isToday = iso === today;
-    const hasMyGame = games.some(isMyGame);
-
     html += `<div class="cal-month-cell${isToday ? " cal-today" : ""}" data-date="${iso}" style="cursor:${games.length ? "pointer" : "default"}">
       <div class="cal-day-num${isToday ? " cal-today-num" : ""}">${d}</div>
       ${games.slice(0, 3).map(g => gameCard(g, true)).join("")}
@@ -111,20 +127,20 @@ function renderMonth() {
     </div>`;
   }
 
-  // Trailing blank cells to complete grid
   const trailing = (7 - ((startDOW + totalDays) % 7)) % 7;
   for (let i = 0; i < trailing; i++) html += `<div class="cal-month-cell cal-other-month"></div>`;
-
   html += `</div>`;
+
   document.getElementById("calView").innerHTML = html;
 
-  // Click a day → switch to day view
   document.querySelectorAll(".cal-month-cell[data-date]").forEach(cell => {
-    cell.addEventListener("click", () => {
-      const [y,m,d] = cell.dataset.date.split("-").map(Number);
-      cursor = new Date(y, m-1, d);
-      setView("day");
-    });
+    if (gamesOnDate(cell.dataset.date).length) {
+      cell.addEventListener("click", () => {
+        const [y,m,d] = cell.dataset.date.split("-").map(Number);
+        cursor = new Date(y, m-1, d);
+        setView("day");
+      });
+    }
   });
 }
 
@@ -132,14 +148,11 @@ function renderMonth() {
 
 function renderWeek() {
   const today = todayISO();
-  // Start of week (Sunday)
-  const sun = new Date(cursor);
+  const sun   = new Date(cursor);
   sun.setDate(cursor.getDate() - cursor.getDay());
 
   const days = Array.from({length:7}, (_,i) => {
-    const d = new Date(sun);
-    d.setDate(sun.getDate() + i);
-    return d;
+    const d = new Date(sun); d.setDate(sun.getDate() + i); return d;
   });
 
   const start = days[0].toLocaleDateString("en-US", {month:"short", day:"numeric"});
@@ -147,7 +160,6 @@ function renderWeek() {
   document.getElementById("calLabel").textContent = `${start} – ${end}`;
 
   const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-
   let html = `<div class="cal-week-grid">`;
   days.forEach(d => {
     const iso    = isoOf(d);
@@ -168,18 +180,13 @@ function renderWeek() {
 
 function renderDay() {
   const iso   = isoOf(cursor);
-  const today = todayISO();
-  const label = cursor.toLocaleDateString("en-US", {weekday:"long", month:"long", day:"numeric", year:"numeric"});
-  document.getElementById("calLabel").textContent = label;
+  document.getElementById("calLabel").textContent =
+    cursor.toLocaleDateString("en-US", {weekday:"long", month:"long", day:"numeric", year:"numeric"});
 
   const games = gamesOnDate(iso);
-  let html;
-  if (!games.length) {
-    html = `<div class="document-note"><p>No games scheduled for this day.</p></div>`;
-  } else {
-    html = `<div style="max-width:600px">${games.map(g => gameCard(g, false)).join("")}</div>`;
-  }
-  document.getElementById("calView").innerHTML = html;
+  document.getElementById("calView").innerHTML = !games.length
+    ? `<div class="document-note"><p>No games scheduled for this day.</p></div>`
+    : `<div style="max-width:600px">${games.map(g => gameCard(g, false)).join("")}</div>`;
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -194,20 +201,26 @@ function setView(v) {
 }
 
 function navigate(dir) {
-  if (view === "month") {
-    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + dir, 1);
-  } else if (view === "week") {
-    cursor.setDate(cursor.getDate() + dir * 7);
-  } else {
-    cursor.setDate(cursor.getDate() + dir);
-  }
+  if (view === "month") cursor = new Date(cursor.getFullYear(), cursor.getMonth() + dir, 1);
+  else if (view === "week") cursor.setDate(cursor.getDate() + dir * 7);
+  else cursor.setDate(cursor.getDate() + dir);
   render();
 }
 
 function render() {
-  if (view === "month")      renderMonth();
-  else if (view === "week")  renderWeek();
-  else                       renderDay();
+  if (view === "month")     renderMonth();
+  else if (view === "week") renderWeek();
+  else                      renderDay();
+}
+
+// ── My Games toggle ───────────────────────────────────────────────────────────
+
+function updateMyGamesBtn() {
+  const btn = document.getElementById("calMyGamesBtn");
+  if (!btn) return;
+  btn.textContent = showMineOnly ? "All Games" : "My Games Only";
+  btn.classList.toggle("filter-active", showMineOnly);
+  btn.classList.toggle("print-btn", !showMineOnly);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -235,10 +248,19 @@ document.getElementById("calToday").addEventListener("click", () => {
 document.querySelectorAll(".cal-tab-btn").forEach(b =>
   b.addEventListener("click", () => setView(b.dataset.view))
 );
+document.getElementById("calMyGamesBtn")?.addEventListener("click", () => {
+  showMineOnly = !showMineOnly;
+  updateMyGamesBtn();
+  render();
+});
 
 onAuthStateChanged(auth, user => {
   currentUid = user?.uid ?? null;
-  render(); // re-render with my-game highlighting
+  // Show My Games button only if signed in
+  const btn = document.getElementById("calMyGamesBtn");
+  if (btn) btn.style.display = currentUid ? "" : "none";
+  updateMyGamesBtn();
+  render();
 });
 
 loadGames();

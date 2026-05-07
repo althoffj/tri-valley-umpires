@@ -247,6 +247,10 @@ exports.importCitySchedule = onCall(
 
     const ratesSnap = await db.doc("config/payRates").get();
     const rates     = ratesSnap.exists ? ratesSnap.data() : {};
+    const rateMap   = { Plate: rates.plate || 0, Field: rates.field || 0, Extra: rates.extra || 0 };
+    const defaultSlotTypes = (rates.defaultSlotTypes && rates.defaultSlotTypes.length)
+      ? rates.defaultSlotTypes
+      : ["Plate", "Field"];
 
     let added = 0, skipped = 0;
     for (const g of CITY_SCHEDULE) {
@@ -261,10 +265,9 @@ exports.importCitySchedule = onCall(
         type:         "Regular",
         field:        g.field,
         needsUmpires: true,
-        umpireSlots: [
-          { type: "Plate", assignedUid: null, assignedName: null, payRate: rates.plate || 0 },
-          { type: "Field", assignedUid: null, assignedName: null, payRate: rates.field || 0 }
-        ],
+        umpireSlots:  defaultSlotTypes.map(t => ({
+          type: t, assignedUid: null, assignedName: null, payRate: rateMap[t] || 0
+        })),
         cancelled:  false,
         externalId,
         source:     "city-schedule",

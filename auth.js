@@ -143,10 +143,15 @@ function updateDropdownState() {
     // Show Admin Panel link only for admins
     const adminLink = document.getElementById("hmAdminLink");
     if (adminLink) adminLink.style.display = isAdmin() ? "" : "none";
+    // Show Calendar link for approved umpires and admins
+    const calLink = document.getElementById("hmCalendarLink");
+    if (calLink) calLink.style.display = (isApproved() || isAdmin()) ? "" : "none";
   } else {
     showView("authLoginView");
     const adminLink = document.getElementById("hmAdminLink");
     if (adminLink) adminLink.style.display = "none";
+    const calLink = document.getElementById("hmCalendarLink");
+    if (calLink) calLink.style.display = "none";
   }
 }
 
@@ -220,6 +225,7 @@ function initAuthUI() {
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <a id="hmAdminLink" href="admin.html" class="btn print-btn" style="width:100%;display:none;text-align:center">Admin Panel</a>
+          <a id="hmCalendarLink" href="calendar.html" class="btn print-btn" style="width:100%;display:none;text-align:center">Calendar</a>
           <button type="button" class="btn print-btn" id="hmEditProfileBtn" style="width:100%">Edit Profile</button>
           <button type="button" class="btn print-btn" id="hmLogoutBtn" style="width:100%">Sign Out</button>
         </div>

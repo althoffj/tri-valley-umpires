@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin: Facilities - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=6" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="schedule.html">Schedule &amp; Signups</a>
+    <a href="request-umpire.html">Request Umpire</a>
+  </nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html">Games</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html" class="admin-subnav-active">Facilities</a>
+      <a href="admin-config.html">Config</a>
+    </nav>
+
+    <h2>Facilities</h2>
+    <div class="document-note">
+      <p>Manage ballpark facilities. Each facility can have multiple fields with optional notes (e.g. pitching rubber distance, special rules).</p>
+    </div>
+
+    <div class="page-actions">
+      <button type="button" class="btn" id="showAddFacilityBtn">+ Add Facility</button>
+    </div>
+
+    <!-- Add Facility inline form (hidden by default) -->
+    <div id="addFacilityForm" style="display:none" class="signup-form">
+      <h3 style="color:white;margin-top:0">New Facility</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="facilityName">Facility Name</label>
+          <input type="text" id="facilityName" placeholder="e.g. Nordby Park" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="facilityAddress">Address</label>
+          <input type="text" id="facilityAddress" placeholder="123 Main St, Crooks, SD 57020" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="facilityMapsUrl">Google Maps URL</label>
+          <input type="url" id="facilityMapsUrl" placeholder="https://maps.google.com/…" />
+        </div>
+      </div>
+      <div class="page-actions" style="margin-top:16px">
+        <button type="button" class="btn" id="saveAddFacilityBtn">Save Facility</button>
+        <button type="button" class="btn print-btn" id="cancelAddFacilityBtn">Cancel</button>
+      </div>
+      <p id="addFacilityMessage" class="signup-message" aria-live="polite"></p>
+    </div>
+
+    <!-- Facility cards list -->
+    <div id="facilitiesList">
+      <p style="color:var(--light-text)">Loading facilities…</p>
+    </div>
+
+  </div>
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=6"></script>
+  <script type="module" src="admin-facilities.js?v=6"></script>
+</body>
+</html>

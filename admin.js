@@ -1,28 +1,18 @@
-// admin.js — admin panel: approvals, roster, game management, pay rates, notifications
-import { db, app } from "./firebase.js";
-import { authReadyPromise, isAdmin } from "./auth.js";
-import {
-  getFunctions,
-  httpsCallable
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
+// admin.js — Overview: pending approvals, roster, admin user management
+import { db } from "./firebase.js";
+import { authReadyPromise, isAdmin, getCurrentUser } from "./auth.js";
 import {
   collection,
   getDocs,
   getDoc,
   doc,
   updateDoc,
-  addDoc,
+  setDoc,
   deleteDoc,
   query,
   orderBy,
-  serverTimestamp,
   where
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-let allGames      = [];
-let allUmpires    = [];
-let gameFilter    = "upcoming";
-let currentRates  = { plate: 0, field: 0, extra: 0 }; // cached for Add Game form
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -35,25 +25,6 @@ function esc(v) {
     .replace(/'/g, "&#39;");
 }
 
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function fmtDate(dateISO) {
-  if (!dateISO) return "—";
-  const [y, m, d] = dateISO.split("-");
-  return `${m}/${d}/${y}`;
-}
-
-function fmtTime(timeStr) {
-  if (!timeStr) return "—";
-  const [h, m] = timeStr.split(":");
-  const hr = parseInt(h, 10);
-  const ampm = hr >= 12 ? "PM" : "AM";
-  return `${hr % 12 || 12}:${m} ${ampm}`;
-}
-
 function setMsg(id, text, type = "info") {
   const el = document.getElementById(id);
   if (!el) return;
@@ -61,13 +32,24 @@ function setMsg(id, text, type = "info") {
   el.className   = `signup-message ${type}`;
 }
 
-function slotBadge(slot) {
-  const cls = slot.type === "Plate" ? "plate" : slot.type === "Field" ? "field" : "extra";
-  const pay = slot.payRate != null
-    ? ` <span style="color:var(--light-text);font-size:0.78rem">$${Number(slot.payRate).toFixed(0)}</span>` : "";
-  const filled = slot.assignedName
-    ? ` <span style="color:var(--light-text);font-size:0.8rem">→ ${esc(slot.assignedName)}</span>` : "";
-  return `<span class="badge badge-${cls}">${esc(slot.type)}</span>${pay}${filled}`;
+// ── Admin role helpers ────────────────────────────────────────────────────────
+
+let currentAdminDoc = null;
+
+async function loadCurrentAdminDoc() {
+  const user = getCurrentUser();
+  if (!user) return;
+  try {
+    const snap = await getDoc(doc(db, "admins", user.uid));
+    currentAdminDoc = snap.exists() ? snap.data() : null;
+  } catch (_) { currentAdminDoc = null; }
+}
+
+function isSuperAdmin() {
+  if (!currentAdminDoc) return false;
+  if (currentAdminDoc.superAdmin === true) return true;
+  const roles = currentAdminDoc.roles || [];
+  return roles.length === 0; // empty roles = super admin
 }
 
 // ── Pending Approvals ─────────────────────────────────────────────────────────
@@ -142,34 +124,36 @@ async function loadRoster() {
   const tbody = document.getElementById("rosterBody");
   try {
     const snap = await getDocs(query(collection(db, "umpires"), orderBy("lastName")));
-    allUmpires = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
     if (snap.empty) {
       tbody.innerHTML = `<tr><td colspan="6" style="color:var(--light-text);text-align:center">No umpires yet.</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = allUmpires.map(p => `
-      <tr>
-        <td>${esc(p.name)}</td>
-        <td><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></td>
-        <td>${esc(p.phone || "—")}</td>
-        <td style="font-size:0.85rem">${esc(p.street || "")}, ${esc(p.city || "")} ${esc(p.state || "")} ${esc(p.zip || "")}</td>
-        <td>
-          ${p.approved
-            ? '<span class="badge badge-upcoming">Approved</span>'
-            : p.denied
-              ? '<span class="badge badge-cancelled">Denied</span>'
-              : '<span class="badge badge-today">Pending</span>'}
-        </td>
-        <td>
-          ${p.approved
-            ? `<button class="btn print-btn revoke-btn" data-uid="${esc(p.id)}" data-name="${esc(p.name)}">Revoke</button>`
-            : !p.denied
-              ? `<button class="btn approve-btn" data-uid="${esc(p.id)}">Approve</button>`
-              : ""}
-        </td>
-      </tr>`).join("");
+    tbody.innerHTML = snap.docs.map(d => {
+      const p = { id: d.id, ...d.data() };
+      return `
+        <tr>
+          <td>${esc(p.name)}</td>
+          <td><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></td>
+          <td>${esc(p.phone || "—")}</td>
+          <td style="font-size:0.85rem">${esc(p.street || "")}, ${esc(p.city || "")} ${esc(p.state || "")} ${esc(p.zip || "")}</td>
+          <td>
+            ${p.approved
+              ? '<span class="badge badge-upcoming">Approved</span>'
+              : p.denied
+                ? '<span class="badge badge-cancelled">Denied</span>'
+                : '<span class="badge badge-today">Pending</span>'}
+          </td>
+          <td>
+            ${p.approved
+              ? `<button class="btn print-btn revoke-btn" data-uid="${esc(p.id)}" data-name="${esc(p.name)}">Revoke</button>`
+              : !p.denied
+                ? `<button class="btn approve-btn" data-uid="${esc(p.id)}">Approve</button>`
+                : ""}
+          </td>
+        </tr>`;
+    }).join("");
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="6" style="color:#ffb4b4">Failed to load roster.</td></tr>`;
     console.error(err);
@@ -186,482 +170,170 @@ async function revokeUmpire(uid, name) {
   }
 }
 
-// ── Games ─────────────────────────────────────────────────────────────────────
+// ── Admin Users Management ────────────────────────────────────────────────────
 
-async function loadGames() {
-  const tbody = document.getElementById("adminGameBody");
+const ALL_ROLES = ["games", "umpires", "payroll", "config", "facilities"];
+
+async function loadAdminUsers() {
+  const tbody = document.getElementById("adminUsersBody");
+  if (!tbody) return;
+
   try {
-    const q = query(collection(db, "games"), where("needsUmpires", "==", true), orderBy("date"), orderBy("time"));
-    const snap = await getDocs(q);
-    allGames = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderAdminGames();
+    const snap = await getDocs(collection(db, "admins"));
+
+    if (snap.empty) {
+      tbody.innerHTML = `<tr><td colspan="4" style="color:var(--light-text);text-align:center">No admins found.</td></tr>`;
+      return;
+    }
+
+    // For each admin, try to look up their umpire profile for name/email
+    const umpireSnaps = await getDocs(collection(db, "umpires"));
+    const umpireMap = {};
+    umpireSnaps.forEach(d => { umpireMap[d.id] = d.data(); });
+
+    tbody.innerHTML = snap.docs.map(d => {
+      const uid  = d.id;
+      const data = d.data();
+      const ump  = umpireMap[uid] || {};
+      const name  = ump.name  || "<em style='color:var(--light-text)'>Unknown</em>";
+      const email = ump.email || "<em style='color:var(--light-text)'>—</em>";
+
+      const isSA    = data.superAdmin === true || (data.roles || []).length === 0;
+      const roles   = data.roles || [];
+      const roleStr = isSA
+        ? '<span class="badge" style="background:#601929;color:#fff">Super Admin</span>'
+        : roles.map(r => `<span class="badge badge-extra" style="margin-right:4px">${esc(r)}</span>`).join("") || "—";
+
+      const currentUid = getCurrentUser()?.uid;
+      const isSelf = uid === currentUid;
+
+      return `
+        <tr data-admin-uid="${esc(uid)}">
+          <td><span style="font-size:0.78rem;color:var(--light-text)">${esc(uid)}</span><br>${name}</td>
+          <td>${email}</td>
+          <td id="adminRolesCell_${esc(uid)}">${roleStr}</td>
+          <td style="white-space:nowrap">
+            <button class="btn print-btn edit-admin-roles-btn" data-uid="${esc(uid)}"
+              style="margin-bottom:4px;display:block;width:100%">Edit Roles</button>
+            ${!isSelf ? `<button class="btn delete-admin-btn" data-uid="${esc(uid)}"
+              style="display:block;width:100%;background:#5a1a1a">Remove</button>` : ""}
+          </td>
+        </tr>`;
+    }).join("");
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="9" style="color:#ffb4b4">Failed to load games.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="color:#ffb4b4">Failed to load admins.</td></tr>`;
     console.error(err);
   }
 }
 
-function renderAdminGames() {
-  const tbody = document.getElementById("adminGameBody");
-  const today = todayISO();
-  const visible = allGames.filter(g =>
-    gameFilter === "all" || (!g.cancelled && g.date >= today)
-  );
+function openEditRolesInline(uid) {
+  const cell = document.getElementById(`adminRolesCell_${uid}`);
+  if (!cell) return;
 
-  if (visible.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--light-text);text-align:center;padding:20px">No games.</td></tr>`;
-    return;
-  }
+  // Read current admin doc roles
+  getDoc(doc(db, "admins", uid)).then(snap => {
+    const data = snap.exists() ? snap.data() : {};
+    const currentRoles = data.roles || [];
+    const isSA = data.superAdmin === true || currentRoles.length === 0;
 
-  tbody.innerHTML = visible.map(g => {
-    const slots = g.umpireSlots || [];
-    const teams = (g.homeTeam && g.awayTeam)
-      ? `<div style="font-size:0.8rem;color:var(--light-text)">${esc(g.homeTeam)} vs ${esc(g.awayTeam)}</div>` : "";
-    const slotHtml = slots.length
-      ? slots.map((s, i) => `
-          <div style="display:flex;align-items:center;gap:6px;${i > 0 ? "margin-top:4px" : ""}">
-            ${slotBadge(s)}
-            ${s.assignedUid && !g.cancelled
-              ? `<button class="btn print-btn unassign-btn" style="font-size:0.75rem;padding:3px 8px"
-                   data-game-id="${esc(g.id)}" data-slot-type="${esc(s.type)}">Unassign</button>`
-              : ""}
-          </div>`).join("")
-      : "—";
+    const checkboxes = ALL_ROLES.map(r => `
+      <label style="display:flex;align-items:center;gap:5px;font-weight:normal;margin:2px 0">
+        <input type="checkbox" class="role-edit-cb" value="${r}" ${currentRoles.includes(r) ? "checked" : ""} />
+        ${r}
+      </label>`).join("");
 
-    const changeWarning = g.possibleChange
-      ? `<div style="color:#ffcc80;font-size:0.78rem;margin-top:4px">⚠ GameChanger event missing — verify with city</div>` : "";
-    const linkedBadge = g.icsLinks?.length
-      ? `<div style="color:var(--light-text);font-size:0.72rem;margin-top:2px">GC linked</div>` : "";
-
-    return `
-    <tr style="${g.cancelled ? "opacity:0.55" : ""}${g.possibleChange ? ";background:rgba(255,204,0,0.06)" : ""}">
-      <td>${esc(fmtDate(g.date))}</td>
-      <td>${esc(fmtTime(g.time))}</td>
-      <td>${esc(g.city || "—")}${teams}</td>
-      <td>${esc(g.division || "—")}</td>
-      <td>${esc(g.type || "—")}</td>
-      <td>${esc(g.field || "—")}${linkedBadge}</td>
-      <td>${g.cancelled ? '<span style="color:#ffb4b4">Cancelled</span>' : slotHtml}${changeWarning}</td>
-      <td style="white-space:nowrap;vertical-align:top">
-        ${g.cancelled ? "" : `
-          <button class="btn print-btn edit-game-btn" style="margin-bottom:4px;display:block;width:100%"
-            data-game-id="${esc(g.id)}">Edit</button>
-          <button class="btn print-btn cancel-game-btn" style="margin-bottom:4px;display:block;width:100%"
-            data-game-id="${esc(g.id)}">Cancel</button>`}
-        <button class="btn delete-game-btn" style="display:block;width:100%;background:#5a1a1a"
-          data-game-id="${esc(g.id)}">Delete</button>
-      </td>
-    </tr>`;
-  }).join("");
+    cell.innerHTML = `
+      <div style="font-size:0.88rem">
+        ${checkboxes}
+        <label style="display:flex;align-items:center;gap:5px;font-weight:normal;margin:4px 0">
+          <input type="checkbox" id="superAdminCb_${esc(uid)}" ${isSA ? "checked" : ""} />
+          Super Admin
+        </label>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <button class="btn save-admin-roles-btn" data-uid="${esc(uid)}"
+            style="font-size:0.78rem;padding:4px 10px">Save</button>
+          <button class="btn print-btn cancel-admin-roles-btn"
+            style="font-size:0.78rem;padding:4px 10px">Cancel</button>
+        </div>
+      </div>`;
+  }).catch(err => alert(err.message));
 }
 
-async function cancelGame(gameId) {
-  const game = allGames.find(g => g.id === gameId);
-  if (!game) return;
-  if (!confirm(`Cancel the game on ${fmtDate(game.date)} at ${game.city}?`)) return;
-  try {
-    await updateDoc(doc(db, "games", gameId), { cancelled: true, cancelledAt: serverTimestamp() });
-    const g = allGames.find(g => g.id === gameId);
-    if (g) g.cancelled = true;
-    renderAdminGames();
-  } catch (err) {
-    alert(err.message);
-  }
-}
+async function saveAdminRoles(uid) {
+  const cell = document.getElementById(`adminRolesCell_${uid}`);
+  if (!cell) return;
 
-async function unassignSlot(gameId, slotType) {
-  if (!confirm(`Remove the umpire from the ${slotType} slot?`)) return;
-  try {
-    const gameRef = doc(db, "games", gameId);
-    const snap = await getDoc(gameRef);
-    if (!snap.exists()) return;
-    const slots = (snap.data().umpireSlots || []).map(s =>
-      s.type === slotType ? { ...s, assignedUid: null, assignedName: null } : s
-    );
-    await updateDoc(gameRef, { umpireSlots: slots });
-    const g = allGames.find(g => g.id === gameId);
-    if (g) g.umpireSlots = slots;
-    renderAdminGames();
-  } catch (err) {
-    alert(err.message);
-  }
-}
-
-async function deleteGame(gameId) {
-  const game = allGames.find(g => g.id === gameId);
-  if (!game) return;
-  if (!confirm(`Permanently delete the game on ${fmtDate(game.date)} at ${game.city}?\nThis cannot be undone.`)) return;
-  try {
-    await deleteDoc(doc(db, "games", gameId));
-    allGames = allGames.filter(g => g.id !== gameId);
-    renderAdminGames();
-  } catch (err) {
-    alert(err.message);
-  }
-}
-
-function openEditModal(gameId) {
-  const game = allGames.find(g => g.id === gameId);
-  if (!game) return;
-  const modal = document.getElementById("editGameModal");
-
-  document.getElementById("editGameId").value        = gameId;
-  document.getElementById("editGameCity").value      = game.city || "";
-  document.getElementById("editGameDivision").value  = game.division || "";
-  document.getElementById("editGameDate").value      = game.date || "";
-  document.getElementById("editGameTime").value      = game.time || "";
-  document.getElementById("editGameType").value      = game.type || "Regular";
-  document.getElementById("editGameField").value     = game.field || "";
-  document.getElementById("editHomeTeam").value      = game.homeTeam || "";
-  document.getElementById("editAwayTeam").value      = game.awayTeam || "";
-
-  // Render per-slot pay inputs from existing slots
-  const slotsDiv = document.getElementById("editSlotPays");
-  const slots = game.umpireSlots || [];
-  slotsDiv.innerHTML = slots.map(s => {
-    const cls = s.type === "Plate" ? "plate" : s.type === "Field" ? "field" : "extra";
-    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <span class="badge badge-${cls}">${esc(s.type)}</span>
-      ${s.assignedName ? `<span style="font-size:0.85rem;color:var(--light-text)">→ ${esc(s.assignedName)}</span>` : ""}
-      <label style="margin:0;font-weight:normal;font-size:0.85rem">Pay $</label>
-      <input type="number" min="0" step="0.01" value="${s.payRate != null ? s.payRate : ""}"
-        class="edit-slot-pay" data-slot-type="${esc(s.type)}"
-        style="width:70px;padding:4px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" />
-    </div>`;
-  }).join("") || '<span style="color:var(--light-text);font-size:0.85rem">No umpire slots</span>';
-
-  setMsg("editGameMessage", "", "info");
-  modal.style.display = "flex";
-}
-
-async function saveGameEdit() {
-  const gameId = document.getElementById("editGameId").value;
-  const btn    = document.getElementById("saveEditGameBtn");
-  btn.disabled = true;
-  setMsg("editGameMessage", "Saving…", "info");
+  const superAdminChecked = document.getElementById(`superAdminCb_${uid}`)?.checked || false;
+  const selectedRoles = superAdminChecked
+    ? []
+    : [...cell.querySelectorAll(".role-edit-cb:checked")].map(cb => cb.value);
 
   try {
-    const updates = {
-      city:      document.getElementById("editGameCity").value,
-      division:  document.getElementById("editGameDivision").value,
-      date:      document.getElementById("editGameDate").value,
-      time:      document.getElementById("editGameTime").value,
-      type:      document.getElementById("editGameType").value,
-      field:     document.getElementById("editGameField").value.trim(),
-      homeTeam:  document.getElementById("editHomeTeam").value.trim(),
-      awayTeam:  document.getElementById("editAwayTeam").value.trim(),
-      needsUmpires: true,
-    };
-
-    // Update per-slot pay rates
-    const gameRef = doc(db, "games", gameId);
-    const snap    = await getDoc(gameRef);
-    if (snap.exists()) {
-      const payInputs = document.querySelectorAll(".edit-slot-pay");
-      const slots = (snap.data().umpireSlots || []).map(s => {
-        const input = [...payInputs].find(i => i.dataset.slotType === s.type);
-        return input ? { ...s, payRate: parseFloat(input.value) || 0 } : s;
-      });
-      updates.umpireSlots = slots;
-    }
-
-    await updateDoc(gameRef, updates);
-    const g = allGames.find(g => g.id === gameId);
-    if (g) Object.assign(g, updates);
-    setMsg("editGameMessage", "Saved!", "success");
-    setTimeout(() => {
-      document.getElementById("editGameModal").style.display = "none";
-      renderAdminGames();
-    }, 800);
-  } catch (err) {
-    setMsg("editGameMessage", err.message, "error");
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-// ── Add game form ─────────────────────────────────────────────────────────────
-
-document.getElementById("addGameForm").addEventListener("submit", async function(e) {
-  e.preventDefault();
-  const btn = document.getElementById("addGameBtn");
-
-  const checkedTypes = [...document.querySelectorAll("#gameUmpireTypes input:checked")].map(cb => cb.value);
-  if (checkedTypes.length === 0) {
-    document.getElementById("umpireTypesError").textContent = "Select at least one umpire position.";
-    return;
-  }
-  document.getElementById("umpireTypesError").textContent = "";
-
-  btn.disabled = true;
-  setMsg("addGameMessage", "Adding game…", "info");
-
-  const city     = document.getElementById("gameCity").value;
-  const division = document.getElementById("gameDivision").value;
-  const date     = document.getElementById("gameDate").value;
-  const time     = document.getElementById("gameTime").value;
-  const type     = document.getElementById("gameType").value;
-  const field    = document.getElementById("gameField").value.trim();
-
-  // Build slots with per-slot pay from inline inputs
-  const umpireSlots = checkedTypes.map(t => {
-    const payInput = document.querySelector(`.slot-pay-input[data-slot-type="${t}"]`);
-    const payRate  = payInput ? (parseFloat(payInput.value) || 0) : 0;
-    return { type: t, assignedUid: null, assignedName: null, payRate };
-  });
-
-  try {
-    await addDoc(collection(db, "games"), {
-      city, division, date, time, type, field,
-      umpireSlots,
-      needsUmpires: true,
-      cancelled: false,
-      createdAt: serverTimestamp()
+    await updateDoc(doc(db, "admins", uid), {
+      superAdmin: superAdminChecked,
+      roles: selectedRoles
     });
-    setMsg("addGameMessage", "Game added!", "success");
-    this.reset();
-    document.querySelectorAll("#gameUmpireTypes input").forEach(cb => cb.checked = false);
-    await loadGames();
+    await loadAdminUsers();
   } catch (err) {
-    setMsg("addGameMessage", err.message, "error");
-  } finally {
-    btn.disabled = false;
+    alert(err.message);
   }
-});
+}
 
-// ── Team Calendars ────────────────────────────────────────────────────────────
-
-async function loadTeamCalendars() {
-  const listEl = document.getElementById("teamCalendarList");
+async function removeAdmin(uid) {
+  if (!confirm("Remove this admin? They will lose all admin access.")) return;
   try {
-    const snap = await getDoc(doc(db, "config", "teamCalendars"));
-    const teams = snap.exists() ? (snap.data().teams || []) : [];
+    await deleteDoc(doc(db, "admins", uid));
+    await loadAdminUsers();
+  } catch (err) {
+    alert(err.message);
+  }
+}
 
-    if (teams.length === 0) {
-      listEl.innerHTML = `<p class="schedule-source">No teams added yet.</p>`;
+document.getElementById("addAdminForm")?.addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const email = document.getElementById("addAdminEmail").value.trim().toLowerCase();
+  const btn   = this.querySelector("button[type='submit']");
+  btn.disabled = true;
+  setMsg("addAdminMessage", "Looking up umpire…", "info");
+
+  try {
+    // Look up UID from umpires collection by email
+    const q = query(collection(db, "umpires"), where("email", "==", email));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      setMsg("addAdminMessage", `No umpire found with email: ${email}`, "error");
+      btn.disabled = false;
       return;
     }
 
-    listEl.innerHTML = teams.map((t, i) => `
-      <div data-team-row="${i}" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #444">
-        <span style="flex:1"><strong>${esc(t.name)}</strong><br>
-          <span style="color:var(--light-text);font-size:0.82rem;word-break:break-all">${esc(t.icsUrl)}</span>
-        </span>
-        <button class="btn print-btn sync-team-btn" data-index="${i}" style="flex-shrink:0">Sync</button>
-        <button class="btn print-btn edit-team-btn" data-index="${i}" style="flex-shrink:0">Edit</button>
-        <button class="btn print-btn remove-team-btn" data-index="${i}" style="flex-shrink:0">Remove</button>
-      </div>`).join("");
-  } catch (err) {
-    listEl.innerHTML = `<p style="color:#ffb4b4">Failed to load teams.</p>`;
-  }
-}
+    const uid = snap.docs[0].id;
 
-async function addTeam(name, icsUrl) {
-  const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-  const snap = await getDoc(doc(db, "config", "teamCalendars"));
-  const teams = snap.exists() ? (snap.data().teams || []) : [];
-  const normalizedUrl = icsUrl.replace(/^webcal:\/\//i, "https://");
-  teams.push({ name, icsUrl: normalizedUrl });
-  await setDoc(doc(db, "config", "teamCalendars"), { teams });
-}
-
-async function removeTeam(index) {
-  const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-  const snap = await getDoc(doc(db, "config", "teamCalendars"));
-  const teams = snap.exists() ? (snap.data().teams || []) : [];
-  teams.splice(index, 1);
-  await setDoc(doc(db, "config", "teamCalendars"), { teams });
-}
-
-async function saveTeam(index, name, icsUrl) {
-  const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-  const snap = await getDoc(doc(db, "config", "teamCalendars"));
-  const teams = snap.exists() ? (snap.data().teams || []) : [];
-  teams[index] = { name, icsUrl: icsUrl.replace(/^webcal:\/\//i, "https://") };
-  await setDoc(doc(db, "config", "teamCalendars"), { teams });
-}
-
-function showTeamEditRow(index, currentName, currentUrl) {
-  const row = document.querySelector(`[data-team-row="${index}"]`);
-  if (!row) return;
-  row.innerHTML = `
-    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-      <input type="text" class="team-edit-name" value="${esc(currentName)}"
-        style="width:100%;padding:6px 8px;background:var(--card-bg);color:var(--text);border:1px solid #555;border-radius:4px" />
-      <input type="url" class="team-edit-url" value="${esc(currentUrl)}"
-        style="width:100%;padding:6px 8px;background:var(--card-bg);color:var(--text);border:1px solid #555;border-radius:4px;font-size:0.82rem" />
-    </div>
-    <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-      <button class="btn save-team-btn" data-index="${index}">Save</button>
-      <button class="btn print-btn cancel-edit-team-btn" data-index="${index}">Cancel</button>
-    </div>`;
-}
-
-document.getElementById("addTeamForm").addEventListener("submit", async function(e) {
-  e.preventDefault();
-  const btn  = document.getElementById("addTeamBtn");
-  const name = document.getElementById("teamName").value.trim();
-  const url  = document.getElementById("teamIcsUrl").value.trim();
-  btn.disabled = true;
-  setMsg("addTeamMessage", "Saving…", "info");
-  try {
-    await addTeam(name, url);
-    setMsg("addTeamMessage", "Team added!", "success");
-    this.reset();
-    await loadTeamCalendars();
-  } catch (err) {
-    setMsg("addTeamMessage", err.message, "error");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-// ── Calendar Sync (via Cloud Function — avoids GameChanger CORS block) ────────
-
-async function syncGamesFromCalendars() {
-  const btn = document.getElementById("syncCalBtn");
-  btn.disabled = true;
-  setMsg("syncCalMessage", "Syncing calendars…", "info");
-  try {
-    const functions   = getFunctions(app, "us-central1");
-    const syncGamesNow = httpsCallable(functions, "syncGamesNow");
-    const { data } = await syncGamesNow();
-    const parts = [];
-    if (data.linked)  parts.push(`${data.linked} game${data.linked !== 1 ? "s" : ""} linked to GameChanger`);
-    if (data.flagged) parts.push(`${data.flagged} possible change${data.flagged !== 1 ? "s" : ""} flagged`);
-    if (data.failed)  parts.push(`${data.failed} feed${data.failed !== 1 ? "s" : ""} failed`);
-    setMsg("syncCalMessage", parts.length ? `Sync: ${parts.join(", ")}.` : "Sync complete — nothing new.", data.flagged > 0 ? "warning" : "success");
-    if (data.linked || data.flagged) await loadGames();
-  } catch (err) {
-    setMsg("syncCalMessage", `Error: ${err.message}`, "error");
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function syncTeamNow(teamIndex) {
-  const functions    = getFunctions(app, "us-central1");
-  const callable     = httpsCallable(functions, "syncTeamNow");
-  const { data }     = await callable({ teamIndex });
-  return data;
-}
-
-document.getElementById("syncCalBtn").addEventListener("click", syncGamesFromCalendars);
-
-document.getElementById("importScheduleBtn").addEventListener("click", async () => {
-  const btn = document.getElementById("importScheduleBtn");
-  btn.disabled = true;
-  setMsg("syncCalMessage", "Importing city schedule…", "info");
-  try {
-    const functions         = getFunctions(app, "us-central1");
-    const importCitySchedule = httpsCallable(functions, "importCitySchedule");
-    const { data } = await importCitySchedule();
-    const msg = `Imported: ${data.added} game${data.added !== 1 ? "s" : ""} added${data.skipped ? `, ${data.skipped} already existed` : ""}.`;
-    setMsg("syncCalMessage", msg, data.added > 0 ? "success" : "info");
-    if (data.added > 0) await loadGames();
-  } catch (err) {
-    setMsg("syncCalMessage", `Error: ${err.message}`, "error");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-// ── Pay rates ─────────────────────────────────────────────────────────────────
-
-// ── Slack Webhooks ────────────────────────────────────────────────────────────
-
-async function loadSlackWebhooks() {
-  try {
-    const snap = await getDoc(doc(db, "config", "slackWebhooks"));
-    if (snap.exists()) {
-      const d = snap.data();
-      document.getElementById("slackJeff").value = d.jeff  || "";
-      document.getElementById("slack10u").value  = d.ch10u || "";
-      document.getElementById("slack12u").value  = d.ch12u || "";
+    // Check if already an admin
+    const existing = await getDoc(doc(db, "admins", uid));
+    if (existing.exists()) {
+      setMsg("addAdminMessage", "This umpire is already an admin.", "warning");
+      btn.disabled = false;
+      return;
     }
-  } catch (_) {}
-}
 
-document.getElementById("slackWebhooksForm")?.addEventListener("submit", async function(e) {
-  e.preventDefault();
-  try {
-    const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-    await setDoc(doc(db, "config", "slackWebhooks"), {
-      jeff:  document.getElementById("slackJeff").value.trim(),
-      ch10u: document.getElementById("slack10u").value.trim(),
-      ch12u: document.getElementById("slack12u").value.trim()
+    const superAdminChecked = document.querySelector('[name="addAdminRole"][value="superAdmin"]')?.checked || false;
+    const selectedRoles = superAdminChecked
+      ? []
+      : [...document.querySelectorAll('[name="addAdminRole"]:checked')]
+          .map(cb => cb.value)
+          .filter(v => v !== "superAdmin");
+
+    await setDoc(doc(db, "admins", uid), {
+      superAdmin: superAdminChecked,
+      roles: selectedRoles,
+      addedAt: new Date().toISOString()
     });
-    setMsg("slackWebhooksMessage", "Webhooks saved.", "success");
-  } catch (err) {
-    setMsg("slackWebhooksMessage", err.message, "error");
-  }
-});
 
-async function loadPayRates() {
-  try {
-    const snap = await getDoc(doc(db, "config", "payRates"));
-    if (snap.exists()) {
-      const r = snap.data();
-      currentRates = { plate: r.plate || 0, field: r.field || 0, extra: r.extra || 0 };
-      document.getElementById("ratePlate").value = r.plate || "";
-      document.getElementById("rateField").value  = r.field  || "";
-      document.getElementById("rateExtra").value  = r.extra  || "";
-      // Pre-fill slot pay inputs in Add Game form
-      prefillSlotPays();
-    }
-  } catch (_) {}
-}
-
-function prefillSlotPays() {
-  const map = { Plate: currentRates.plate, Field: currentRates.field, Extra: currentRates.extra };
-  document.querySelectorAll(".slot-pay-input").forEach(input => {
-    if (!input.value) input.value = map[input.dataset.slotType] || "";
-  });
-}
-
-document.getElementById("payRatesForm").addEventListener("submit", async function(e) {
-  e.preventDefault();
-  try {
-    const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-    await setDoc(doc(db, "config", "payRates"), {
-      plate: parseFloat(document.getElementById("ratePlate").value) || 0,
-      field: parseFloat(document.getElementById("rateField").value)  || 0,
-      extra: parseFloat(document.getElementById("rateExtra").value)  || 0
-    });
-    setMsg("payRatesMessage", "Pay rates saved.", "success");
-  } catch (err) {
-    setMsg("payRatesMessage", err.message, "error");
-  }
-});
-
-// ── Push notifications ────────────────────────────────────────────────────────
-
-document.getElementById("notifForm").addEventListener("submit", async function(e) {
-  e.preventDefault();
-  const btn   = document.getElementById("sendNotifBtn");
-  const title = document.getElementById("notifTitle").value.trim();
-  const body  = document.getElementById("notifBody").value.trim();
-
-  btn.disabled = true;
-  setMsg("notifMessage", "Sending notifications…", "info");
-
-  try {
-    if (typeof emailjs !== "undefined") {
-      emailjs.init("H9Z9Qz-HB-PehAQjp");
-      const roster = allUmpires.filter(u => u.approved && u.email);
-      await Promise.allSettled(roster.map(u =>
-        emailjs.send("service_vljauqe", "template_notification", {
-          to_name:     u.name,
-          to_email:    u.email,
-          notif_title: title,
-          notif_body:  body
-        })
-      ));
-    }
-    setMsg("notifMessage", `Notification sent to ${allUmpires.filter(u => u.approved).length} umpires.`, "success");
+    setMsg("addAdminMessage", `Admin added: ${email}`, "success");
     this.reset();
+    await loadAdminUsers();
   } catch (err) {
-    setMsg("notifMessage", err.message, "error");
+    setMsg("addAdminMessage", err.message, "error");
   } finally {
     btn.disabled = false;
   }
@@ -679,107 +351,22 @@ document.addEventListener("click", e => {
   const revokeBtn = e.target.closest(".revoke-btn");
   if (revokeBtn) { revokeUmpire(revokeBtn.dataset.uid, revokeBtn.dataset.name); return; }
 
-  const editGameBtn = e.target.closest(".edit-game-btn");
-  if (editGameBtn) { openEditModal(editGameBtn.dataset.gameId); return; }
+  const editRolesBtn = e.target.closest(".edit-admin-roles-btn");
+  if (editRolesBtn) { openEditRolesInline(editRolesBtn.dataset.uid); return; }
 
-  const cancelGameBtn = e.target.closest(".cancel-game-btn");
-  if (cancelGameBtn) { cancelGame(cancelGameBtn.dataset.gameId); return; }
+  const saveRolesBtn = e.target.closest(".save-admin-roles-btn");
+  if (saveRolesBtn) { saveAdminRoles(saveRolesBtn.dataset.uid); return; }
 
-  const deleteGameBtn = e.target.closest(".delete-game-btn");
-  if (deleteGameBtn) { deleteGame(deleteGameBtn.dataset.gameId); return; }
+  const cancelRolesBtn = e.target.closest(".cancel-admin-roles-btn");
+  if (cancelRolesBtn) { loadAdminUsers(); return; }
 
-  const unassignBtn = e.target.closest(".unassign-btn");
-  if (unassignBtn) { unassignSlot(unassignBtn.dataset.gameId, unassignBtn.dataset.slotType); return; }
-
-  const syncTeamBtn = e.target.closest(".sync-team-btn");
-  if (syncTeamBtn) {
-    const index = Number(syncTeamBtn.dataset.index);
-    syncTeamBtn.disabled = true;
-    syncTeamBtn.textContent = "Syncing…";
-    const msgEl = document.getElementById("syncCalMessage");
-    if (msgEl) { msgEl.textContent = "Syncing team…"; msgEl.className = "signup-message info"; }
-    syncTeamNow(index)
-      .then(r => {
-        if (msgEl) { msgEl.textContent = `Done — ${r.added ?? 0} added, ${r.linked ?? 0} linked.`; msgEl.className = "signup-message success"; }
-      })
-      .catch(err => {
-        if (msgEl) { msgEl.textContent = `Error: ${err.message}`; msgEl.className = "signup-message error"; }
-      })
-      .finally(() => { syncTeamBtn.disabled = false; syncTeamBtn.textContent = "Sync"; });
-    return;
-  }
-
-  const editTeamBtn = e.target.closest(".edit-team-btn");
-  if (editTeamBtn) {
-    const i = Number(editTeamBtn.dataset.index);
-    const row = document.querySelector(`[data-team-row="${i}"]`);
-    const name = row.querySelector("strong")?.textContent || "";
-    const url  = row.querySelector("span > span")?.textContent || "";
-    showTeamEditRow(i, name, url);
-    return;
-  }
-
-  const saveTeamBtn = e.target.closest(".save-team-btn");
-  if (saveTeamBtn) {
-    const i    = Number(saveTeamBtn.dataset.index);
-    const row  = document.querySelector(`[data-team-row="${i}"]`);
-    const name = row.querySelector(".team-edit-name").value.trim();
-    const url  = row.querySelector(".team-edit-url").value.trim();
-    if (!name || !url) { alert("Name and URL are required."); return; }
-    saveTeamBtn.disabled = true;
-    saveTeam(i, name, url).then(loadTeamCalendars).catch(err => { alert(err.message); saveTeamBtn.disabled = false; });
-    return;
-  }
-
-  const cancelEditTeamBtn = e.target.closest(".cancel-edit-team-btn");
-  if (cancelEditTeamBtn) {
-    loadTeamCalendars();
-    return;
-  }
-
-  const removeTeamBtn = e.target.closest(".remove-team-btn");
-  if (removeTeamBtn) {
-    if (!confirm("Remove this team?")) return;
-    removeTeam(Number(removeTeamBtn.dataset.index)).then(loadTeamCalendars).catch(err => alert(err.message));
-    return;
-  }
-
-  const filterBtn = e.target.closest(".filter-btn");
-  if (filterBtn) {
-    gameFilter = filterBtn.dataset.filter;
-    document.querySelectorAll(".filter-btn").forEach(b =>
-      b.classList.toggle("filter-active", b.dataset.filter === gameFilter)
-    );
-    renderAdminGames();
-  }
-});
-
-// ── Edit modal wiring ─────────────────────────────────────────────────────────
-
-document.getElementById("saveEditGameBtn").addEventListener("click", saveGameEdit);
-document.getElementById("cancelEditGameBtn").addEventListener("click", () => {
-  document.getElementById("editGameModal").style.display = "none";
-});
-document.getElementById("editGameModal").addEventListener("click", e => {
-  if (e.target === document.getElementById("editGameModal"))
-    document.getElementById("editGameModal").style.display = "none";
-});
-
-// Pre-fill slot pay inputs when a checkbox is checked
-document.getElementById("gameUmpireTypes").addEventListener("change", e => {
-  if (e.target.type !== "checkbox") return;
-  const type     = e.target.value;
-  const payInput = document.querySelector(`.slot-pay-input[data-slot-type="${type}"]`);
-  if (!payInput) return;
-  if (e.target.checked && !payInput.value) {
-    payInput.value = currentRates[type.toLowerCase()] || "";
-  }
-  payInput.disabled = !e.target.checked;
+  const deleteAdminBtn = e.target.closest(".delete-admin-btn");
+  if (deleteAdminBtn) { removeAdmin(deleteAdminBtn.dataset.uid); return; }
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-authReadyPromise.then(() => {
+authReadyPromise.then(async () => {
   if (!isAdmin()) {
     document.getElementById("adminContent").style.display = "none";
     document.getElementById("noAccess").style.display = "";
@@ -788,285 +375,13 @@ authReadyPromise.then(() => {
   document.getElementById("adminContent").style.display = "";
   document.getElementById("noAccess").style.display = "none";
 
+  await loadCurrentAdminDoc();
+
   loadPending();
   loadRoster();
-  loadGames();
-  loadPayRates();
-  loadSlackWebhooks();
-  loadTeamCalendars();
-  loadPayroll();
-  loadUmpireRequests();
-  loadIncidents();
+
+  if (isSuperAdmin()) {
+    document.getElementById("adminUsersSection").style.display = "";
+    loadAdminUsers();
+  }
 });
-
-// ── Payroll Summary ───────────────────────────────────────────────────────────
-
-let payrollRows = []; // flat list of {gameId, slotType, umpireName, date, city, division, pay, paid}
-let payrollFromFilter = "";
-let payrollToFilter   = "";
-
-async function loadPayroll() {
-  const tbody    = document.getElementById("payrollBody");
-  const totalsEl = document.getElementById("payrollTotals");
-  if (!tbody) return;
-
-  try {
-    const snap = await getDocs(query(collection(db, "games"), orderBy("date", "asc")));
-
-    payrollRows = [];
-    snap.forEach(d => {
-      const g = { id: d.id, ...d.data() };
-      (g.umpireSlots ?? []).forEach(slot => {
-        if (!slot.assignedUid) return;
-        payrollRows.push({
-          gameId:    g.id,
-          slotType:  slot.type,
-          uid:       slot.assignedUid,
-          umpireName: slot.assignedName ?? slot.assignedUid,
-          date:      g.date ?? "",
-          city:      g.city ?? "",
-          division:  g.division ?? "",
-          pay:       Number(slot.payRate ?? g.payRate ?? 0),
-          paid:      slot.paid === true
-        });
-      });
-    });
-
-    renderPayrollTable();
-    wirePayrollFilters();
-  } catch (err) {
-    console.error(err);
-    tbody.innerHTML = '<tr><td colspan="6" style="color:#ffb4b4">Error loading payroll.</td></tr>';
-  }
-}
-
-function renderPayrollTable() {
-  const tbody    = document.getElementById("payrollBody");
-  const totalsEl = document.getElementById("payrollTotals");
-  if (!tbody) return;
-
-  const rows = payrollRows.filter(r => {
-    if (payrollFromFilter && r.date < payrollFromFilter) return false;
-    if (payrollToFilter   && r.date > payrollToFilter)   return false;
-    return true;
-  });
-
-  if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--light-text);text-align:center">No payroll records found.</td></tr>';
-    if (totalsEl) totalsEl.textContent = "";
-    return;
-  }
-
-  const totalOwed = rows.reduce((s, r) => s + r.pay, 0);
-  const totalPaid = rows.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
-  const outstanding = totalOwed - totalPaid;
-  if (totalsEl) {
-    totalsEl.textContent =
-      `Total: $${totalOwed.toFixed(2)} — Paid: $${totalPaid.toFixed(2)} — Outstanding: $${outstanding.toFixed(2)}`;
-  }
-
-  tbody.innerHTML = rows.map(r => {
-    const fmtDate = iso => iso ? iso.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$2/$3/$1") : "—";
-    const paidBadge = r.paid
-      ? `<span class="badge" style="background:#17351f;color:#b8f2c4">Paid</span>`
-      : `<span class="badge" style="background:#4a2c00;color:#ffcc80">Unpaid</span>`;
-    const toggleBtn = `<button class="btn ${r.paid ? "print-btn" : ""} payroll-toggle-btn"
-        data-game-id="${esc(r.gameId)}" data-slot-type="${esc(r.slotType)}" data-uid="${esc(r.uid)}"
-        style="font-size:0.78rem;padding:3px 10px;margin-left:8px">
-        ${r.paid ? "Mark Unpaid" : "Mark Paid"}
-      </button>`;
-    return `<tr>
-      <td>${esc(r.umpireName)}</td>
-      <td>${esc(fmtDate(r.date))}</td>
-      <td>${esc(r.city)}<br><span style="color:var(--light-text);font-size:0.85rem">${esc(r.division)}</span></td>
-      <td><span class="badge badge-${r.slotType.toLowerCase()}">${esc(r.slotType)}</span></td>
-      <td>$${r.pay.toFixed(2)}</td>
-      <td style="white-space:nowrap">${paidBadge}${toggleBtn}</td>
-    </tr>`;
-  }).join("");
-
-  tbody.querySelectorAll(".payroll-toggle-btn").forEach(btn => {
-    btn.addEventListener("click", () =>
-      togglePaid(btn.dataset.gameId, btn.dataset.slotType, btn.dataset.uid)
-    );
-  });
-}
-
-async function togglePaid(gameId, slotType, uid) {
-  const ref = doc(db, "games", gameId);
-  try {
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return;
-    const slots = (snap.data().umpireSlots ?? []).map(s => {
-      if (s.type === slotType && s.assignedUid === uid) {
-        return { ...s, paid: !s.paid };
-      }
-      return s;
-    });
-    await updateDoc(ref, { umpireSlots: slots });
-
-    // Update in-memory payrollRows and re-render
-    const row = payrollRows.find(r => r.gameId === gameId && r.slotType === slotType && r.uid === uid);
-    if (row) row.paid = !row.paid;
-    renderPayrollTable();
-  } catch (err) {
-    console.error(err);
-    alert("Error updating paid status.");
-  }
-}
-
-function wirePayrollFilters() {
-  document.getElementById("payrollFilterBtn")?.addEventListener("click", () => {
-    payrollFromFilter = document.getElementById("payrollFrom").value;
-    payrollToFilter   = document.getElementById("payrollTo").value;
-    renderPayrollTable();
-  });
-  document.getElementById("payrollResetBtn")?.addEventListener("click", () => {
-    payrollFromFilter = "";
-    payrollToFilter   = "";
-    document.getElementById("payrollFrom").value = "";
-    document.getElementById("payrollTo").value   = "";
-    renderPayrollTable();
-  });
-}
-
-// ── Umpire Requests ───────────────────────────────────────────────────────────
-
-async function loadUmpireRequests() {
-  const listEl = document.getElementById("requestList");
-  const noteEl = document.getElementById("requestNote");
-  if (!listEl) return;
-
-  try {
-    const snap = await getDocs(
-      query(collection(db, "umpireRequests"), orderBy("submittedAt", "desc"))
-    );
-
-    if (snap.empty) {
-      noteEl.textContent = "No umpire requests submitted yet.";
-      listEl.innerHTML = "";
-      return;
-    }
-
-    const pending = snap.docs.filter(d => d.data().status === "pending");
-    noteEl.textContent = `${snap.size} total request${snap.size === 1 ? "" : "s"} — ${pending.length} pending.`;
-
-    listEl.innerHTML = snap.docs.map(d => {
-      const r = d.data();
-      const id = d.id;
-      const fmtDate = iso => iso ? iso.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$2/$3/$1") : "—";
-      const fmtTime = t => {
-        if (!t) return "—";
-        const [h, m] = t.split(":").map(Number);
-        return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-      };
-      const positions = (r.positions ?? []).map(p => `${p.type} ($${p.pay})`).join(", ") || "—";
-      const statusBadge = {
-        pending:  '<span class="badge" style="background:#4a2c00;color:#ffcc80">Pending</span>',
-        approved: '<span class="badge" style="background:#17351f;color:#b8f2c4">Approved</span>',
-        denied:   '<span class="badge" style="background:#5a1a1a;color:#ffb4b4">Denied</span>'
-      }[r.status] ?? r.status;
-
-      const actionBtns = r.status === "pending"
-        ? `<button class="btn req-approve-btn" data-id="${esc(id)}" style="font-size:0.8rem;padding:5px 12px">Approve</button>
-           <button class="btn print-btn req-deny-btn" data-id="${esc(id)}" style="font-size:0.8rem;padding:5px 12px">Deny</button>`
-        : "";
-
-      return `
-        <div class="document-note" style="border-left-color:#7ec8f7;margin-bottom:16px" data-request-id="${esc(id)}">
-          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-            <strong style="color:white">${esc(r.homeTeam ?? "?")} vs ${esc(r.awayTeam ?? "?")} — ${esc(r.division ?? "")}</strong>
-            ${statusBadge}
-          </div>
-          <p style="margin:0 0 3px"><span style="color:var(--light-text)">Date / Time:</span> ${esc(fmtDate(r.date))} at ${esc(fmtTime(r.time))}</p>
-          <p style="margin:0 0 3px"><span style="color:var(--light-text)">Location:</span> ${esc(r.location ?? "")}</p>
-          <p style="margin:0 0 3px"><span style="color:var(--light-text)">Positions:</span> ${esc(positions)}</p>
-          <p style="margin:0 0 3px"><span style="color:var(--light-text)">Coach:</span> ${esc(r.coachName ?? "")} — ${esc(r.coachEmail ?? "")} — ${esc(r.coachPhone ?? "")}</p>
-          ${r.notes ? `<p style="margin:4px 0 0;color:var(--light-text);font-size:0.9rem">${esc(r.notes)}</p>` : ""}
-          ${actionBtns ? `<div class="page-actions" style="margin-top:12px;margin-bottom:0">${actionBtns}</div>` : ""}
-          <p class="signup-message req-status-msg" style="margin:6px 0 0;min-height:0"></p>
-        </div>`;
-    }).join("");
-
-    // Wire approve/deny buttons
-    listEl.querySelectorAll(".req-approve-btn").forEach(btn => {
-      btn.addEventListener("click", () => handleRequestAction(btn.dataset.id, "approved"));
-    });
-    listEl.querySelectorAll(".req-deny-btn").forEach(btn => {
-      btn.addEventListener("click", () => handleRequestAction(btn.dataset.id, "denied"));
-    });
-  } catch (err) {
-    console.error(err);
-    listEl.innerHTML = '<p style="color:#ffb4b4">Error loading umpire requests.</p>';
-  }
-}
-
-async function handleRequestAction(requestId, newStatus) {
-  const card = document.querySelector(`[data-request-id="${requestId}"]`);
-  const msgEl = card?.querySelector(".req-status-msg");
-  if (msgEl) { msgEl.textContent = "Saving…"; msgEl.className = "signup-message req-status-msg info"; }
-
-  try {
-    const ref = doc(db, "umpireRequests", requestId);
-    await updateDoc(ref, { status: newStatus });
-    if (msgEl) {
-      msgEl.textContent = newStatus === "approved" ? "Approved — remember to add the game to the schedule." : "Denied.";
-      msgEl.className = `signup-message req-status-msg ${newStatus === "approved" ? "success" : "warning"}`;
-    }
-    // Update badge and hide buttons
-    card?.querySelectorAll(".req-approve-btn, .req-deny-btn").forEach(b => b.remove());
-    const badgeEl = card?.querySelector(".badge");
-    if (badgeEl) {
-      badgeEl.textContent = newStatus === "approved" ? "Approved" : "Denied";
-      badgeEl.style.background = newStatus === "approved" ? "#17351f" : "#5a1a1a";
-      badgeEl.style.color      = newStatus === "approved" ? "#b8f2c4" : "#ffb4b4";
-    }
-  } catch (err) {
-    console.error(err);
-    if (msgEl) { msgEl.textContent = "Error saving."; msgEl.className = "signup-message req-status-msg error"; }
-  }
-}
-
-// ── Incident Reports ──────────────────────────────────────────────────────────
-
-async function loadIncidents() {
-  const listEl = document.getElementById("incidentList");
-  const noteEl = document.getElementById("incidentNote");
-  if (!listEl) return;
-
-  try {
-    const snap = await getDocs(
-      query(collection(db, "incidentReports"), orderBy("submittedAt", "desc"))
-    );
-
-    if (snap.empty) {
-      noteEl.textContent = "No incident reports submitted yet.";
-      listEl.innerHTML = "";
-      return;
-    }
-
-    noteEl.textContent = `${snap.size} report${snap.size === 1 ? "" : "s"} on file.`;
-
-    listEl.innerHTML = snap.docs.map(d => {
-      const r = d.data();
-      const date = r.submittedAt?.toDate
-        ? r.submittedAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
-        : "—";
-      const gameLabel = [r.gameDate ? r.gameDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$2/$3/$1") : "", r.gameCity, r.gameDivision].filter(Boolean).join(" · ");
-      return `
-        <div class="document-note" style="border-left-color:#f7c87e;margin-bottom:16px">
-          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-            <strong style="color:white">${esc(r.incidentType ?? "Incident")}</strong>
-            <span style="color:var(--light-text);font-size:0.85rem">${esc(date)}</span>
-          </div>
-          <p style="margin:0 0 4px"><span style="color:var(--light-text)">Reported by:</span> ${esc(r.reporterName ?? "")}</p>
-          ${gameLabel ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Game:</span> ${esc(gameLabel)}</p>` : ""}
-          ${r.involvedParties ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Involved:</span> ${esc(r.involvedParties)}</p>` : ""}
-          <p style="margin:8px 0 0;white-space:pre-wrap">${esc(r.description ?? "")}</p>
-        </div>`;
-    }).join("");
-  } catch (err) {
-    console.error(err);
-    listEl.innerHTML = '<p style="color:#ffb4b4">Error loading incident reports.</p>';
-  }
-}
