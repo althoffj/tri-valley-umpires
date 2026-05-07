@@ -1,5 +1,6 @@
-const { onSchedule }          = require("firebase-functions/v2/scheduler");
-const { onCall, HttpsError }   = require("firebase-functions/v2/https");
+const { onSchedule }                  = require("firebase-functions/v2/scheduler");
+const { onCall, HttpsError }          = require("firebase-functions/v2/https");
+const { onDocumentWritten }           = require("firebase-functions/v2/firestore");
 const { initializeApp }        = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const https = require("https");
@@ -274,3 +275,213 @@ exports.importCitySchedule = onCall(
     return { added, skipped };
   }
 );
+
+// ── Phase 11: single-team sync ────────────────────────────────────────────────
+
+async function runSyncForTeam(team, teamIndex) {
+  const db = getFirestore();
+
+  const gamesSnap      = await db.collection("games").get();
+  const existingExtIds = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
+  const linkedUids     = new Set();
+  const cityGames      = [];
+  for (const d of gamesSnap.docs) {
+    const g = d.data();
+    if (g.source === "city-schedule") {
+      cityGames.push({ ref: d.ref, ...g });
+      (g.icsLinks || []).forEach(l => linkedUids.add(l.uid));
+    }
+  }
+
+  const division = inferDivision(team.name);
+  let icsText;
+  try { icsText = await fetchICS(team.icsUrl); }
+  catch (err) { throw new Error(`Failed to fetch ICS for ${team.name}: ${err.message}`); }
+
+  const events = parseVEvents(icsText);
+  const eventsByDivDate = {};
+  let added = 0;
+
+  for (const ev of events) {
+    if (!ev.uid) continue;
+    const key = `${division}|${ev.date}`;
+    if (!eventsByDivDate[key]) eventsByDivDate[key] = [];
+    if (!eventsByDivDate[key].some(e => e.uid === ev.uid))
+      eventsByDivDate[key].push({ uid: ev.uid, teamName: team.name, location: ev.location, homeTeam: ev.homeTeam, awayTeam: ev.awayTeam });
+
+    if (existingExtIds.has(ev.uid) || linkedUids.has(ev.uid)) continue;
+    await db.collection("games").add({
+      teamName: team.name, division,
+      date: ev.date, time: ev.time, location: ev.location,
+      homeTeam: ev.homeTeam, awayTeam: ev.awayTeam,
+      needsUmpires: false, umpireSlots: [], cancelled: false,
+      externalId: ev.uid, source: "calendar",
+      createdAt: FieldValue.serverTimestamp()
+    });
+    existingExtIds.add(ev.uid);
+    added++;
+  }
+
+  const today = todayISO();
+  let linked = 0, flagged = 0;
+  for (const game of cityGames) {
+    if (game.division !== division) continue;
+    if (game.date < today || game.cancelled) continue;
+    const key     = `${division}|${game.date}`;
+    const matches = eventsByDivDate[key] || [];
+    if (!game.icsLinks || game.icsLinks.length === 0) {
+      if (matches.length > 0) {
+        const update = { icsLinks: matches.map(e => ({ uid: e.uid, teamName: e.teamName })) };
+        const first  = matches[0];
+        if (!game.homeTeam && first.homeTeam) update.homeTeam = first.homeTeam;
+        if (!game.awayTeam && first.awayTeam) update.awayTeam = first.awayTeam;
+        await game.ref.update(update); linked++;
+      }
+    } else {
+      const liveUids = new Set(matches.map(e => e.uid));
+      const missing  = game.icsLinks.filter(l => !liveUids.has(l.uid));
+      if (missing.length > 0 && !game.possibleChange) { await game.ref.update({ possibleChange: true }); flagged++; }
+      else if (missing.length === 0 && game.possibleChange) { await game.ref.update({ possibleChange: false }); }
+    }
+  }
+
+  return { added, linked, flagged };
+}
+
+exports.syncTeamNow = onCall(
+  { cors: ["https://tri-valley-baseball-umpires.web.app", "https://tri-valley-baseball-umpires.firebaseapp.com"] },
+  async request => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in.");
+    const db       = getFirestore();
+    const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+    if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+    const { teamIndex } = request.data;
+    if (typeof teamIndex !== "number") throw new HttpsError("invalid-argument", "teamIndex required.");
+
+    const teamsSnap = await db.doc("config/teamCalendars").get();
+    const teams     = teamsSnap.exists ? (teamsSnap.data().teams || []) : [];
+    if (teamIndex < 0 || teamIndex >= teams.length)
+      throw new HttpsError("out-of-range", "Invalid team index.");
+
+    return await runSyncForTeam(teams[teamIndex], teamIndex);
+  }
+);
+
+// ── Phase 12: Slack helpers ───────────────────────────────────────────────────
+
+function postSlack(webhookUrl, text) {
+  if (!webhookUrl) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const body    = JSON.stringify({ text });
+    const urlObj  = new URL(webhookUrl);
+    const req     = https.request({
+      hostname: urlObj.hostname,
+      path:     urlObj.pathname + urlObj.search,
+      method:   "POST",
+      headers:  { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
+    }, res => {
+      res.resume();
+      res.on("end", () => resolve());
+    });
+    req.on("error", reject);
+    req.setTimeout(8000, () => { req.destroy(); reject(new Error("Slack timeout")); });
+    req.write(body);
+    req.end();
+  });
+}
+
+async function getSlackWebhooks(db) {
+  const snap = await db.doc("config/slackWebhooks").get();
+  return snap.exists ? snap.data() : {};
+}
+
+function fmtDateSlack(iso) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${m}/${d}/${y}`;
+}
+
+function fmtTimeSlack(t) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"}`;
+}
+
+function gameLabel(g) {
+  const teams = [g.homeTeam, g.awayTeam].filter(Boolean).join(" vs ");
+  return `${fmtDateSlack(g.date)} at ${fmtTimeSlack(g.time)} — ${g.city ?? ""} ${g.division ?? ""}${teams ? " · " + teams : ""}${g.field ? " · " + g.field : ""}`;
+}
+
+// ── Phase 12: onGameWrite trigger ─────────────────────────────────────────────
+
+exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
+  const before = event.data.before?.data() ?? null;
+  const after  = event.data.after?.data()  ?? null;
+
+  // Only fire for needsUmpires games
+  if (!after?.needsUmpires && !before?.needsUmpires) return;
+
+  const db      = getFirestore();
+  const hooks   = await getSlackWebhooks(db);
+  if (!hooks.jeff && !hooks.ch10u && !hooks.ch12u) return;
+
+  const div     = after?.division ?? before?.division ?? "";
+  const channel = /10U/i.test(div) ? hooks.ch10u : /12U/i.test(div) ? hooks.ch12u : null;
+
+  let msg = null;
+  if (!before && after) {
+    msg = `🆕 New game added: ${gameLabel(after)}`;
+  } else if (before && !after) {
+    msg = `🗑️ Game deleted: ${gameLabel(before)}`;
+  } else if (before && after) {
+    if (!before.cancelled && after.cancelled) {
+      msg = `❌ Game cancelled: ${gameLabel(after)}`;
+    } else if (before.cancelled && !after.cancelled) {
+      msg = `✅ Game reinstated: ${gameLabel(after)}`;
+    } else {
+      // Only notify on field changes meaningful to umpires
+      const changed = ["date","time","field","city","division"].some(k => before[k] !== after[k]);
+      if (changed) msg = `✏️ Game updated: ${gameLabel(after)}`;
+    }
+  }
+
+  if (!msg) return;
+
+  await Promise.allSettled([
+    hooks.jeff  ? postSlack(hooks.jeff,  msg) : null,
+    channel     ? postSlack(channel,     msg) : null
+  ].filter(Boolean));
+});
+
+// ── Phase 12: day-of reminders at 7 AM ───────────────────────────────────────
+
+exports.sendDayOfReminders = onSchedule("every day 07:00", async () => {
+  const db    = getFirestore();
+  const hooks = await getSlackWebhooks(db);
+  if (!hooks.jeff && !hooks.ch10u && !hooks.ch12u) return;
+
+  const today = todayISO();
+  const snap  = await db.collection("games")
+    .where("date", "==", today)
+    .where("needsUmpires", "==", true)
+    .get();
+
+  if (snap.empty) return;
+
+  for (const d of snap.docs) {
+    const g      = d.data();
+    if (g.cancelled) continue;
+    const div    = g.division ?? "";
+    const channel = /10U/i.test(div) ? hooks.ch10u : /12U/i.test(div) ? hooks.ch12u : null;
+    const slots  = (g.umpireSlots ?? [])
+      .map(s => s.assignedName ? `${s.type}: ${s.assignedName}` : `${s.type}: OPEN`)
+      .join(" | ");
+    const msg = `⚾ *Game today:* ${gameLabel(g)}\n${slots}`;
+
+    await Promise.allSettled([
+      hooks.jeff ? postSlack(hooks.jeff, msg) : null,
+      channel    ? postSlack(channel,    msg) : null
+    ].filter(Boolean));
+  }
+});

@@ -447,6 +447,7 @@ async function loadTeamCalendars() {
         <span style="flex:1"><strong>${esc(t.name)}</strong><br>
           <span style="color:var(--light-text);font-size:0.82rem;word-break:break-all">${esc(t.icsUrl)}</span>
         </span>
+        <button class="btn print-btn sync-team-btn" data-index="${i}" style="flex-shrink:0">Sync</button>
         <button class="btn print-btn edit-team-btn" data-index="${i}" style="flex-shrink:0">Edit</button>
         <button class="btn print-btn remove-team-btn" data-index="${i}" style="flex-shrink:0">Remove</button>
       </div>`).join("");
@@ -538,6 +539,13 @@ async function syncGamesFromCalendars() {
   }
 }
 
+async function syncTeamNow(teamIndex) {
+  const functions    = getFunctions(app, "us-central1");
+  const callable     = httpsCallable(functions, "syncTeamNow");
+  const { data }     = await callable({ teamIndex });
+  return data;
+}
+
 document.getElementById("syncCalBtn").addEventListener("click", syncGamesFromCalendars);
 
 document.getElementById("importScheduleBtn").addEventListener("click", async () => {
@@ -559,6 +567,35 @@ document.getElementById("importScheduleBtn").addEventListener("click", async () 
 });
 
 // ── Pay rates ─────────────────────────────────────────────────────────────────
+
+// ── Slack Webhooks ────────────────────────────────────────────────────────────
+
+async function loadSlackWebhooks() {
+  try {
+    const snap = await getDoc(doc(db, "config", "slackWebhooks"));
+    if (snap.exists()) {
+      const d = snap.data();
+      document.getElementById("slackJeff").value = d.jeff  || "";
+      document.getElementById("slack10u").value  = d.ch10u || "";
+      document.getElementById("slack12u").value  = d.ch12u || "";
+    }
+  } catch (_) {}
+}
+
+document.getElementById("slackWebhooksForm")?.addEventListener("submit", async function(e) {
+  e.preventDefault();
+  try {
+    const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    await setDoc(doc(db, "config", "slackWebhooks"), {
+      jeff:  document.getElementById("slackJeff").value.trim(),
+      ch10u: document.getElementById("slack10u").value.trim(),
+      ch12u: document.getElementById("slack12u").value.trim()
+    });
+    setMsg("slackWebhooksMessage", "Webhooks saved.", "success");
+  } catch (err) {
+    setMsg("slackWebhooksMessage", err.message, "error");
+  }
+});
 
 async function loadPayRates() {
   try {
@@ -654,6 +691,24 @@ document.addEventListener("click", e => {
   const unassignBtn = e.target.closest(".unassign-btn");
   if (unassignBtn) { unassignSlot(unassignBtn.dataset.gameId, unassignBtn.dataset.slotType); return; }
 
+  const syncTeamBtn = e.target.closest(".sync-team-btn");
+  if (syncTeamBtn) {
+    const index = Number(syncTeamBtn.dataset.index);
+    syncTeamBtn.disabled = true;
+    syncTeamBtn.textContent = "Syncing…";
+    const msgEl = document.getElementById("syncCalMessage");
+    if (msgEl) { msgEl.textContent = "Syncing team…"; msgEl.className = "signup-message info"; }
+    syncTeamNow(index)
+      .then(r => {
+        if (msgEl) { msgEl.textContent = `Done — ${r.added ?? 0} added, ${r.linked ?? 0} linked.`; msgEl.className = "signup-message success"; }
+      })
+      .catch(err => {
+        if (msgEl) { msgEl.textContent = `Error: ${err.message}`; msgEl.className = "signup-message error"; }
+      })
+      .finally(() => { syncTeamBtn.disabled = false; syncTeamBtn.textContent = "Sync"; });
+    return;
+  }
+
   const editTeamBtn = e.target.closest(".edit-team-btn");
   if (editTeamBtn) {
     const i = Number(editTeamBtn.dataset.index);
@@ -737,6 +792,7 @@ authReadyPromise.then(() => {
   loadRoster();
   loadGames();
   loadPayRates();
+  loadSlackWebhooks();
   loadTeamCalendars();
   loadPayroll();
   loadUmpireRequests();

@@ -226,6 +226,28 @@
       <p id="payRatesMessage" class="signup-message" aria-live="polite"></p>
     </form>
 
+    <!-- ── Slack Webhooks ────────────────────────────────────────────────── -->
+    <h2>Slack Webhooks</h2>
+    <div class="document-note">
+      <p>Paste incoming webhook URLs to receive Slack notifications when games are added, updated, or cancelled, and day-of reminders at 7&nbsp;AM. Leave blank to disable a channel.</p>
+      <p style="margin-bottom:0">Create webhooks in Slack: <strong>Apps → Incoming Webhooks → Add New Webhook to Workspace</strong>.</p>
+    </div>
+    <form id="slackWebhooksForm" class="signup-form">
+      <label for="slackJeff">Jeff (direct DM webhook)</label>
+      <input type="url" id="slackJeff" placeholder="https://hooks.slack.com/services/…" />
+
+      <label for="slack10u">10U Channel webhook</label>
+      <input type="url" id="slack10u" placeholder="https://hooks.slack.com/services/…" />
+
+      <label for="slack12u">12U Channel webhook</label>
+      <input type="url" id="slack12u" placeholder="https://hooks.slack.com/services/…" />
+
+      <div class="page-actions" style="margin-top:16px">
+        <button type="submit" class="btn">Save Webhooks</button>
+      </div>
+      <p id="slackWebhooksMessage" class="signup-message" aria-live="polite"></p>
+    </form>
+
     <!-- ── Push Notification ─────────────────────────────────────────────── -->
     <h2>Send Notification</h2>
     <div class="document-note">
