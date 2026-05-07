@@ -4,9 +4,6 @@ const SIGNUP_API_URL = "https://script.google.com/macros/s/AKfycbxAUMxCm-PebuhlM
 // In production this constant is always set, so those code paths are inactive.
 // They exist to make local testing without a live Apps Script easier.
 
-// JSONP requests time out after 10 seconds
-const JSONP_TIMEOUT_MS = 10000;
-
 let games = [];
 let assignments = {};
 let activeFilter = "all";
@@ -304,6 +301,5 @@ document.addEventListener("DOMContentLoaded", function() {
     window.location.href = "index.html";
     return;
   }
+  loadAssignments();
 });
-
-loadAssignments();
