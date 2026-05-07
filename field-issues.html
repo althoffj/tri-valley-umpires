@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Field Issues - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=7" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Field Issues</h1>
+  </div>
+
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="expectations.html">Expectations</a>
+    <a href="principles_of_umpiring.html">Principles</a>
+    <a href="rule_breakdown.html">Rules</a>
+    <a href="pregame-meeting.html">Plate Meeting</a>
+    <a href="schedule.html">Schedule &amp; Signups</a>
+    <a href="fields.html" data-auth-approved style="display:none">Fields</a>
+    <a href="incident.html" data-auth-approved style="display:none">Incident Report</a>
+    <a href="field-issues.html" data-auth-approved style="display:none">Field Issues</a>
+    <a href="form.html" data-auth-guest>Acknowledgment</a>
+    <a href="request-umpire.html">Request Umpire</a>
+  </nav>
+
+  <!-- Approved umpires and admins -->
+  <div class="container" data-auth-approved style="display:none">
+
+    <h2>Report a Field Issue</h2>
+    <div class="document-note">
+      <p>Use this form to report any field conditions that need attention — damaged equipment, unsafe surfaces, maintenance issues, or anything else that affects play. Reports go directly to the administrator.</p>
+    </div>
+
+    <form id="fieldIssueForm" class="signup-form" novalidate>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="issueFacility">Facility *</label>
+          <select id="issueFacility" required>
+            <option value="">-- Select facility --</option>
+          </select>
+          <p class="field-error" id="issueFacilityError"></p>
+        </div>
+        <div class="form-group">
+          <label for="issueFieldSelect">Field</label>
+          <select id="issueFieldSelect">
+            <option value="">-- General / Whole Complex --</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="issueSeverity">Severity *</label>
+          <select id="issueSeverity" required>
+            <option value="">-- Select --</option>
+            <option value="Low">Low — Minor, can wait</option>
+            <option value="Medium">Medium — Should be addressed soon</option>
+            <option value="High">High — Safety concern / affects play immediately</option>
+          </select>
+          <p class="field-error" id="issueSeverityError"></p>
+        </div>
+        <div class="form-group">
+          <label for="issueCategory">Category</label>
+          <select id="issueCategory">
+            <option value="">-- Select --</option>
+            <option value="Field Surface">Field Surface</option>
+            <option value="Equipment">Equipment (bases, rubber, mound)</option>
+            <option value="Fence / Boundary">Fence / Boundary</option>
+            <option value="Lighting">Lighting</option>
+            <option value="Safety Hazard">Safety Hazard</option>
+            <option value="Amenities">Amenities (restrooms, concessions)</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="issueTitle">Short Description *</label>
+          <input type="text" id="issueTitle" placeholder="e.g. Pitching rubber is loose and cracked" maxlength="120" required />
+          <p class="field-error" id="issueTitleError"></p>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="issueDescription">Full Details</label>
+          <textarea id="issueDescription" rows="4"
+            placeholder="Describe the issue in detail — location on the field, how it affects play, when you first noticed it, etc."
+            style="width:100%;padding:10px 12px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:0.95rem;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
+        </div>
+      </div>
+
+      <p id="issueFormMessage" class="signup-message" aria-live="polite"></p>
+
+      <div class="page-actions" style="margin-top:8px">
+        <button type="submit" class="btn" id="submitIssueBtn">Submit Report</button>
+      </div>
+
+    </form>
+
+    <!-- My submitted issues -->
+    <h2 style="margin-top:40px">My Submitted Issues</h2>
+    <div id="myIssuesList">
+      <p style="color:var(--light-text)">Loading…</p>
+    </div>
+
+  </div>
+
+  <!-- Guest / pending fallback -->
+  <div class="container" data-auth-guest>
+    <div class="document-note">
+      <p>Field issue reporting is available to approved umpires. <a href="form.html">Register here</a> or sign in via the <strong>☰ menu</strong> (top right).</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      <span data-auth-approved style="display:none">
+        Questions? Post in
+        <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+        | Jeff Althoff: 605-380-0229 (urgent only) |
+      </span>
+      <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+      | <a href="https://www.minndak.org/" target="_blank">Minndak Baseball League</a>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=7"></script>
+  <script type="module" src="field-issues.js?v=7"></script>
+</body>
+</html>

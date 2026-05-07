@@ -24,6 +24,14 @@
         { "fieldPath": "date", "order": "ASCENDING" },
         { "fieldPath": "time", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "fieldIssues",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "reportedBy",  "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

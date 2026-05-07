@@ -9,6 +9,8 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  query,
+  orderBy,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -845,6 +847,184 @@ document.addEventListener("click", e => {
   }
 });
 
+// ── Field Issues (admin) ──────────────────────────────────────────────────────
+
+let allIssues   = [];
+let issueFilter = "open";
+
+function fmtDateTime(ts) {
+  if (!ts) return "—";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+    " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+function severityBadge(s) {
+  const styles = {
+    High:   "background:#3a0a0a;color:#f88;border-color:#c0392b",
+    Medium: "background:#2a2000;color:#f5c842;border-color:#b8860b",
+    Low:    "background:#0a2a0a;color:#8fc;border-color:#2a6a2a",
+  };
+  return `<span style="${styles[s] || "background:#222;color:#aaa;border-color:#444"};border:1px solid;border-radius:10px;padding:1px 8px;font-size:0.75rem">${esc(s || "—")}</span>`;
+}
+
+function statusBadge(s) {
+  const styles = {
+    Open:         "background:#3a0808;color:#f88;border-color:#c0392b",
+    "In Progress":"background:#2a2000;color:#f5c842;border-color:#b8860b",
+    Resolved:     "background:#0a2a0a;color:#8fc;border-color:#2a6a2a",
+  };
+  return `<span style="${styles[s] || "background:#222;color:#aaa;border-color:#444"};border:1px solid;border-radius:10px;padding:1px 8px;font-size:0.75rem">${esc(s || "—")}</span>`;
+}
+
+async function loadFieldIssues() {
+  const listEl = document.getElementById("fieldIssuesList");
+  if (!listEl) return;
+  try {
+    const snap = await getDocs(
+      query(collection(db, "fieldIssues"), orderBy("submittedAt", "desc"))
+    );
+    allIssues = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderFieldIssues();
+  } catch (err) {
+    listEl.innerHTML = `<p style="color:#ffb4b4">Error: ${esc(err.message)}</p>`;
+    console.error(err);
+  }
+}
+
+function renderFieldIssues() {
+  const listEl = document.getElementById("fieldIssuesList");
+  if (!listEl) return;
+
+  const visible = allIssues.filter(r => {
+    if (issueFilter === "open")        return r.status === "Open";
+    if (issueFilter === "in-progress") return r.status === "In Progress";
+    return true;
+  });
+
+  if (visible.length === 0) {
+    listEl.innerHTML = `<p style="color:var(--light-text)">No issues match the current filter.</p>`;
+    return;
+  }
+
+  listEl.innerHTML = visible.map(r => {
+    const loc = r.fieldName
+      ? `${esc(r.facilityName)} — ${esc(r.fieldName)}`
+      : esc(r.facilityName);
+
+    return `
+      <div class="facility-card" style="margin-bottom:12px" id="issue_${esc(r.id)}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+              ${statusBadge(r.status)}
+              ${severityBadge(r.severity)}
+              ${r.category ? `<span style="font-size:0.8rem;color:var(--light-text)">${esc(r.category)}</span>` : ""}
+            </div>
+            <strong style="font-size:1rem">${esc(r.title)}</strong>
+            <div style="font-size:0.85rem;color:var(--light-text);margin-top:2px">
+              ${loc} &nbsp;·&nbsp; Reported by ${esc(r.reporterName)} &nbsp;·&nbsp; ${fmtDateTime(r.submittedAt)}
+            </div>
+            ${r.description ? `<div style="margin-top:6px;font-size:0.9rem;color:#ccc;white-space:pre-wrap">${esc(r.description)}</div>` : ""}
+            ${r.adminNotes  ? `<div style="margin-top:6px;font-size:0.85rem;color:#aaa;font-style:italic;border-left:2px solid #555;padding-left:8px">Admin notes: ${esc(r.adminNotes)}</div>` : ""}
+            ${r.status === "Resolved" && r.resolvedByName
+              ? `<div style="font-size:0.8rem;color:#8fc;margin-top:4px">Resolved by ${esc(r.resolvedByName)} on ${fmtDateTime(r.resolvedAt)}</div>` : ""}
+          </div>
+          <button class="btn print-btn toggle-issue-edit-btn" data-issue-id="${esc(r.id)}"
+            style="font-size:0.78rem;padding:4px 10px;flex-shrink:0">Update</button>
+        </div>
+
+        <!-- Admin update panel (hidden) -->
+        <div id="issueEdit_${esc(r.id)}" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid #444">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="issueStatus_${esc(r.id)}" style="margin-top:0">Status</label>
+              <select id="issueStatus_${esc(r.id)}">
+                <option value="Open"        ${r.status === "Open"         ? "selected" : ""}>Open</option>
+                <option value="In Progress" ${r.status === "In Progress"  ? "selected" : ""}>In Progress</option>
+                <option value="Resolved"    ${r.status === "Resolved"     ? "selected" : ""}>Resolved</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="issueAdminNotes_${esc(r.id)}" style="margin-top:0">Admin Notes</label>
+              <textarea id="issueAdminNotes_${esc(r.id)}" rows="3"
+                placeholder="Internal notes on the issue, actions taken, who to contact, etc."
+                style="width:100%;padding:10px 12px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:0.9rem;box-sizing:border-box;resize:vertical">${esc(r.adminNotes || "")}</textarea>
+            </div>
+          </div>
+          <div class="page-actions" style="margin-top:8px">
+            <button class="btn save-issue-btn" data-issue-id="${esc(r.id)}" style="font-size:0.85rem">Save Update</button>
+            <button class="btn print-btn toggle-issue-edit-btn" data-issue-id="${esc(r.id)}" style="font-size:0.85rem">Cancel</button>
+          </div>
+          <p id="issueEditMsg_${esc(r.id)}" class="signup-message"></p>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+async function saveIssueUpdate(issueId) {
+  const status     = document.getElementById(`issueStatus_${issueId}`)?.value;
+  const adminNotes = document.getElementById(`issueAdminNotes_${issueId}`)?.value.trim() || "";
+  const msgEl      = document.getElementById(`issueEditMsg_${issueId}`);
+
+  const updates = { status, adminNotes };
+
+  // Auto-stamp resolved fields
+  if (status === "Resolved") {
+    const issue = allIssues.find(r => r.id === issueId);
+    if (issue?.status !== "Resolved") {
+      // Only set resolvedAt/resolvedBy the first time it's resolved
+      // We don't have getCurrentUser here, but we can import via auth
+      updates.resolvedAt = serverTimestamp();
+    }
+  } else {
+    updates.resolvedAt    = null;
+    updates.resolvedBy    = "";
+    updates.resolvedByName = "";
+  }
+
+  try {
+    await updateDoc(doc(db, "fieldIssues", issueId), updates);
+    if (msgEl) { msgEl.textContent = "Saved."; msgEl.className = "signup-message success"; }
+    // Update local cache
+    const idx = allIssues.findIndex(r => r.id === issueId);
+    if (idx !== -1) Object.assign(allIssues[idx], updates);
+    setTimeout(() => {
+      document.getElementById(`issueEdit_${issueId}`)?.style &&
+        (document.getElementById(`issueEdit_${issueId}`).style.display = "none");
+      renderFieldIssues();
+    }, 600);
+  } catch (err) {
+    if (msgEl) { msgEl.textContent = err.message; msgEl.className = "signup-message error"; }
+  }
+}
+
+// Wire issue filter buttons
+document.addEventListener("click", e => {
+  const filterBtn = e.target.closest(".filter-btn[data-issue-filter]");
+  if (filterBtn) {
+    issueFilter = filterBtn.dataset.issueFilter;
+    document.querySelectorAll(".filter-btn[data-issue-filter]").forEach(b => {
+      b.classList.toggle("filter-active", b === filterBtn);
+      b.classList.toggle("print-btn", b !== filterBtn);
+    });
+    renderFieldIssues();
+    return;
+  }
+
+  const toggleBtn = e.target.closest(".toggle-issue-edit-btn");
+  if (toggleBtn) {
+    const panel = document.getElementById(`issueEdit_${toggleBtn.dataset.issueId}`);
+    if (panel) panel.style.display = panel.style.display === "none" ? "" : "none";
+    return;
+  }
+
+  const saveBtn = e.target.closest(".save-issue-btn");
+  if (saveBtn) { saveIssueUpdate(saveBtn.dataset.issueId); return; }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 authReadyPromise.then(() => {
@@ -857,4 +1037,5 @@ authReadyPromise.then(() => {
   document.getElementById("noAccess").style.display = "none";
 
   loadFacilities();
+  loadFieldIssues();
 });

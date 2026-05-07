@@ -85,6 +85,22 @@
       <p style="color:var(--light-text)">Loading facilities…</p>
     </div>
 
+    <!-- ── Field Issues ──────────────────────────────────────────────────── -->
+    <h2 style="margin-top:48px">Field Issue Reports</h2>
+    <div class="document-note">
+      <p>Issues submitted by umpires via the <a href="field-issues.html">Field Issues</a> page. Update status and add admin notes to track resolution. Resolved issues are hidden by default.</p>
+    </div>
+
+    <div class="page-actions" style="margin-bottom:8px">
+      <button class="btn filter-btn filter-active" data-issue-filter="open">Open</button>
+      <button class="btn print-btn filter-btn" data-issue-filter="in-progress">In Progress</button>
+      <button class="btn print-btn filter-btn" data-issue-filter="all">All</button>
+    </div>
+
+    <div id="fieldIssuesList">
+      <p style="color:var(--light-text)">Loading…</p>
+    </div>
+
   </div>
 
   <!-- Not-admin fallback -->

@@ -67,5 +67,12 @@ service cloud.firestore {
       allow read: if isApproved() || isAdmin();
       allow write: if isAdmin();
     }
+
+    // Field issue reports: any approved umpire can submit; only admins can update/delete
+    match /fieldIssues/{issueId} {
+      allow read:   if isApproved() || isAdmin();
+      allow create: if isApproved();
+      allow update, delete: if isAdmin();
+    }
   }
 }
