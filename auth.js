@@ -63,7 +63,7 @@ function getLoggedInName() {
   return s ? s.name : null;
 }
 
-function login(name, email, password) {
+function login(email, password) {
   return new Promise(function(resolve, reject) {
     var callbackName = "umpireLogin_" + Date.now() + "_" + Math.random().toString(36).slice(2);
     var script = document.createElement("script");
@@ -72,7 +72,6 @@ function login(name, email, password) {
 
     url.searchParams.set("action", "login");
     url.searchParams.set("callback", callbackName);
-    url.searchParams.set("name", name);
     url.searchParams.set("email", email);
     url.searchParams.set("password", password);
 
@@ -92,7 +91,7 @@ function login(name, email, password) {
       delete window[callbackName];
       script.remove();
       if (payload && payload.ok) {
-        setSession(name, email);
+        setSession(payload.name, email);
         resolve(payload);
       } else {
         reject(new Error((payload && payload.message) || "Login failed."));

@@ -79,12 +79,11 @@ function doGet(event) {
 }
 
 function login(params) {
-  var name = clean(params.name);
   var email = clean(params.email).toLowerCase();
   var password = clean(params.password);
 
-  if (!name || !email || !password) {
-    return { ok: false, message: "Name, email, and password are required." };
+  if (!email || !password) {
+    return { ok: false, message: "Email and password are required." };
   }
 
   var sheet = getOrCreateSheet(UMPIRES_SHEET_NAME, ACKNOWLEDGMENT_COLUMNS);
@@ -101,40 +100,34 @@ function login(params) {
   var approvedIdx = findHeaderIndex(headers, ["approved"]);
   var foundRow = null;
 
-  if (nameIdx === -1 || emailIdx === -1 || passwordIdx === -1) {
+  if (emailIdx === -1 || passwordIdx === -1) {
     return { ok: false, message: "Unable to find credential columns in the sheet." };
   }
 
-  // FIX: normalize() already collapses internal whitespace via replace(/\s+/g, " ").
-  // Using it consistently on both the stored value and the incoming value means
-  // "Jeff  Althoff" in the sheet matches "Jeff Althoff" from the login form.
-  var requestedName = normalize(name);
-  var requestedEmail = email.toLowerCase();
-
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
-    var rowName = normalize(clean(row[nameIdx]));
     var rowEmail = clean(row[emailIdx]).toLowerCase();
     var rowPassword = clean(row[passwordIdx]);
 
-    if (rowName === requestedName && rowEmail === requestedEmail && rowPassword === password) {
+    if (rowEmail === email && rowPassword === password) {
       foundRow = row;
       break;
     }
   }
 
   if (!foundRow) {
-    Logger.log("login: no match for name=" + requestedName + " email=" + requestedEmail);
+    Logger.log("login: no match for email=" + email);
     return {
       ok: false,
-      message: "You do not have a valid account. Please complete the acknowledgment form at https://althoffj.github.io/tri-valley-umpires/form.html to register."
+      message: "Incorrect email or password. If you haven't registered yet, complete the acknowledgment form at https://althoffj.github.io/tri-valley-umpires/form.html."
     };
   }
 
-  // Check if the umpire has been approved by an administrator
+  // Treat blank Approved (pre-dates the column) as approved; only an
+  // explicit "no" blocks login so existing umpires aren't locked out.
   if (approvedIdx !== -1) {
     var approved = clean(foundRow[approvedIdx]).toLowerCase();
-    if (approved !== "yes") {
+    if (approved === "no") {
       return {
         ok: false,
         message: "Your account has not yet been approved by an administrator. Please wait for approval before signing up for games."
@@ -142,8 +135,9 @@ function login(params) {
     }
   }
 
-  Logger.log("login: success for " + requestedEmail);
-  return { ok: true };
+  var name = nameIdx !== -1 ? clean(foundRow[nameIdx]) : email;
+  Logger.log("login: success for " + email);
+  return { ok: true, name: name };
 }
 
 function resetPassword(params) {
@@ -357,7 +351,7 @@ function readRosterFromSheet(sheet) {
 
     if (approvedIndex !== -1) {
       const approved = clean(row[approvedIndex]).toLowerCase();
-      if (approved !== "yes") continue;
+      if (approved === "no") continue;
     }
 
     if (name && email && !seen[email]) {
