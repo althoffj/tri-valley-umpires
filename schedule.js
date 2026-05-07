@@ -166,9 +166,10 @@ function buildActionCell(game) {
     return '<span style="color:var(--light-text);font-size:0.85rem">Game over</span>';
   }
 
-  const uid    = getCurrentUser()?.uid;
-  const slots  = getSlots(game);
+  const uid      = getCurrentUser()?.uid;
+  const slots    = getSlots(game);
   const loggedIn = isLoggedIn() && isApproved();
+  const alreadyOnGame = uid && slots.some(s => s.assignedUid === uid);
 
   return slots.map(slot => {
     if (slot.assignedUid === uid) {
@@ -183,6 +184,10 @@ function buildActionCell(game) {
     if (!loggedIn) {
       return `<a href="index.html" class="btn print-btn"
         style="margin:2px 0">Log in to sign up</a>`;
+    }
+    if (alreadyOnGame) {
+      return `<button type="button" class="btn locked-btn" disabled
+        style="margin:2px 0" title="You already have a slot on this game">${esc(slot.type)} —</button>`;
     }
     return `<button type="button" class="btn signup-btn"
       data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}"
@@ -377,6 +382,7 @@ async function claimSlot(gameId, slotType) {
       if (data.cancelled) throw new Error("This game has been cancelled.");
 
       const slots = data.umpireSlots || [];
+      if (slots.some(s => s.assignedUid === user.uid)) throw new Error("You're already signed up for this game.");
       const slotIdx = slots.findIndex(s => s.type === slotType && !s.assignedUid);
       if (slotIdx === -1) throw new Error(`The ${slotType} slot was just claimed by someone else. Please refresh.`);
 
