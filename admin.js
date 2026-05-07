@@ -328,10 +328,11 @@ async function loadTeamCalendars() {
     }
 
     listEl.innerHTML = teams.map((t, i) => `
-      <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #444">
+      <div data-team-row="${i}" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #444">
         <span style="flex:1"><strong>${esc(t.name)}</strong><br>
           <span style="color:var(--light-text);font-size:0.82rem;word-break:break-all">${esc(t.icsUrl)}</span>
         </span>
+        <button class="btn print-btn edit-team-btn" data-index="${i}" style="flex-shrink:0">Edit</button>
         <button class="btn print-btn remove-team-btn" data-index="${i}" style="flex-shrink:0">Remove</button>
       </div>`).join("");
   } catch (err) {
@@ -354,6 +355,30 @@ async function removeTeam(index) {
   const teams = snap.exists() ? (snap.data().teams || []) : [];
   teams.splice(index, 1);
   await setDoc(doc(db, "config", "teamCalendars"), { teams });
+}
+
+async function saveTeam(index, name, icsUrl) {
+  const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+  const snap = await getDoc(doc(db, "config", "teamCalendars"));
+  const teams = snap.exists() ? (snap.data().teams || []) : [];
+  teams[index] = { name, icsUrl: icsUrl.replace(/^webcal:\/\//i, "https://") };
+  await setDoc(doc(db, "config", "teamCalendars"), { teams });
+}
+
+function showTeamEditRow(index, currentName, currentUrl) {
+  const row = document.querySelector(`[data-team-row="${index}"]`);
+  if (!row) return;
+  row.innerHTML = `
+    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+      <input type="text" class="team-edit-name" value="${esc(currentName)}"
+        style="width:100%;padding:6px 8px;background:var(--card-bg);color:var(--text);border:1px solid #555;border-radius:4px" />
+      <input type="url" class="team-edit-url" value="${esc(currentUrl)}"
+        style="width:100%;padding:6px 8px;background:var(--card-bg);color:var(--text);border:1px solid #555;border-radius:4px;font-size:0.82rem" />
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+      <button class="btn save-team-btn" data-index="${index}">Save</button>
+      <button class="btn print-btn cancel-edit-team-btn" data-index="${index}">Cancel</button>
+    </div>`;
 }
 
 document.getElementById("addTeamForm").addEventListener("submit", async function(e) {
@@ -454,6 +479,34 @@ document.addEventListener("click", e => {
 
   const unassignBtn = e.target.closest(".unassign-btn");
   if (unassignBtn) { unassignSlot(unassignBtn.dataset.gameId, unassignBtn.dataset.slotType); return; }
+
+  const editTeamBtn = e.target.closest(".edit-team-btn");
+  if (editTeamBtn) {
+    const i = Number(editTeamBtn.dataset.index);
+    const row = document.querySelector(`[data-team-row="${i}"]`);
+    const name = row.querySelector("strong")?.textContent || "";
+    const url  = row.querySelector("span > span")?.textContent || "";
+    showTeamEditRow(i, name, url);
+    return;
+  }
+
+  const saveTeamBtn = e.target.closest(".save-team-btn");
+  if (saveTeamBtn) {
+    const i    = Number(saveTeamBtn.dataset.index);
+    const row  = document.querySelector(`[data-team-row="${i}"]`);
+    const name = row.querySelector(".team-edit-name").value.trim();
+    const url  = row.querySelector(".team-edit-url").value.trim();
+    if (!name || !url) { alert("Name and URL are required."); return; }
+    saveTeamBtn.disabled = true;
+    saveTeam(i, name, url).then(loadTeamCalendars).catch(err => { alert(err.message); saveTeamBtn.disabled = false; });
+    return;
+  }
+
+  const cancelEditTeamBtn = e.target.closest(".cancel-edit-team-btn");
+  if (cancelEditTeamBtn) {
+    loadTeamCalendars();
+    return;
+  }
 
   const removeTeamBtn = e.target.closest(".remove-team-btn");
   if (removeTeamBtn) {
