@@ -35,15 +35,21 @@ let facilitiesCache = {}; // { [facilityId]: facilityData }
 
 // ── Field form helpers ────────────────────────────────────────────────────────
 
+function formSection(title) {
+  return `<p style="margin:16px 0 6px;font-weight:bold;color:#aaa;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #333;padding-bottom:4px">${title}</p>`;
+}
+
 // Generates the inner rows of an add or edit field form.
 // prefix: "add" | "edit", fId: facility id, f: existing field data (or null)
 function fieldFormRows(prefix, fId, f = {}) {
-  const p = `${prefix}Field`;
+  const p  = `${prefix}Field`;
   const id = fId;
   const chk = (key) => f[key] ? "checked" : "";
   const val = (key) => esc(f[key] || "");
+  const sel = (key, opt) => opt === (f[key] || "") ? "selected" : "";
 
   return `
+    ${formSection("Basic")}
     <div class="form-row">
       <div class="form-group">
         <label for="${p}Name_${id}" style="margin-top:0">Field Name</label>
@@ -51,27 +57,8 @@ function fieldFormRows(prefix, fId, f = {}) {
       </div>
     </div>
 
-    <div class="form-row" style="margin-top:12px">
-      <div class="form-group">
-        <label style="margin-top:0;margin-bottom:4px">Amenities</label>
-        <div class="check-list" style="margin-top:4px">
-          <label><input type="checkbox" id="${p}Concession_${id}" ${chk("concessionStand")} /> Concession Stand</label>
-          <label><input type="checkbox" id="${p}Bathrooms_${id}" ${chk("bathrooms")} /> Bathrooms</label>
-          <label><input type="checkbox" id="${p}Portapotty_${id}" ${chk("portapotty")} /> Porta-Potty</label>
-          <label><input type="checkbox" id="${p}Lights_${id}" ${chk("lights")} /> Lights</label>
-          <label><input type="checkbox" id="${p}Scoreboard_${id}" ${chk("scoreboard")} /> Scoreboard</label>
-        </div>
-      </div>
-      <div class="form-group">
-        <label style="margin-top:0;margin-bottom:4px">Pitching Mound</label>
-        <div class="check-list" style="margin-top:4px">
-          <label><input type="checkbox" id="${p}FixedMound_${id}" ${chk("fixedMound")} /> Fixed Mound</label>
-          <label><input type="checkbox" id="${p}PortableMound_${id}" ${chk("portableMound")} /> Portable Mound</label>
-        </div>
-      </div>
-    </div>
-
-    <div class="form-row" style="margin-top:12px">
+    ${formSection("Measurements")}
+    <div class="form-row">
       <div class="form-group">
         <label for="${p}Basepath_${id}" style="margin-top:0">Basepath Length</label>
         <input type="text" id="${p}Basepath_${id}" value="${val("basepathLength")}" placeholder="e.g. 60 ft" />
@@ -81,15 +68,121 @@ function fieldFormRows(prefix, fId, f = {}) {
         <input type="text" id="${p}Pitching_${id}" value="${val("pitchingDistance")}" placeholder="e.g. 44 ft" />
       </div>
     </div>
-
-    <div class="form-row" style="margin-top:4px">
+    <div class="form-row">
       <div class="form-group">
-        <label for="${p}Dimensions_${id}" style="margin-top:0">Field Dimensions</label>
-        <input type="text" id="${p}Dimensions_${id}" value="${val("fieldDimensions")}" placeholder="e.g. 200ft LF, 225ft CF" />
+        <label for="${p}LF_${id}" style="margin-top:0">LF Distance</label>
+        <input type="text" id="${p}LF_${id}" value="${val("distanceLF")}" placeholder="e.g. 200 ft" />
+      </div>
+      <div class="form-group">
+        <label for="${p}CF_${id}" style="margin-top:0">CF Distance</label>
+        <input type="text" id="${p}CF_${id}" value="${val("distanceCF")}" placeholder="e.g. 225 ft" />
+      </div>
+      <div class="form-group">
+        <label for="${p}RF_${id}" style="margin-top:0">RF Distance</label>
+        <input type="text" id="${p}RF_${id}" value="${val("distanceRF")}" placeholder="e.g. 200 ft" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="${p}FenceHeight_${id}" style="margin-top:0">Fence Height</label>
+        <input type="text" id="${p}FenceHeight_${id}" value="${val("fenceHeight")}" placeholder="e.g. 4 ft" />
+      </div>
+      <div class="form-group">
+        <label for="${p}FenceType_${id}" style="margin-top:0">Fence Type</label>
+        <select id="${p}FenceType_${id}">
+          <option value="" ${sel("fenceType","")}>-- Select --</option>
+          <option value="Permanent" ${sel("fenceType","Permanent")}>Permanent</option>
+          <option value="Temporary" ${sel("fenceType","Temporary")}>Temporary</option>
+          <option value="Mixed" ${sel("fenceType","Mixed")}>Mixed</option>
+        </select>
       </div>
     </div>
 
-    <div class="form-row" style="margin-top:4px">
+    ${formSection("Surface")}
+    <div class="form-row">
+      <div class="form-group">
+        <label for="${p}InfieldSurface_${id}" style="margin-top:0">Infield Surface</label>
+        <select id="${p}InfieldSurface_${id}">
+          <option value="" ${sel("infieldSurface","")}>-- Select --</option>
+          <option value="Natural Grass" ${sel("infieldSurface","Natural Grass")}>Natural Grass</option>
+          <option value="Dirt" ${sel("infieldSurface","Dirt")}>Dirt</option>
+          <option value="Artificial Turf" ${sel("infieldSurface","Artificial Turf")}>Artificial Turf</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="${p}OutfieldSurface_${id}" style="margin-top:0">Outfield Surface</label>
+        <select id="${p}OutfieldSurface_${id}">
+          <option value="" ${sel("outfieldSurface","")}>-- Select --</option>
+          <option value="Natural Grass" ${sel("outfieldSurface","Natural Grass")}>Natural Grass</option>
+          <option value="Artificial Turf" ${sel("outfieldSurface","Artificial Turf")}>Artificial Turf</option>
+        </select>
+      </div>
+    </div>
+
+    ${formSection("Amenities")}
+    <div class="form-row">
+      <div class="form-group">
+        <div class="check-list" style="margin-top:4px">
+          <label><input type="checkbox" id="${p}Concession_${id}" ${chk("concessionStand")} /> Concession Stand</label>
+          <label><input type="checkbox" id="${p}Bathrooms_${id}" ${chk("bathrooms")} /> Bathrooms</label>
+          <label><input type="checkbox" id="${p}Portapotty_${id}" ${chk("portapotty")} /> Porta-Potty</label>
+          <label><input type="checkbox" id="${p}Lights_${id}" ${chk("lights")} /> Lights</label>
+          <label><input type="checkbox" id="${p}Scoreboard_${id}" ${chk("scoreboard")} /> Scoreboard</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="check-list" style="margin-top:4px">
+          <label><input type="checkbox" id="${p}PA_${id}" ${chk("paSystem")} /> PA System</label>
+          <label><input type="checkbox" id="${p}FirstAid_${id}" ${chk("firstAid")} /> First Aid Kit</label>
+          <label><input type="checkbox" id="${p}BattingCage_${id}" ${chk("battingCage")} /> Batting Cage</label>
+          <label><input type="checkbox" id="${p}WarningTrack_${id}" ${chk("warningTrack")} /> Warning Track</label>
+          <label><input type="checkbox" id="${p}CoveredSeating_${id}" ${chk("coveredSeating")} /> Covered/Shaded Seating</label>
+        </div>
+      </div>
+    </div>
+
+    ${formSection("Pitching Mound")}
+    <div class="form-row">
+      <div class="form-group">
+        <div class="check-list" style="margin-top:4px">
+          <label><input type="checkbox" id="${p}FixedMound_${id}" ${chk("fixedMound")} /> Fixed Mound</label>
+          <label><input type="checkbox" id="${p}PortableMound_${id}" ${chk("portableMound")} /> Portable Mound</label>
+        </div>
+      </div>
+    </div>
+
+    ${formSection("Umpire Info")}
+    <div class="form-row">
+      <div class="form-group">
+        <label for="${p}HomeDugout_${id}" style="margin-top:0">Home Dugout Side</label>
+        <select id="${p}HomeDugout_${id}">
+          <option value="" ${sel("homeDugoutSide","")}>-- Unknown --</option>
+          <option value="1st Base" ${sel("homeDugoutSide","1st Base")}>1st Base Side</option>
+          <option value="3rd Base" ${sel("homeDugoutSide","3rd Base")}>3rd Base Side</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="${p}Equipment_${id}" style="margin-top:0">Equipment Storage</label>
+        <input type="text" id="${p}Equipment_${id}" value="${val("equipmentStorage")}" placeholder="e.g. Concession stand cabinet" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="${p}Sun_${id}" style="margin-top:0">Sun / Visibility Notes</label>
+        <input type="text" id="${p}Sun_${id}" value="${val("sunNotes")}" placeholder="e.g. Sun in batter's eyes 4–6 PM facing west" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="${p}GroundRules_${id}" style="margin-top:0">Ground Rules</label>
+        <textarea id="${p}GroundRules_${id}" rows="3"
+          placeholder="List any special local ground rules for this field…"
+          style="width:100%;padding:10px 12px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:0.95rem;box-sizing:border-box;resize:vertical">${val("groundRules")}</textarea>
+      </div>
+    </div>
+
+    ${formSection("General Notes")}
+    <div class="form-row">
       <div class="form-group">
         <label for="${p}Notes_${id}" style="margin-top:0">Notes</label>
         <input type="text" id="${p}Notes_${id}" value="${val("notes")}" placeholder="Any additional notes" />
@@ -106,16 +199,37 @@ function readFieldForm(prefix, fId) {
 
   return {
     name:             v(`${p}Name_${id}`),
+    // Measurements
+    basepathLength:   v(`${p}Basepath_${id}`),
+    pitchingDistance: v(`${p}Pitching_${id}`),
+    distanceLF:       v(`${p}LF_${id}`),
+    distanceCF:       v(`${p}CF_${id}`),
+    distanceRF:       v(`${p}RF_${id}`),
+    fenceHeight:      v(`${p}FenceHeight_${id}`),
+    fenceType:        v(`${p}FenceType_${id}`),
+    // Surface
+    infieldSurface:   v(`${p}InfieldSurface_${id}`),
+    outfieldSurface:  v(`${p}OutfieldSurface_${id}`),
+    // Amenities
     concessionStand:  c(`${p}Concession_${id}`),
     bathrooms:        c(`${p}Bathrooms_${id}`),
     portapotty:       c(`${p}Portapotty_${id}`),
     lights:           c(`${p}Lights_${id}`),
     scoreboard:       c(`${p}Scoreboard_${id}`),
+    paSystem:         c(`${p}PA_${id}`),
+    firstAid:         c(`${p}FirstAid_${id}`),
+    battingCage:      c(`${p}BattingCage_${id}`),
+    warningTrack:     c(`${p}WarningTrack_${id}`),
+    coveredSeating:   c(`${p}CoveredSeating_${id}`),
+    // Mound
     fixedMound:       c(`${p}FixedMound_${id}`),
     portableMound:    c(`${p}PortableMound_${id}`),
-    basepathLength:   v(`${p}Basepath_${id}`),
-    pitchingDistance: v(`${p}Pitching_${id}`),
-    fieldDimensions:  v(`${p}Dimensions_${id}`),
+    // Umpire info
+    homeDugoutSide:   v(`${p}HomeDugout_${id}`),
+    equipmentStorage: v(`${p}Equipment_${id}`),
+    sunNotes:         v(`${p}Sun_${id}`),
+    groundRules:      v(`${p}GroundRules_${id}`),
+    // General
     notes:            v(`${p}Notes_${id}`),
   };
 }
@@ -146,29 +260,59 @@ async function loadFacilities() {
 
 // Renders amenity badge chips for a field
 function fieldAmenityBadges(f) {
-  const items = [
-    [f.concessionStand,  "Concessions"],
-    [f.bathrooms,        "Bathrooms"],
-    [f.portapotty,       "Porta-Potty"],
-    [f.lights,           "Lights"],
-    [f.scoreboard,       "Scoreboard"],
-    [f.fixedMound,       "Fixed Mound"],
-    [f.portableMound,    "Portable Mound"],
+  const amenities = [
+    [f.concessionStand, "Concessions"],
+    [f.bathrooms,       "Bathrooms"],
+    [f.portapotty,      "Porta-Potty"],
+    [f.lights,          "Lights"],
+    [f.scoreboard,      "Scoreboard"],
+    [f.paSystem,        "PA System"],
+    [f.firstAid,        "First Aid"],
+    [f.battingCage,     "Batting Cage"],
+    [f.warningTrack,    "Warning Track"],
+    [f.coveredSeating,  "Covered Seating"],
+    [f.fixedMound,      "Fixed Mound"],
+    [f.portableMound,   "Portable Mound"],
   ].filter(([on]) => on).map(([, label]) =>
     `<span style="display:inline-block;background:#2a3a2a;color:#8fc;border:1px solid #3a5a3a;border-radius:10px;padding:1px 8px;font-size:0.75rem;white-space:nowrap">${label}</span>`
   );
-  return items.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${items.join("")}</div>` : "";
+  return amenities.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${amenities.join("")}</div>` : "";
 }
 
-// Renders measurement line for a field
-function fieldMeasurements(f) {
-  const parts = [];
-  if (f.basepathLength)   parts.push(`Basepath: ${esc(f.basepathLength)}`);
-  if (f.pitchingDistance) parts.push(`Pitching: ${esc(f.pitchingDistance)}`);
-  if (f.fieldDimensions)  parts.push(esc(f.fieldDimensions));
-  return parts.length
-    ? `<div style="font-size:0.82rem;color:var(--light-text);margin-top:3px">${parts.join(" · ")}</div>`
+// Renders a compact info block for a field
+function fieldInfoBlock(f) {
+  const lines = [];
+
+  // Measurements
+  const meas = [];
+  if (f.basepathLength)   meas.push(`Basepath: ${esc(f.basepathLength)}`);
+  if (f.pitchingDistance) meas.push(`Pitching: ${esc(f.pitchingDistance)}`);
+  const fences = [f.distanceLF, f.distanceCF, f.distanceRF].filter(Boolean);
+  if (fences.length) meas.push(`Fences: ${fences.map(esc).join(" / ")}`);
+  if (f.fenceHeight) meas.push(`Fence: ${esc(f.fenceHeight)}`);
+  if (meas.length) lines.push(meas.join(" · "));
+
+  // Surface & fence type
+  const surf = [];
+  if (f.infieldSurface)  surf.push(`Infield: ${esc(f.infieldSurface)}`);
+  if (f.outfieldSurface) surf.push(`Outfield: ${esc(f.outfieldSurface)}`);
+  if (f.fenceType)       surf.push(`Fence: ${esc(f.fenceType)}`);
+  if (surf.length) lines.push(surf.join(" · "));
+
+  // Umpire info
+  if (f.homeDugoutSide)   lines.push(`Home dugout: ${esc(f.homeDugoutSide)} side`);
+  if (f.equipmentStorage) lines.push(`Equipment: ${esc(f.equipmentStorage)}`);
+  if (f.sunNotes)         lines.push(`☀ ${esc(f.sunNotes)}`);
+
+  const html = lines.map(l =>
+    `<div style="font-size:0.82rem;color:var(--light-text);margin-top:2px">${l}</div>`
+  ).join("");
+
+  const groundRulesHtml = f.groundRules
+    ? `<div style="font-size:0.82rem;color:#c8a;margin-top:4px"><strong style="color:#dbb">Ground rules:</strong> ${esc(f.groundRules).replace(/\n/g, "<br>")}</div>`
     : "";
+
+  return html + groundRulesHtml;
 }
 
 function renderFacilityCard(id, data) {
@@ -183,7 +327,7 @@ function renderFacilityCard(id, data) {
           <li data-field-index="${i}" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:8px 0">
             <div style="min-width:0">
               <strong>${esc(f.name)}</strong>
-              ${fieldMeasurements(f)}
+              ${fieldInfoBlock(f)}
               ${fieldAmenityBadges(f)}
               ${f.notes ? `<div style="font-size:0.82rem;color:var(--light-text);margin-top:2px">${esc(f.notes)}</div>` : ""}
             </div>
@@ -405,19 +549,40 @@ function openEditFieldForm(facilityId, fieldIndex) {
   const set = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ""; };
   const chk = (elId, val) => { const el = document.getElementById(elId); if (el) el.checked = !!val; };
 
-  set(`${p}Name_${id}`,       f.name);
-  set(`${p}Basepath_${id}`,   f.basepathLength);
-  set(`${p}Pitching_${id}`,   f.pitchingDistance);
-  set(`${p}Dimensions_${id}`, f.fieldDimensions);
-  set(`${p}Notes_${id}`,      f.notes);
-
-  chk(`${p}Concession_${id}`,   f.concessionStand);
-  chk(`${p}Bathrooms_${id}`,    f.bathrooms);
-  chk(`${p}Portapotty_${id}`,   f.portapotty);
-  chk(`${p}Lights_${id}`,       f.lights);
-  chk(`${p}Scoreboard_${id}`,   f.scoreboard);
-  chk(`${p}FixedMound_${id}`,   f.fixedMound);
+  // Basic
+  set(`${p}Name_${id}`,           f.name);
+  // Measurements
+  set(`${p}Basepath_${id}`,       f.basepathLength);
+  set(`${p}Pitching_${id}`,       f.pitchingDistance);
+  set(`${p}LF_${id}`,             f.distanceLF);
+  set(`${p}CF_${id}`,             f.distanceCF);
+  set(`${p}RF_${id}`,             f.distanceRF);
+  set(`${p}FenceHeight_${id}`,    f.fenceHeight);
+  set(`${p}FenceType_${id}`,      f.fenceType);
+  // Surface
+  set(`${p}InfieldSurface_${id}`,  f.infieldSurface);
+  set(`${p}OutfieldSurface_${id}`, f.outfieldSurface);
+  // Amenities
+  chk(`${p}Concession_${id}`,    f.concessionStand);
+  chk(`${p}Bathrooms_${id}`,     f.bathrooms);
+  chk(`${p}Portapotty_${id}`,    f.portapotty);
+  chk(`${p}Lights_${id}`,        f.lights);
+  chk(`${p}Scoreboard_${id}`,    f.scoreboard);
+  chk(`${p}PA_${id}`,            f.paSystem);
+  chk(`${p}FirstAid_${id}`,      f.firstAid);
+  chk(`${p}BattingCage_${id}`,   f.battingCage);
+  chk(`${p}WarningTrack_${id}`,  f.warningTrack);
+  chk(`${p}CoveredSeating_${id}`, f.coveredSeating);
+  // Mound
+  chk(`${p}FixedMound_${id}`,    f.fixedMound);
   chk(`${p}PortableMound_${id}`, f.portableMound);
+  // Umpire info
+  set(`${p}HomeDugout_${id}`,    f.homeDugoutSide);
+  set(`${p}Equipment_${id}`,     f.equipmentStorage);
+  set(`${p}Sun_${id}`,           f.sunNotes);
+  set(`${p}GroundRules_${id}`,   f.groundRules);
+  // Notes
+  set(`${p}Notes_${id}`,         f.notes);
 
   editForm.style.display = "";
 }
