@@ -3,6 +3,20 @@
 The schedule page uses `schedule.js` for the public UI and
 `google-apps-script.js` as the Google Sheets write bridge.
 
+## Security Considerations
+
+1. **Passwords are stored in plaintext** in the Google Sheet. This is an
+   inherent limitation of using a static GitHub Pages site with Google Sheets
+   as a backend — there is no server-side code available to hash passwords.
+2. **Passwords travel in URL query parameters** during login because JSONP is
+   required for GitHub Pages → Google Apps Script communication (no CORS
+   support on the Apps Script side). This means passwords appear in browser
+   history and server access logs.
+3. **Umpires should use a unique password** that is not reused with any other
+   service.
+4. A backend proxy server would be required to fully mitigate these issues.
+   This is a known architectural limitation of the static-site approach.
+
 ## Google Sheet
 
 `https://docs.google.com/spreadsheets/d/1nco-hg12C8qT5nXwPrFxRL1aDg4PQyUat8Ntpxd1KW8/edit`
@@ -11,7 +25,7 @@ The schedule page uses `schedule.js` for the public UI and
 
 The `Umpires` tab serves two purposes:
 1. **Acknowledgment submissions** — appended via `doPost` with columns:
-   `Timestamp | Name | Email | Phone | Signature | ParentName | ParentEmail | ParentPhone`
+   `Timestamp | Name | Email | Phone | Signature | ParentName | ParentEmail | ParentPhone | Password`
 2. **Approved umpire roster** — the signup flow validates against this same tab.
    The header row must include a recognizable name column and email column.
 
@@ -58,11 +72,11 @@ the spreadsheet.
 
 Current web app URL:
 
-`https://script.google.com/macros/s/AKfycbxilIe2j1MscC8fE77siFCDwZHPU3z1WLqQV-SdvHgQlWQo1rcn6RiSJtYsQfCUAKMc/exec`
+`https://script.google.com/macros/s/AKfycbxSq4Oqrcg1GNvGpNmqU-T7X0tORYma7n-5e79UVNfF7sDBNbbIauMlyC4cl73NFH0/exec`
 
 Current deployment ID:
 
-`AKfycbxilIe2j1MscC8fE77siFCDwZHPU3z1WLqQV-SdvHgQlWQo1rcn6RiSJtYsQfCUAKMc`
+`AKfycbxSq4Oqrcg1GNvGpNmqU-T7X0tORYma7n-5e79UVNfF7sDBNbbIauMlyC4cl73NFH0`
 
 The script intentionally contains both entrypoints:
 

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Game Schedule & Umpire Signups - Tri-Valley Baseball</title>
   <link rel="stylesheet" href="styles.css?v=2" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://script.google.com https://challenges.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://challenges.cloudflare.com; connect-src 'self' https://script.google.com;">
 </head>
 <body>
   <div class="header">
@@ -44,7 +45,7 @@
     </div>
 
     <div class="page-actions" id="filterBar">
-      <button type="button" class="btn filter-btn" data-filter="all" style="background:var(--accent)">All Games</button>
+      <button type="button" class="btn filter-btn filter-active" data-filter="all">All Games</button>
       <button type="button" class="btn print-btn filter-btn" data-filter="needs">Needs Umpire</button>
       <button type="button" class="btn print-btn filter-btn" data-filter="filled">Filled</button>
     </div>

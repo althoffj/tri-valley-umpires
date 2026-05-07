@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tri-Valley Baseball Umpires - 2026</title>
     <link rel="stylesheet" href="styles.css?v=2" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://script.google.com https://challenges.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://challenges.cloudflare.com; connect-src 'self' https://script.google.com;">
   </head>
   <body>
     <div class="header">
@@ -54,7 +55,7 @@
           <input type="email" id="loginEmail" required autocomplete="email" />
 
           <label for="loginPassword">Password</label>
-          <input type="password" id="loginPassword" required />
+          <input type="password" id="loginPassword" required autocomplete="current-password" />
 
           <div class="page-actions">
             <button type="submit" id="loginBtn" class="btn">Log In</button>
@@ -68,7 +69,7 @@
         <div class="document-note" style="border-left-color: #b8f2c4;">
           <p>
             Logged in as <strong data-auth-name></strong>.
-            <button type="button" id="logoutBtn" class="btn print-btn" style="display:inline;padding:6px 14px;margin:0 0 0 10px;font-size:0.85rem;">Log Out</button>
+            <button type="button" id="logoutBtn" class="btn print-btn logout-btn">Log Out</button>
           </p>
         </div>
 

@@ -248,13 +248,19 @@ function readRosterFromSheet(sheet) {
     return [];
   }
 
-  return values
-    .slice(1)
-    .map((row) => ({
-      name: clean(row[nameIndex]),
-      email: clean(row[emailIndex]).toLowerCase()
-    }))
-    .filter((umpire) => umpire.name && umpire.email);
+  // Deduplicate: iterate from bottom to top so the most recent submission
+  // per email address wins. This handles umpires who re-submit the form.
+  const seen = {};
+  for (let i = values.length - 1; i >= 1; i--) {
+    const row = values[i];
+    const name = clean(row[nameIndex]);
+    const email = clean(row[emailIndex]).toLowerCase();
+    if (name && email && !seen[email]) {
+      seen[email] = { name, email };
+    }
+  }
+
+  return Object.values(seen);
 }
 
 function findHeaderIndex(headers, exactMatches) {

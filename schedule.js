@@ -1,4 +1,4 @@
-const SIGNUP_API_URL = "https://script.google.com/macros/s/AKfycbxilIe2j1MscC8fE77siFCDwZHPU3z1WLqQV-SdvHgQlWQo1rcn6RiSJtYsQfCUAKMc/exec";
+const SIGNUP_API_URL = "https://script.google.com/macros/s/AKfycbxSq4Oqrcg1GNvGpNmqU-T7X0tORYma7n-5e79UVNfF7sDBNbbIauMlyC4cl73NFH0/exec";
 
 // NOTE: The !SIGNUP_API_URL branches below are development-only fallbacks.
 // In production this constant is always set, so those code paths are inactive.
@@ -250,11 +250,9 @@ document.addEventListener("click", function(event) {
     if (!filter) return;
     activeFilter = filter;
 
-    // Update button styles
+    // Update button styles using CSS class
     document.querySelectorAll(".filter-btn").forEach(function(btn) {
-      btn.style.background = btn.dataset.filter === filter
-        ? "var(--accent)"
-        : "#444";
+      btn.classList.toggle("filter-active", btn.dataset.filter === filter);
     });
 
     renderGameRows();
@@ -292,7 +290,7 @@ document.getElementById("signupForm").addEventListener("submit", async function(
     event.target.reset();
     event.target.hidden = true;
     setMessage(payload.game.assignedName + " is now assigned and the game is locked.", "success");
-    populateCachedSignupFields();
+    // populateCachedSignupFields intentionally omitted — form is hidden so pre-filling is unnecessary
   } catch (error) {
     setMessage(error.message, "error");
   } finally {

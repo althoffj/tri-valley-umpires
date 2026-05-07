@@ -321,6 +321,17 @@ th {
   margin-bottom: 4px;
 }
 
+.logout-btn {
+  display: inline;
+  padding: 6px 14px;
+  margin: 0 0 0 10px;
+  font-size: 0.85rem;
+}
+
+.filter-active {
+  background: var(--accent) !important;
+}
+
 /* Mobile Responsive */
 @media (max-width: 768px) {
   body {

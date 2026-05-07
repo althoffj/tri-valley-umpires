@@ -10,7 +10,7 @@
 // architecture. Umpires should use a unique password not shared with other
 // services.
 
-const AUTH_API_URL = "https://script.google.com/macros/s/AKfycbxilIe2j1MscC8fE77siFCDwZHPU3z1WLqQV-SdvHgQlWQo1rcn6RiSJtYsQfCUAKMc/exec";
+const AUTH_API_URL = "https://script.google.com/macros/s/AKfycbxSq4Oqrcg1GNvGpNmqU-T7X0tORYma7n-5e79UVNfF7sDBNbbIauMlyC4cl73NFH0/exec";
 
 const AUTH_STORAGE_KEY = "umpireSession";
 
