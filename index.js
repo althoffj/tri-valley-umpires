@@ -91,6 +91,7 @@ async function loadAgenda(user) {
       // Show all games this week; highlight ones where user is assigned
       const snap = await getDocs(
         query(collection(db, "games"),
+          where("needsUmpires", "==", true),
           where("date", ">=", today),
           where("date", "<=", weekEnd),
           orderBy("date"), orderBy("time"))
@@ -106,6 +107,7 @@ async function loadAgenda(user) {
       // Guest / pending: today's games only
       const snap = await getDocs(
         query(collection(db, "games"),
+          where("needsUmpires", "==", true),
           where("date", "==", today),
           orderBy("time"))
       );
