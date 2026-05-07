@@ -427,6 +427,24 @@ async function syncGamesFromCalendars() {
 
 document.getElementById("syncCalBtn").addEventListener("click", syncGamesFromCalendars);
 
+document.getElementById("importScheduleBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("importScheduleBtn");
+  btn.disabled = true;
+  setMsg("syncCalMessage", "Importing city schedule…", "info");
+  try {
+    const functions         = getFunctions(app, "us-central1");
+    const importCitySchedule = httpsCallable(functions, "importCitySchedule");
+    const { data } = await importCitySchedule();
+    const msg = `Imported: ${data.added} game${data.added !== 1 ? "s" : ""} added${data.skipped ? `, ${data.skipped} already existed` : ""}.`;
+    setMsg("syncCalMessage", msg, data.added > 0 ? "success" : "info");
+    if (data.added > 0) await loadGames();
+  } catch (err) {
+    setMsg("syncCalMessage", `Error: ${err.message}`, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // ── Pay rates ─────────────────────────────────────────────────────────────────
 
 async function loadPayRates() {

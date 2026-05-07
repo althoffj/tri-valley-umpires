@@ -76,7 +76,9 @@ async function runSync() {
 
   const teamsSnap = await db.doc("config/teamCalendars").get();
   const teams     = teamsSnap.exists ? (teamsSnap.data().teams || []) : [];
+  console.log(`Teams in Firestore (${teams.length}): ${teams.map(t => t.name).join(", ") || "none"}`);
   const relevant  = teams.filter(t => /10U|12U/i.test(t.name));
+  console.log(`Relevant 10U/12U teams (${relevant.length}): ${relevant.map(t => t.name).join(", ") || "none"}`);
 
   if (relevant.length === 0) return { added: 0, failed: 0 };
 
@@ -102,12 +104,23 @@ async function runSync() {
 
     const division = /10U/i.test(team.name) ? "10U" : "12U";
 
-    for (const ev of parseVEvents(icsText)) {
+    const events = parseVEvents(icsText);
+    const upcoming = events.filter(e => e.date >= today);
+    console.log(`  ${team.name}: ${events.length} total, ${upcoming.length} upcoming`);
+
+    for (const ev of events) {
       if (ev.date < today) continue;
 
+      // Empty location = home game; non-empty = away game at another venue
+      // Also accept explicit Crooks/Colton addresses in case GameChanger fills them in
       let city = null;
-      if (/crooks,\s*sd/i.test(ev.location))       city = "City of Crooks";
-      else if (/colton,\s*sd/i.test(ev.location))  city = "City of Colton";
+      if (!ev.location) {
+        city = division === "12U" ? "City of Crooks" : "City of Colton";
+      } else if (/crooks,\s*sd/i.test(ev.location)) {
+        city = "City of Crooks";
+      } else if (/colton,\s*sd/i.test(ev.location)) {
+        city = "City of Colton";
+      }
       if (!city) continue;
 
       if (ev.uid && seenUids.has(ev.uid)) continue;
@@ -159,5 +172,61 @@ exports.syncGamesNow = onCall(
     const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
     if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
     return await runSync();
+  }
+);
+
+// ── One-time city schedule import ─────────────────────────────────────────────
+
+const CITY_SCHEDULE = [
+  // City of Crooks — 12U
+  { city: "City of Crooks", division: "12U", date: "2026-05-13", time: "18:30", field: "NH-North" },
+  { city: "City of Crooks", division: "12U", date: "2026-05-20", time: "18:30", field: "NH-North" },
+  { city: "City of Crooks", division: "12U", date: "2026-05-27", time: "18:30", field: "NH-North" },
+  // City of Colton — 10U
+  { city: "City of Colton", division: "10U", date: "2026-05-11", time: "18:30", field: "West" },
+  { city: "City of Colton", division: "10U", date: "2026-05-13", time: "18:30", field: "West" },
+  { city: "City of Colton", division: "10U", date: "2026-05-18", time: "18:30", field: "West" },
+  { city: "City of Colton", division: "10U", date: "2026-05-20", time: "18:30", field: "West" },
+  { city: "City of Colton", division: "10U", date: "2026-05-27", time: "18:30", field: "East" },
+  { city: "City of Colton", division: "10U", date: "2026-05-27", time: "18:30", field: "West" },
+];
+
+exports.importCitySchedule = onCall(
+  { cors: ["https://tri-valley-baseball-umpires.web.app", "https://tri-valley-baseball-umpires.firebaseapp.com"] },
+  async request => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in.");
+    const db       = getFirestore();
+    const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+    if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+    const ratesSnap  = await db.doc("config/payRates").get();
+    const rates      = ratesSnap.exists ? ratesSnap.data() : {};
+    const defaultPay = rates.plate || 0;
+
+    let added = 0, skipped = 0;
+    for (const g of CITY_SCHEDULE) {
+      const externalId = `city-2026-${g.city.replace(/\s+/g,"").toLowerCase()}-${g.division}-${g.date}-${g.field.replace(/\s+/g,"")}`;
+      const existing = await db.collection("games").where("externalId", "==", externalId).limit(1).get();
+      if (!existing.empty) { skipped++; continue; }
+      await db.collection("games").add({
+        city:       g.city,
+        division:   g.division,
+        date:       g.date,
+        time:       g.time,
+        type:       "Regular",
+        field:      g.field,
+        payRate:    defaultPay,
+        umpireSlots: [
+          { type: "Plate", assignedUid: null, assignedName: null },
+          { type: "Field", assignedUid: null, assignedName: null }
+        ],
+        cancelled:  false,
+        externalId,
+        source:     "city-schedule",
+        createdAt:  FieldValue.serverTimestamp()
+      });
+      added++;
+    }
+    return { added, skipped };
   }
 );
