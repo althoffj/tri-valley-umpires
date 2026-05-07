@@ -105,30 +105,39 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Umpire Positions Needed</label>
-          <div id="gameUmpireTypes" style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;">
-            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
-              <input type="checkbox" value="Plate" /> Plate
-            </label>
-            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
-              <input type="checkbox" value="Field" /> Field
-            </label>
-            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
-              <input type="checkbox" value="Extra" /> Extra
-            </label>
-          </div>
-          <p class="field-error" id="umpireTypesError"></p>
+          <label for="gameField">Field / Location</label>
+          <input type="text" id="gameField" placeholder="e.g. NH-North, East" />
         </div>
       </div>
 
       <div class="form-row">
         <div class="form-group">
-          <label for="gameField">Field / Location</label>
-          <input type="text" id="gameField" placeholder="e.g. Field 1, Crooks Complex" />
-        </div>
-        <div class="form-group form-group--sm">
-          <label for="gamePayRate">Pay Rate ($)</label>
-          <input type="number" id="gamePayRate" min="0" step="0.01" placeholder="40" />
+          <label>Umpire Positions &amp; Pay</label>
+          <div id="gameUmpireTypes" style="margin-top:8px">
+            <div style="display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:6px 10px">
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+                <input type="checkbox" value="Plate" /> Plate
+              </label>
+              <span></span>
+              <input type="number" class="slot-pay-input" data-slot-type="Plate"
+                min="0" step="0.01" placeholder="$" style="width:70px;padding:5px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" disabled />
+
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+                <input type="checkbox" value="Field" /> Field
+              </label>
+              <span></span>
+              <input type="number" class="slot-pay-input" data-slot-type="Field"
+                min="0" step="0.01" placeholder="$" style="width:70px;padding:5px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" disabled />
+
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
+                <input type="checkbox" value="Extra" /> Extra
+              </label>
+              <span></span>
+              <input type="number" class="slot-pay-input" data-slot-type="Extra"
+                min="0" step="0.01" placeholder="$" style="width:70px;padding:5px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" disabled />
+            </div>
+          </div>
+          <p class="field-error" id="umpireTypesError"></p>
         </div>
       </div>
 
@@ -150,13 +159,12 @@
           <tr>
             <th>Date</th>
             <th>Time</th>
-            <th>City</th>
+            <th>City / Teams</th>
             <th>Div</th>
             <th>Type</th>
             <th>Field</th>
-            <th>Pay</th>
-            <th>Umpire</th>
-            <th>Action</th>
+            <th>Umpires</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody id="adminGameBody">
@@ -248,8 +256,82 @@
     </p>
   </div>
 
+  <!-- ── Edit Game Modal ──────────────────────────────────────────────────── -->
+  <div id="editGameModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:32px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto">
+      <h2 style="margin-top:0">Edit Game</h2>
+      <input type="hidden" id="editGameId" />
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editGameCity">City / League</label>
+          <select id="editGameCity">
+            <option value="City of Crooks">City of Crooks</option>
+            <option value="City of Colton">City of Colton</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="editGameDivision">Division</label>
+          <select id="editGameDivision">
+            <option value="10U">10U</option>
+            <option value="12U">12U</option>
+            <option value="14U">14U</option>
+            <option value="HS JV">HS JV</option>
+            <option value="HS Varsity">HS Varsity</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editGameDate">Date</label>
+          <input type="date" id="editGameDate" />
+        </div>
+        <div class="form-group">
+          <label for="editGameTime">Time</label>
+          <input type="time" id="editGameTime" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editGameType">Game Type</label>
+          <select id="editGameType">
+            <option value="Regular">Regular</option>
+            <option value="Playoff">Playoff</option>
+            <option value="Tournament">Tournament</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="editGameField">Field / Location</label>
+          <input type="text" id="editGameField" placeholder="e.g. NH-North" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editHomeTeam">Home Team</label>
+          <input type="text" id="editHomeTeam" placeholder="e.g. Crooks 12U Blue" />
+        </div>
+        <div class="form-group">
+          <label for="editAwayTeam">Away Team</label>
+          <input type="text" id="editAwayTeam" placeholder="e.g. Mitchell 12U" />
+        </div>
+      </div>
+
+      <label>Umpire Slots &amp; Pay</label>
+      <div id="editSlotPays" style="margin-top:8px;margin-bottom:16px"></div>
+
+      <div class="page-actions">
+        <button type="button" class="btn" id="saveEditGameBtn">Save Changes</button>
+        <button type="button" class="btn print-btn" id="cancelEditGameBtn">Cancel</button>
+      </div>
+      <p id="editGameMessage" class="signup-message" aria-live="polite"></p>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script type="module" src="auth.js?v=4"></script>
-  <script type="module" src="admin.js?v=4"></script>
+  <script type="module" src="admin.js?v=5"></script>
 </body>
 </html>

@@ -12,15 +12,17 @@ import {
   doc,
   updateDoc,
   addDoc,
+  deleteDoc,
   query,
   orderBy,
   serverTimestamp,
   where
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-let allGames   = [];
-let allUmpires = [];
-let gameFilter = "upcoming";
+let allGames      = [];
+let allUmpires    = [];
+let gameFilter    = "upcoming";
+let currentRates  = { plate: 0, field: 0, extra: 0 }; // cached for Add Game form
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -61,10 +63,11 @@ function setMsg(id, text, type = "info") {
 
 function slotBadge(slot) {
   const cls = slot.type === "Plate" ? "plate" : slot.type === "Field" ? "field" : "extra";
+  const pay = slot.payRate != null
+    ? ` <span style="color:var(--light-text);font-size:0.78rem">$${Number(slot.payRate).toFixed(0)}</span>` : "";
   const filled = slot.assignedName
-    ? ` <span style="color:var(--light-text);font-size:0.8rem">→ ${esc(slot.assignedName)}</span>`
-    : "";
-  return `<span class="badge badge-${cls}">${esc(slot.type)}</span>${filled}`;
+    ? ` <span style="color:var(--light-text);font-size:0.8rem">→ ${esc(slot.assignedName)}</span>` : "";
+  return `<span class="badge badge-${cls}">${esc(slot.type)}</span>${pay}${filled}`;
 }
 
 // ── Pending Approvals ─────────────────────────────────────────────────────────
@@ -212,6 +215,8 @@ function renderAdminGames() {
 
   tbody.innerHTML = visible.map(g => {
     const slots = g.umpireSlots || [];
+    const teams = (g.homeTeam && g.awayTeam)
+      ? `<div style="font-size:0.8rem;color:var(--light-text)">${esc(g.homeTeam)} vs ${esc(g.awayTeam)}</div>` : "";
     const slotHtml = slots.length
       ? slots.map((s, i) => `
           <div style="display:flex;align-items:center;gap:6px;${i > 0 ? "margin-top:4px" : ""}">
@@ -224,26 +229,27 @@ function renderAdminGames() {
       : "—";
 
     const changeWarning = g.possibleChange
-      ? `<div style="color:#ffcc80;font-size:0.78rem;margin-top:4px">⚠ GameChanger event missing — verify with city</div>`
-      : "";
+      ? `<div style="color:#ffcc80;font-size:0.78rem;margin-top:4px">⚠ GameChanger event missing — verify with city</div>` : "";
     const linkedBadge = g.icsLinks?.length
-      ? `<div style="color:var(--light-text);font-size:0.72rem;margin-top:2px">GC linked</div>`
-      : "";
+      ? `<div style="color:var(--light-text);font-size:0.72rem;margin-top:2px">GC linked</div>` : "";
 
     return `
     <tr style="${g.cancelled ? "opacity:0.55" : ""}${g.possibleChange ? ";background:rgba(255,204,0,0.06)" : ""}">
       <td>${esc(fmtDate(g.date))}</td>
       <td>${esc(fmtTime(g.time))}</td>
-      <td>${esc(g.city || "—")}</td>
+      <td>${esc(g.city || "—")}${teams}</td>
       <td>${esc(g.division || "—")}</td>
       <td>${esc(g.type || "—")}</td>
       <td>${esc(g.field || "—")}${linkedBadge}</td>
-      <td>${g.payRate ? `$${Number(g.payRate).toFixed(2)}` : "—"}</td>
       <td>${g.cancelled ? '<span style="color:#ffb4b4">Cancelled</span>' : slotHtml}${changeWarning}</td>
-      <td>
-        ${g.cancelled
-          ? ""
-          : `<button class="btn print-btn cancel-game-btn" data-game-id="${esc(g.id)}">Cancel Game</button>`}
+      <td style="white-space:nowrap;vertical-align:top">
+        ${g.cancelled ? "" : `
+          <button class="btn print-btn edit-game-btn" style="margin-bottom:4px;display:block;width:100%"
+            data-game-id="${esc(g.id)}">Edit</button>
+          <button class="btn print-btn cancel-game-btn" style="margin-bottom:4px;display:block;width:100%"
+            data-game-id="${esc(g.id)}">Cancel</button>`}
+        <button class="btn delete-game-btn" style="display:block;width:100%;background:#5a1a1a"
+          data-game-id="${esc(g.id)}">Delete</button>
       </td>
     </tr>`;
   }).join("");
@@ -281,6 +287,99 @@ async function unassignSlot(gameId, slotType) {
   }
 }
 
+async function deleteGame(gameId) {
+  const game = allGames.find(g => g.id === gameId);
+  if (!game) return;
+  if (!confirm(`Permanently delete the game on ${fmtDate(game.date)} at ${game.city}?\nThis cannot be undone.`)) return;
+  try {
+    await deleteDoc(doc(db, "games", gameId));
+    allGames = allGames.filter(g => g.id !== gameId);
+    renderAdminGames();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function openEditModal(gameId) {
+  const game = allGames.find(g => g.id === gameId);
+  if (!game) return;
+  const modal = document.getElementById("editGameModal");
+
+  document.getElementById("editGameId").value        = gameId;
+  document.getElementById("editGameCity").value      = game.city || "";
+  document.getElementById("editGameDivision").value  = game.division || "";
+  document.getElementById("editGameDate").value      = game.date || "";
+  document.getElementById("editGameTime").value      = game.time || "";
+  document.getElementById("editGameType").value      = game.type || "Regular";
+  document.getElementById("editGameField").value     = game.field || "";
+  document.getElementById("editHomeTeam").value      = game.homeTeam || "";
+  document.getElementById("editAwayTeam").value      = game.awayTeam || "";
+
+  // Render per-slot pay inputs from existing slots
+  const slotsDiv = document.getElementById("editSlotPays");
+  const slots = game.umpireSlots || [];
+  slotsDiv.innerHTML = slots.map(s => {
+    const cls = s.type === "Plate" ? "plate" : s.type === "Field" ? "field" : "extra";
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span class="badge badge-${cls}">${esc(s.type)}</span>
+      ${s.assignedName ? `<span style="font-size:0.85rem;color:var(--light-text)">→ ${esc(s.assignedName)}</span>` : ""}
+      <label style="margin:0;font-weight:normal;font-size:0.85rem">Pay $</label>
+      <input type="number" min="0" step="0.01" value="${s.payRate != null ? s.payRate : ""}"
+        class="edit-slot-pay" data-slot-type="${esc(s.type)}"
+        style="width:70px;padding:4px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:4px" />
+    </div>`;
+  }).join("") || '<span style="color:var(--light-text);font-size:0.85rem">No umpire slots</span>';
+
+  setMsg("editGameMessage", "", "info");
+  modal.style.display = "flex";
+}
+
+async function saveGameEdit() {
+  const gameId = document.getElementById("editGameId").value;
+  const btn    = document.getElementById("saveEditGameBtn");
+  btn.disabled = true;
+  setMsg("editGameMessage", "Saving…", "info");
+
+  try {
+    const updates = {
+      city:      document.getElementById("editGameCity").value,
+      division:  document.getElementById("editGameDivision").value,
+      date:      document.getElementById("editGameDate").value,
+      time:      document.getElementById("editGameTime").value,
+      type:      document.getElementById("editGameType").value,
+      field:     document.getElementById("editGameField").value.trim(),
+      homeTeam:  document.getElementById("editHomeTeam").value.trim(),
+      awayTeam:  document.getElementById("editAwayTeam").value.trim(),
+      needsUmpires: true,
+    };
+
+    // Update per-slot pay rates
+    const gameRef = doc(db, "games", gameId);
+    const snap    = await getDoc(gameRef);
+    if (snap.exists()) {
+      const payInputs = document.querySelectorAll(".edit-slot-pay");
+      const slots = (snap.data().umpireSlots || []).map(s => {
+        const input = [...payInputs].find(i => i.dataset.slotType === s.type);
+        return input ? { ...s, payRate: parseFloat(input.value) || 0 } : s;
+      });
+      updates.umpireSlots = slots;
+    }
+
+    await updateDoc(gameRef, updates);
+    const g = allGames.find(g => g.id === gameId);
+    if (g) Object.assign(g, updates);
+    setMsg("editGameMessage", "Saved!", "success");
+    setTimeout(() => {
+      document.getElementById("editGameModal").style.display = "none";
+      renderAdminGames();
+    }, 800);
+  } catch (err) {
+    setMsg("editGameMessage", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ── Add game form ─────────────────────────────────────────────────────────────
 
 document.getElementById("addGameForm").addEventListener("submit", async function(e) {
@@ -297,20 +396,25 @@ document.getElementById("addGameForm").addEventListener("submit", async function
   btn.disabled = true;
   setMsg("addGameMessage", "Adding game…", "info");
 
-  const city    = document.getElementById("gameCity").value;
+  const city     = document.getElementById("gameCity").value;
   const division = document.getElementById("gameDivision").value;
-  const date    = document.getElementById("gameDate").value;
-  const time    = document.getElementById("gameTime").value;
-  const type    = document.getElementById("gameType").value;
-  const field   = document.getElementById("gameField").value.trim();
-  const payRate = parseFloat(document.getElementById("gamePayRate").value) || 0;
+  const date     = document.getElementById("gameDate").value;
+  const time     = document.getElementById("gameTime").value;
+  const type     = document.getElementById("gameType").value;
+  const field    = document.getElementById("gameField").value.trim();
 
-  const umpireSlots = checkedTypes.map(t => ({ type: t, assignedUid: null, assignedName: null }));
+  // Build slots with per-slot pay from inline inputs
+  const umpireSlots = checkedTypes.map(t => {
+    const payInput = document.querySelector(`.slot-pay-input[data-slot-type="${t}"]`);
+    const payRate  = payInput ? (parseFloat(payInput.value) || 0) : 0;
+    return { type: t, assignedUid: null, assignedName: null, payRate };
+  });
 
   try {
     await addDoc(collection(db, "games"), {
-      city, division, date, time, type, field, payRate,
+      city, division, date, time, type, field,
       umpireSlots,
+      needsUmpires: true,
       cancelled: false,
       createdAt: serverTimestamp()
     });
@@ -461,11 +565,21 @@ async function loadPayRates() {
     const snap = await getDoc(doc(db, "config", "payRates"));
     if (snap.exists()) {
       const r = snap.data();
+      currentRates = { plate: r.plate || 0, field: r.field || 0, extra: r.extra || 0 };
       document.getElementById("ratePlate").value = r.plate || "";
       document.getElementById("rateField").value  = r.field  || "";
       document.getElementById("rateExtra").value  = r.extra  || "";
+      // Pre-fill slot pay inputs in Add Game form
+      prefillSlotPays();
     }
   } catch (_) {}
+}
+
+function prefillSlotPays() {
+  const map = { Plate: currentRates.plate, Field: currentRates.field, Extra: currentRates.extra };
+  document.querySelectorAll(".slot-pay-input").forEach(input => {
+    if (!input.value) input.value = map[input.dataset.slotType] || "";
+  });
 }
 
 document.getElementById("payRatesForm").addEventListener("submit", async function(e) {
@@ -528,8 +642,14 @@ document.addEventListener("click", e => {
   const revokeBtn = e.target.closest(".revoke-btn");
   if (revokeBtn) { revokeUmpire(revokeBtn.dataset.uid, revokeBtn.dataset.name); return; }
 
+  const editGameBtn = e.target.closest(".edit-game-btn");
+  if (editGameBtn) { openEditModal(editGameBtn.dataset.gameId); return; }
+
   const cancelGameBtn = e.target.closest(".cancel-game-btn");
   if (cancelGameBtn) { cancelGame(cancelGameBtn.dataset.gameId); return; }
+
+  const deleteGameBtn = e.target.closest(".delete-game-btn");
+  if (deleteGameBtn) { deleteGame(deleteGameBtn.dataset.gameId); return; }
 
   const unassignBtn = e.target.closest(".unassign-btn");
   if (unassignBtn) { unassignSlot(unassignBtn.dataset.gameId, unassignBtn.dataset.slotType); return; }
@@ -577,6 +697,29 @@ document.addEventListener("click", e => {
     );
     renderAdminGames();
   }
+});
+
+// ── Edit modal wiring ─────────────────────────────────────────────────────────
+
+document.getElementById("saveEditGameBtn").addEventListener("click", saveGameEdit);
+document.getElementById("cancelEditGameBtn").addEventListener("click", () => {
+  document.getElementById("editGameModal").style.display = "none";
+});
+document.getElementById("editGameModal").addEventListener("click", e => {
+  if (e.target === document.getElementById("editGameModal"))
+    document.getElementById("editGameModal").style.display = "none";
+});
+
+// Pre-fill slot pay inputs when a checkbox is checked
+document.getElementById("gameUmpireTypes").addEventListener("change", e => {
+  if (e.target.type !== "checkbox") return;
+  const type     = e.target.value;
+  const payInput = document.querySelector(`.slot-pay-input[data-slot-type="${type}"]`);
+  if (!payInput) return;
+  if (e.target.checked && !payInput.value) {
+    payInput.value = currentRates[type.toLowerCase()] || "";
+  }
+  payInput.disabled = !e.target.checked;
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
