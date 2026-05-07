@@ -6,6 +6,69 @@
     <title>Rule Breakdown - Tri-Valley Baseball</title>
     <link rel="stylesheet" href="styles.css?v=2" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://script.google.com https://challenges.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://challenges.cloudflare.com; connect-src 'self' https://script.google.com;">
+    <style>
+      .rule-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 25px 0;
+        font-size: 0.95rem;
+      }
+      .rule-table th,
+      .rule-table td {
+        border: 1px solid #555;
+        padding: 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      .rule-table th {
+        background: var(--accent);
+        color: white;
+        font-weight: bold;
+      }
+      .rule-table th:first-child {
+        width: 24%;
+      }
+      .rule-table th:nth-child(2),
+      .rule-table th:nth-child(3) {
+        width: 38%;
+      }
+      .rule-table td:first-child {
+        font-weight: bold;
+        color: white;
+        white-space: nowrap;
+      }
+      .rule-table tr:nth-child(even) td {
+        background: #1f1f1f;
+      }
+      .rule-table td ul {
+        margin: 4px 0;
+        padding-left: 18px;
+      }
+      .rule-table td ul li {
+        margin: 4px 0;
+        line-height: 1.5;
+      }
+      .rule-section-heading {
+        background: #2b2b2b !important;
+        color: #f0b6c3 !important;
+        font-size: 1rem;
+        text-align: center !important;
+      }
+      .rule-section-heading td {
+        background: #2b2b2b !important;
+        color: #f0b6c3 !important;
+        font-weight: bold;
+        text-align: center;
+      }
+      .rule-note {
+        color: var(--light-text);
+        font-size: 0.9rem;
+        text-align: center;
+        margin-top: 30px;
+        padding-top: 15px;
+        border-top: 1px solid var(--border);
+      }
+    </style>
   </head>
   <body>
     <div class="header">
@@ -23,39 +86,147 @@
       <a href="principles_of_umpiring.html">Principles</a>
       <a href="rule_breakdown.html">Rules</a>
       <a href="pregame-meeting.html">Plate Meeting</a>
-      <a href="schedule.html">Schedule</a>
+      <a href="schedule.html">Schedule & Signups</a>
       <a href="form.html">Acknowledgment</a>
     </nav>
 
     <div class="container">
       <div class="page-actions">
         <a href="index.html" class="back-btn">Back to Home</a>
-        <a href="rule_breakdown.pdf" target="_blank" class="btn" download
-          >Download PDF</a
-        >
-        <a href="rule_breakdown.pdf" target="_blank" class="btn print-btn"
-          >Open / Print PDF</a
-        >
+        <a href="rule_breakdown.pdf" target="_blank" class="btn" download>Download PDF</a>
+        <a href="rule_breakdown.pdf" target="_blank" class="btn print-btn">Open / Print PDF</a>
       </div>
 
       <div class="document-note">
         <p>
-          This document compares the key rule differences between the 10U and 12U
-          divisions. Review the rules for the age group you're umpiring.
+          The following table compares the key rules between the 10U and 12U Mid and Rec Divisions
+          of the MinnDak Baseball League, based on the official rules available on
+          <a href="https://www.minndak.org/" target="_blank">minndak.org</a>.
+          This comparison highlights similarities and differences in gameplay, field dimensions,
+          and other regulations.
         </p>
       </div>
 
-      <div class="pdf-card">
-        <div class="pdf-card-icon">&#x1F3F0;</div>
-        <h3>10U vs 12U Rule Comparison</h3>
-        <p>
-          Side-by-side comparison of pitching distance, base size, lead-offs,
-          innings, and other key rule differences.
-        </p>
-        <div class="page-actions">
-          <a href="rule_breakdown.pdf" target="_blank" class="btn">Open PDF</a>
-          <a href="rule_breakdown.pdf" download class="btn print-btn">Download PDF</a>
-        </div>
+      <table class="rule-table">
+        <thead>
+          <tr>
+            <th>Rule Category</th>
+            <th>10U Mid and Rec</th>
+            <th>12U Mid and Rec</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Bat Rules</td>
+            <td colspan="2">All metal bats must have a USA Baseball stamp; wood bats allowed.</td>
+          </tr>
+          <tr>
+            <td>Game Length</td>
+            <td>6 innings; extra innings until a winner unless ended by darkness/weather (can end in a tie). No new inning after 1 hour 45 minutes unless both coaches agree and no games follow.</td>
+            <td>6 innings; extra innings until a winner unless ended by darkness/weather (can end in a tie). No time limit specified.</td>
+          </tr>
+          <tr>
+            <td>Official Game</td>
+            <td colspan="2">Official after 3 innings if stopped due to weather.</td>
+          </tr>
+          <tr>
+            <td>Minimum Players</td>
+            <td colspan="2">At least 7 players to start. 8 players: no out for 9th batting spot; 7 players: out for 8th spot.</td>
+          </tr>
+          <tr>
+            <td>Roster and Substitutions</td>
+            <td>Player on one team/roster. Can fill to 9 with lower division players (e.g., 8U), not same division/town, with opposing coach approval.</td>
+            <td>Same as 10U, but lower division is 10U for 12U.</td>
+          </tr>
+          <tr>
+            <td>Run Limit</td>
+            <td colspan="2">5-run limit per inning for first 5 innings; no limit in 6th or extra innings.</td>
+          </tr>
+          <tr>
+            <td>Mercy Rule</td>
+            <td colspan="2">Game called after 4 innings (15-run lead) or 5 innings (10-run lead).</td>
+          </tr>
+          <tr>
+            <td>Base Length</td>
+            <td>60 feet.</td>
+            <td>65 feet (or 60 feet at home team's discretion).</td>
+          </tr>
+          <tr>
+            <td>Pitching Distance</td>
+            <td>46 feet 6 inches.</td>
+            <td>49 feet.</td>
+          </tr>
+          <tr>
+            <td>Dropped Third Strike</td>
+            <td>Runners cannot advance on a dropped third strike.</td>
+            <td>Runners can advance on a dropped third strike.</td>
+          </tr>
+          <tr>
+            <td>Stealing Bases</td>
+            <td>
+              <ul>
+                <li>No stealing/advancing on passed balls in May; allowed after May 31.</li>
+                <li>Steal when ball crosses plate; out if early.</li>
+                <li>"Home Plate Closed": Cannot score by stealing home on passed balls, wild pitches, or catcher's return throws; furthest advance is 3rd base.</li>
+                <li>Must commit halfway to next base by catcher's throw back; no "dancing."</li>
+              </ul>
+            </td>
+            <td>
+              <ul>
+                <li>Stealing/advancing on passed balls always allowed.</li>
+                <li>Steal when ball released (65' bases) or crosses plate (60' bases, if agreed); out if early.</li>
+                <li>"Home Plate Open": Can score on passed balls, wild pitches, or throws to other bases on steals.</li>
+                <li>No "3rd base dancing" after clean catch; runner returns to 3rd.</li>
+              </ul>
+            </td>
+          </tr>
+          <tr>
+            <td>Sliding Rule</td>
+            <td colspan="2">Runner out if does not slide or attempt to avoid fielder with ball waiting to tag.</td>
+          </tr>
+          <tr>
+            <td>Infield Fly</td>
+            <td>Not in effect.</td>
+            <td>In effect.</td>
+          </tr>
+          <tr>
+            <td>Bunting</td>
+            <td>No intentional bunting allowed.</td>
+            <td>Bunting allowed.</td>
+          </tr>
+          <tr>
+            <td>Pitching Types</td>
+            <td>No breaking pitches (called a ball if umpire catches).</td>
+            <td>Breaking pitches allowed.</td>
+          </tr>
+          <tr>
+            <td>Switch Pitchers / Hitters</td>
+            <td colspan="2">Switching arms within inning is allowed; switching mid at bat is forbidden.</td>
+          </tr>
+          <tr>
+            <td>Pitching Limits</td>
+            <td>
+              3 innings max or 75 pitches per game.<br />
+              Tournament: 3 innings/game, 6 innings/day, 9 innings/tournament; no daily pitch count limit. Pitch count is per player, total pitches, not per arm.
+            </td>
+            <td>
+              3 innings max or 85 pitches per game.<br />
+              Tournament: Same as 10U.
+            </td>
+          </tr>
+          <tr>
+            <td>Walks</td>
+            <td colspan="2">No automatic intentional walks; must receive 4 pitches to walk.</td>
+          </tr>
+          <tr>
+            <td>Batting and Fielding</td>
+            <td colspan="2">All players bat in order, play minimum 2 innings in field (including tournaments). Injured player skipped without out unless roster drops to 7. Defensive-only player records an out.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="rule-note">
+        Tri-Valley Baseball Association &mdash; MinnDak 10U vs 12U Rule Comparison &mdash; Rev May 3, 2026
       </div>
     </div>
 
@@ -63,7 +234,7 @@
       <p>
         <a href="https://www.trivalleyball.com" target="_blank">Tri-Valley Baseball Association</a>
         | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
-        | <a href="https://www.minndak.org/" target="_blank">Minndak Baseball League</a>
+        | <a href="https://www.minndak.org/" target="_blank">MinnDak Baseball League</a>
         | Official Umpire Portal
       </p>
     </div>
