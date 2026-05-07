@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tri-Valley Baseball Umpires - 2026</title>
-    <link rel="stylesheet" href="styles.css?v=4" />
+    <link rel="stylesheet" href="styles.css?v=5" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com;">
   </head>
   <body>
@@ -28,96 +28,59 @@
       <h2>Welcome Umpires!</h2>
       <p>
         Thank you for being part of the Tri-Valley Baseball Association crew for
-        the 2026 season. This portal is your central hub for everything
-        umpire-related &mdash; from reviewing expectations to claiming your games.
+        the 2026 season. This portal is your central hub for reviewing expectations,
+        claiming games, and staying connected with the crew.
       </p>
 
-      <!-- Guest section: visible when not logged in -->
+      <!-- Guest: prompt to register or sign in via hamburger -->
       <div data-auth-guest>
-        <div class="document-note" style="border-left-color: #b8f2c4;">
+        <div class="document-note" style="border-left-color:#b8f2c4;">
           <p>
-            <strong>New umpire?</strong> Complete the
-            <a href="form.html">acknowledgment form</a> to register. You'll create
-            a password during registration, then log in below to access contact
-            information and sign up for games.
+            <strong>New umpire?</strong> Complete the <a href="form.html">acknowledgment form</a>
+            to register. Once approved, use the <strong>☰ menu</strong> (top right) to sign in
+            and access the full portal.
+          </p>
+          <p style="margin-bottom:0;color:var(--light-text);font-size:0.9rem">
+            Already registered? Your account requires administrator approval before you can sign in.
+            This typically takes 1&ndash;2 days after submitting the form.
           </p>
         </div>
-
-        <h2>Log In</h2>
-        <p class="schedule-source" style="margin-bottom:12px;">
-          Newly registered? Your account requires administrator approval before
-          you can log in. Once approved you'll receive confirmation &mdash; this
-          typically takes 1&ndash;2 days.
-        </p>
-
-        <form id="loginForm" class="signup-form">
-          <label for="loginEmail">Email</label>
-          <input type="email" id="loginEmail" required autocomplete="email" />
-
-          <label for="loginPassword">Password</label>
-          <input type="password" id="loginPassword" required autocomplete="current-password" />
-
-          <div class="page-actions" style="margin-top:16px;">
-            <button type="submit" id="loginBtn" class="btn">Log In</button>
-            <button type="button" id="showResetBtn" class="btn print-btn">Forgot Password?</button>
-          </div>
-          <p id="loginMessage" class="signup-message" aria-live="polite"></p>
-        </form>
-
-        <form id="resetForm" class="signup-form" hidden>
-          <h3 style="margin-top:0;color:white;">Reset Password</h3>
-          <p class="schedule-source">Enter your email and we'll send a password reset link.</p>
-
-          <label for="resetEmail">Email</label>
-          <input type="email" id="resetEmail" required autocomplete="email" />
-
-          <div class="page-actions" style="margin-top:16px;">
-            <button type="submit" id="resetBtn" class="btn">Send Reset Email</button>
-            <button type="button" id="cancelResetBtn" class="btn print-btn">Cancel</button>
-          </div>
-          <p id="resetMessage" class="signup-message" aria-live="polite"></p>
-        </form>
       </div>
 
-      <!-- Authenticated section: visible when logged in -->
+      <!-- Authenticated: getting started + contact -->
       <div data-auth-required style="display:none">
-        <div class="document-note" style="border-left-color: #b8f2c4;">
-          <p>
-            Logged in as <strong data-auth-name></strong>.
-            <button type="button" id="logoutBtn" class="btn print-btn logout-btn">Log Out</button>
-          </p>
-        </div>
-
         <h2>Getting Started</h2>
         <p>If you're new this season, follow these steps:</p>
         <ol>
-          <li><strong>Review the resources</strong> &mdash; Read through the umpire expectations, core principles, rule breakdowns, and the pre-game plate meeting guide linked below.</li>
+          <li><strong>Review the resources</strong> &mdash; Read through umpire expectations, core principles, rule breakdowns, and the pre-game plate meeting guide below.</li>
           <li><strong>Claim your games</strong> &mdash; Browse the schedule and sign up for open games.</li>
         </ol>
-
         <div class="page-actions">
           <a href="schedule.html" class="btn">View Schedule &amp; Sign Up</a>
           <a href="expectations.html" class="btn print-btn">Umpire Expectations</a>
         </div>
 
-        <h2>Contact &amp; Communication</h2>
-        <ul>
-          <li>
-            <strong>Slack (recommended for general questions)</strong><br />
-            <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Join Umpire Slack Group</a>
-            &mdash; Use Slack for scheduling questions, rule clarifications, and general discussion.
-          </li>
-          <li>
-            <strong>Phone (urgent, time-sensitive issues only)</strong><br />
-            Jeff Althoff: <strong>605-380-0229</strong>
-            &mdash; Call or text for last-minute cancellations or emergencies.
-          </li>
-          <li>
-            <strong>Email</strong><br />
-            <a href="mailto:althoff.jeff@gmail.com">althoff.jeff@gmail.com</a>
-            &mdash; For formal requests or non-urgent matters.
-          </li>
-        </ul>
+        <!-- Contact section — only approved umpires and admins -->
+        <div data-auth-approved style="display:none">
+          <h2>Contact &amp; Communication</h2>
+          <ul>
+            <li>
+              <strong>Slack (recommended for general questions)</strong><br />
+              <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Join Umpire Slack Group</a>
+              &mdash; Use Slack for scheduling questions, rule clarifications, and general discussion.
+            </li>
+            <li>
+              <strong>Phone (urgent / time-sensitive only)</strong><br />
+              Jeff Althoff: <strong>605-380-0229</strong>
+              &mdash; Call or text for last-minute cancellations or emergencies.
+            </li>
+            <li>
+              <strong>Email</strong><br />
+              <a href="mailto:althoff.jeff@gmail.com">althoff.jeff@gmail.com</a>
+              &mdash; For formal requests or non-urgent matters.
+            </li>
+          </ul>
+        </div>
       </div>
 
       <h2>Resources &amp; Documents</h2>
@@ -165,7 +128,6 @@
       </p>
     </div>
 
-    <script type="module" src="auth.js?v=4"></script>
-    <script type="module" src="index.js?v=4"></script>
+    <script type="module" src="auth.js?v=5"></script>
   </body>
 </html>

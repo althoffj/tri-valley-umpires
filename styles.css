@@ -1,4 +1,9 @@
 /* styles.css - Tri-Valley Baseball Umpires 2026 */
+
+/* Hide auth-gated elements until auth resolves — prevents flash */
+[data-auth-required] { display: none; }
+[data-auth-approved] { display: none; }
+[data-auth-admin]    { display: none; }
 :root {
   --accent: #601929;
   --accent-hover: #8b0000;
@@ -23,8 +28,95 @@ body {
   background: #000;
   color: white;
   padding: 20px;
-  text-align: center;
   border-bottom: 4px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  position: relative;
+}
+
+.hamburger-btn {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.25);
+  color: #fff;
+  font-size: 1.1rem;
+  padding: 7px 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  line-height: 1;
+  z-index: 10;
+}
+.hamburger-btn:hover { background: rgba(255,255,255,0.1); }
+
+/* Auth dropdown slide-in panel */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000;
+  display: none;
+}
+.auth-overlay.open { display: block; }
+
+.auth-dropdown {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 300px;
+  max-width: 100vw;
+  height: 100vh;
+  background: #1c1c1c;
+  border-left: 1px solid var(--border);
+  box-shadow: -6px 0 28px rgba(0,0,0,0.55);
+  padding: 24px 20px;
+  z-index: 1001;
+  overflow-y: auto;
+  display: none;
+}
+.auth-dropdown.open { display: block; }
+
+.auth-dropdown-close {
+  background: transparent;
+  border: none;
+  color: var(--light-text);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.auth-dropdown-close:hover { color: var(--text); }
+
+.auth-dropdown label {
+  display: block;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  font-weight: bold;
+  font-size: 0.88rem;
+  color: #ccc;
+}
+.auth-dropdown input[type="email"],
+.auth-dropdown input[type="password"],
+.auth-dropdown input[type="text"],
+.auth-dropdown input[type="tel"] {
+  width: 100%;
+  padding: 9px 11px;
+  background: var(--field);
+  border: 1px solid #555;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+.auth-dropdown input:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(96,25,41,0.3);
 }
 
 .logo {
