@@ -77,7 +77,7 @@ the spreadsheet.
 
 Current web app URL:
 
-`https://script.google.com/macros/s/AKfycbydMOi6hVva4DBCFIUdcanW_rDnVYeehUMSizpVShojTTA0wrY9-459yeekTWMbfXuu/exec`
+`https://script.google.com/macros/s/AKfycbxAUMxCm-PebuhlMTlnODLyaWXwtO5rbiAzBVgI8ozSJQeGxPyB_t6StTiI1Ejy_QOA/exec`
 
 Current deployment ID:
 

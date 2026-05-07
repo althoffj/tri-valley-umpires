@@ -116,7 +116,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <script>
-      var APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbydMOi6hVva4DBCFIUdcanW_rDnVYeehUMSizpVShojTTA0wrY9-459yeekTWMbfXuu/exec";
+      var APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxAUMxCm-PebuhlMTlnODLyaWXwtO5rbiAzBVgI8ozSJQeGxPyB_t6StTiI1Ejy_QOA/exec";
 
       emailjs.init("H9Z9Qz-HB-PehAQjp");
 
@@ -167,22 +167,59 @@
           }
         }
 
-        // POST to Google Apps Script for the umpire roster (includes password)
+        // Submit to Google Apps Script for the umpire roster (includes password)
+        // Uses JSONP (same approach as login/assign) because no-cors POST with
+        // JSON Content-Type can fail silently on some browsers.
         try {
-          await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: formData.name,
-              email: formData.email,
-              phone: formData.phone,
-              signature: formData.signature,
-              password: formData.password,
-              parent_name: formData.parent_name,
-              parent_email: formData.parent_email,
-              parent_phone: formData.parent_phone
-            })
+          await new Promise(function(resolve, reject) {
+            var callbackName = "umpireSubmit_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+            var script = document.createElement("script");
+            var url = new URL(APPS_SCRIPT_URL);
+            var settled = false;
+
+            url.searchParams.set("action", "submitAcknowledgment");
+            url.searchParams.set("callback", callbackName);
+            url.searchParams.set("name", formData.name);
+            url.searchParams.set("email", formData.email);
+            url.searchParams.set("phone", formData.phone);
+            url.searchParams.set("signature", formData.signature);
+            url.searchParams.set("password", formData.password);
+            url.searchParams.set("parent_name", formData.parent_name);
+            url.searchParams.set("parent_email", formData.parent_email);
+            url.searchParams.set("parent_phone", formData.parent_phone);
+
+            var timer = setTimeout(function() {
+              if (settled) return;
+              settled = true;
+              delete window[callbackName];
+              script.remove();
+              reject(new Error("Submission timed out. Please check your connection and try again."));
+            }, 10000);
+
+            window[callbackName] = function(payload) {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              delete window[callbackName];
+              script.remove();
+              if (payload && payload.ok) {
+                resolve(payload);
+              } else {
+                reject(new Error((payload && payload.message) || "Submission failed."));
+              }
+            };
+
+            script.onerror = function() {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              delete window[callbackName];
+              script.remove();
+              reject(new Error("Unable to reach the submission service."));
+            };
+
+            script.src = url.toString();
+            document.body.appendChild(script);
           });
           sheetSuccess = true;
         } catch (err) {

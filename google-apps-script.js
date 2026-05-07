@@ -86,6 +86,8 @@ function doGet(event) {
       payload = login(params);
     } else if (action === "resetPassword") {
       payload = resetPassword(params);
+    } else if (action === "submitAcknowledgment") {
+      payload = submitAcknowledgment(params);
     } else {
       payload = listGames();
     }
@@ -215,6 +217,29 @@ function resetPassword(params) {
   sheet.getRange(rowNumber, columnNumber).setValue(newPassword);
 
   return { ok: true, message: "Password has been updated successfully. You can now log in with your new password." };
+}
+
+function submitAcknowledgment(params) {
+  try {
+    var sheet = getOrCreateSheet(UMPIRES_SHEET_NAME, ACKNOWLEDGMENT_COLUMNS);
+
+    sheet.appendRow([
+      new Date(),
+      clean(params.name),
+      clean(params.email),
+      clean(params.phone),
+      clean(params.signature),
+      clean(params.parent_name),
+      clean(params.parent_email),
+      clean(params.parent_phone),
+      clean(params.password),
+      "No"  // Approved — must be set to "Yes" by an administrator
+    ]);
+
+    return { ok: true, message: "Acknowledgment recorded." };
+  } catch (error) {
+    return { ok: false, message: "Failed to save acknowledgment: " + error.message };
+  }
 }
 
 function listGames() {
