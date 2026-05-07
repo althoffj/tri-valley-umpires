@@ -52,6 +52,7 @@ function parseVEvents(icsText) {
     const dtstart  = get("DTSTART");
     const location = get("LOCATION");
     const uid      = get("UID");
+    const summary  = get("SUMMARY");
 
     const dateM = dtstart.match(/(\d{4})(\d{2})(\d{2})/);
     if (!dateM) continue;
@@ -59,7 +60,16 @@ function parseVEvents(icsText) {
     const timeM = dtstart.match(/T(\d{2})(\d{2})/);
     const time  = timeM ? `${timeM[1]}:${timeM[2]}` : "";
 
-    events.push({ date, time, location, uid });
+    // Parse home/away from SUMMARY (GameChanger formats: "Home @ Away" or "Home vs Away")
+    let homeTeam = "", awayTeam = "";
+    if (summary) {
+      const atMatch  = summary.match(/^(.+?)\s+@\s+(.+)$/);
+      const vsMatch  = summary.match(/^(.+?)\s+vs\.?\s+(.+)$/i);
+      if (atMatch)  { homeTeam = atMatch[1].trim();  awayTeam = atMatch[2].trim(); }
+      else if (vsMatch) { homeTeam = vsMatch[1].trim(); awayTeam = vsMatch[2].trim(); }
+    }
+
+    events.push({ date, time, location, uid, summary, homeTeam, awayTeam });
   }
   return events;
 }
@@ -100,9 +110,7 @@ async function runSync() {
     }
   }
 
-  const ratesSnap  = await db.doc("config/payRates").get();
-  const defaultPay = ratesSnap.exists ? (ratesSnap.data().plate || 0) : 0;
-  const today      = todayISO();
+  const today = todayISO();
 
   // Fetch ALL team feeds; build reference games + divDate map for city-schedule matching
   const eventsByDivDate = {}; // "DIVISION|DATE" → [{uid, teamName, location}]
@@ -122,7 +130,7 @@ async function runSync() {
       const key = `${division}|${ev.date}`;
       if (!eventsByDivDate[key]) eventsByDivDate[key] = [];
       if (!eventsByDivDate[key].some(e => e.uid === ev.uid))
-        eventsByDivDate[key].push({ uid: ev.uid, teamName: team.name, location: ev.location });
+        eventsByDivDate[key].push({ uid: ev.uid, teamName: team.name, location: ev.location, homeTeam: ev.homeTeam, awayTeam: ev.awayTeam });
 
       // Save as reference game if not already stored
       if (existingExtIds.has(ev.uid) || linkedUids.has(ev.uid)) continue;
@@ -133,6 +141,8 @@ async function runSync() {
         date:         ev.date,
         time:         ev.time,
         location:     ev.location,
+        homeTeam:     ev.homeTeam,
+        awayTeam:     ev.awayTeam,
         needsUmpires: false,
         umpireSlots:  [],
         cancelled:    false,
@@ -155,7 +165,12 @@ async function runSync() {
 
     if (!game.icsLinks || game.icsLinks.length === 0) {
       if (matches.length > 0) {
-        await game.ref.update({ icsLinks: matches.map(e => ({ uid: e.uid, teamName: e.teamName })) });
+        const update = { icsLinks: matches.map(e => ({ uid: e.uid, teamName: e.teamName })) };
+        // Copy team names from first matching ICS event if not already set
+        const first = matches[0];
+        if (!game.homeTeam && first.homeTeam) update.homeTeam = first.homeTeam;
+        if (!game.awayTeam && first.awayTeam) update.awayTeam = first.awayTeam;
+        await game.ref.update(update);
         linked++;
       }
     } else {
@@ -166,11 +181,15 @@ async function runSync() {
       } else if (missing.length === 0 && game.possibleChange) {
         await game.ref.update({ possibleChange: false });
       }
-      // Pick up an explicit location if GameChanger ever fills it in
+      // Pick up team names or location if GameChanger fills them in later
       const locatedMatch = matches.find(e =>
         /crooks,\s*sd/i.test(e.location) || /colton,\s*sd/i.test(e.location)
       );
-      if (locatedMatch) await game.ref.update({ field: locatedMatch.location });
+      const teamUpdate = {};
+      if (locatedMatch) teamUpdate.field = locatedMatch.location;
+      const namedMatch = matches.find(e => e.homeTeam);
+      if (namedMatch && !game.homeTeam) { teamUpdate.homeTeam = namedMatch.homeTeam; teamUpdate.awayTeam = namedMatch.awayTeam; }
+      if (Object.keys(teamUpdate).length) await game.ref.update(teamUpdate);
     }
   }
 
@@ -225,9 +244,8 @@ exports.importCitySchedule = onCall(
     const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
     if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
 
-    const ratesSnap  = await db.doc("config/payRates").get();
-    const rates      = ratesSnap.exists ? ratesSnap.data() : {};
-    const defaultPay = rates.plate || 0;
+    const ratesSnap = await db.doc("config/payRates").get();
+    const rates     = ratesSnap.exists ? ratesSnap.data() : {};
 
     let added = 0, skipped = 0;
     for (const g of CITY_SCHEDULE) {
@@ -241,11 +259,10 @@ exports.importCitySchedule = onCall(
         time:         g.time,
         type:         "Regular",
         field:        g.field,
-        payRate:      defaultPay,
         needsUmpires: true,
         umpireSlots: [
-          { type: "Plate", assignedUid: null, assignedName: null },
-          { type: "Field", assignedUid: null, assignedName: null }
+          { type: "Plate", assignedUid: null, assignedName: null, payRate: rates.plate || 0 },
+          { type: "Field", assignedUid: null, assignedName: null, payRate: rates.field || 0 }
         ],
         cancelled:  false,
         externalId,

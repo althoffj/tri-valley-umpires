@@ -110,8 +110,11 @@ function renderPaySummary() {
   if (activeFilter !== "mine") { el.style.display = "none"; return; }
 
   const mine = games.filter(g => mySlots(g).length > 0);
-  const total = mine.reduce((sum, g) => sum + (Number(g.payRate) || 0), 0);
   if (mine.length === 0) { el.style.display = "none"; return; }
+  // Sum per-slot payRate; fall back to game-level payRate for legacy docs
+  const total = mine.reduce((sum, g) => {
+    return sum + mySlots(g).reduce((s, slot) => s + (Number(slot.payRate ?? g.payRate) || 0), 0);
+  }, 0);
   el.textContent = `${mine.length} game${mine.length !== 1 ? "s" : ""} — estimated pay: $${total.toFixed(2)}`;
   el.style.display = "";
 }
@@ -197,16 +200,22 @@ function renderGameRows() {
       return;
     }
 
-    tbody.innerHTML = visible.map(g => `
+    tbody.innerHTML = visible.map(g => {
+      const teams = (g.homeTeam && g.awayTeam)
+        ? `${esc(g.homeTeam)} <span style="color:var(--light-text)">vs</span> ${esc(g.awayTeam)}`
+        : "—";
+      return `
       <tr>
         <td>${esc(fmtDate(g.date))} ${dateBadge(g)}</td>
         <td>${esc(g.time || "—")}</td>
         <td>${esc(g.division || "—")}</td>
+        <td>${teams}</td>
         <td>${buildTypesCell(g)}</td>
         <td>${esc(g.field || "—")}</td>
         <td class="${buildStatusClass(g)}">${buildStatusCell(g)}</td>
         <td style="white-space:nowrap">${buildActionCell(g)}</td>
-      </tr>`).join("");
+      </tr>`;
+    }).join("");
   });
 
   renderCount();
@@ -312,10 +321,14 @@ async function openModal(gameId, slotType) {
   pendingGameId   = gameId;
   pendingSlotType = slotType;
 
-  const pay = game.payRate ? `$${Number(game.payRate).toFixed(2)}` : "TBD";
+  const slot = getSlots(game).find(s => s.type === slotType);
+  const slotPay = slot?.payRate ?? game.payRate;
+  const pay = slotPay ? `$${Number(slotPay).toFixed(2)}` : "TBD";
+  const teams = (game.homeTeam && game.awayTeam)
+    ? `${esc(game.homeTeam)} vs ${esc(game.awayTeam)}<br>` : "";
   document.getElementById("modalGameDetail").innerHTML =
     `<strong>${esc(game.city)}</strong> &mdash; ${esc(game.division)} ${typeBadge(slotType)}<br>
-     ${esc(fmtDate(game.date))} at ${esc(game.time || "TBD")} &mdash; ${esc(game.field || "TBD")}<br>
+     ${teams}${esc(fmtDate(game.date))} at ${esc(game.time || "TBD")} &mdash; ${esc(game.field || "TBD")}<br>
      Pay rate: <strong>${pay}</strong>`;
 
   const msgEl = document.getElementById("signupMessage");
