@@ -442,3 +442,71 @@ th {
     display: none;
   }
 }
+
+/* ── Form layout helpers ───────────────────────────────────────────────────── */
+.form-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.form-group--sm {
+  flex: 0 0 90px;
+}
+
+.form-group label,
+.form-group select,
+.form-group input {
+  width: 100%;
+}
+
+.field-error {
+  color: #ffb4b4;
+  font-size: 0.82rem;
+  margin: 2px 0 8px;
+  min-height: 1em;
+}
+
+/* Status badges */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-past      { background: #444;    color: #aaa; }
+.badge-today     { background: #7a5c00; color: #ffd966; }
+.badge-upcoming  { background: #1a3a1a; color: #b8f2c4; }
+.badge-cancelled { background: #5a1a1a; color: #ffb4b4; }
+
+/* Umpire type badges */
+.badge-plate { background: #0d2b4a; color: #7ec8f7; }
+.badge-field { background: #0d3320; color: #7ef7a0; }
+.badge-extra { background: #333;    color: #ccc; }
+
+/* My games pay summary */
+.pay-summary {
+  font-size: 0.9rem;
+  color: var(--light-text);
+  margin: 4px 0 12px;
+}
+
+@media (max-width: 600px) {
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+  .form-group--sm {
+    flex: 1;
+  }
+}
