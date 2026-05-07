@@ -1,6 +1,6 @@
 // admin-games.js — Game management: sync, add, list, edit modal, team calendars
 import { db, app } from "./firebase.js";
-import { authReadyPromise, isAdmin } from "./auth.js";
+import { authReadyPromise, isAdmin, isSuperAdmin } from "./auth.js";
 import {
   getFunctions,
   httpsCallable
@@ -164,14 +164,18 @@ function renderAdminGames() {
     const slots = g.umpireSlots || [];
     const teams = (g.homeTeam && g.awayTeam)
       ? `<div style="font-size:0.8rem;color:var(--light-text)">${esc(g.homeTeam)} vs ${esc(g.awayTeam)}</div>` : "";
+    const canAssign = isSuperAdmin() && !g.cancelled;
     const slotHtml = slots.length
       ? slots.map((s, i) => `
-          <div style="display:flex;align-items:center;gap:6px;${i > 0 ? "margin-top:4px" : ""}">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;${i > 0 ? "margin-top:4px" : ""}">
             ${slotBadge(s)}
-            ${s.assignedUid && !g.cancelled
+            ${s.assignedUid
               ? `<button class="btn print-btn unassign-btn" style="font-size:0.75rem;padding:3px 8px"
                    data-game-id="${esc(g.id)}" data-slot-type="${esc(s.type)}">Unassign</button>`
-              : ""}
+              : canAssign
+                ? `<button class="btn print-btn assign-btn" style="font-size:0.75rem;padding:3px 8px"
+                     data-game-id="${esc(g.id)}" data-slot-type="${esc(s.type)}">Assign</button>`
+                : ""}
           </div>`).join("")
       : "—";
 
@@ -375,6 +379,108 @@ async function saveGameEdit() {
     btn.disabled = false;
   }
 }
+
+// ── Assign umpire modal ───────────────────────────────────────────────────────
+
+let approvedUmpires = []; // { uid, name, email }
+let assignTarget    = null; // { gameId, slotType }
+
+async function loadApprovedUmpires() {
+  if (approvedUmpires.length) return;
+  try {
+    const snap = await getDocs(query(collection(db, "umpires"), where("approved", "==", true), orderBy("name")));
+    approvedUmpires = snap.docs.map(d => ({
+      uid:   d.id,
+      name:  d.data().name  || d.data().displayName || "",
+      email: d.data().email || "",
+    }));
+  } catch (err) {
+    console.error("loadApprovedUmpires:", err);
+  }
+}
+
+function renderAssignList(filter = "") {
+  const list  = document.getElementById("assignUmpireList");
+  const lower = filter.toLowerCase();
+  const shown = approvedUmpires.filter(u =>
+    !filter || u.name.toLowerCase().includes(lower) || u.email.toLowerCase().includes(lower)
+  );
+
+  if (!shown.length) {
+    list.innerHTML = `<p style="padding:12px 16px;color:var(--light-text);margin:0">No matching umpires.</p>`;
+    return;
+  }
+
+  list.innerHTML = shown.map(u => `
+    <div class="assign-umpire-row" data-uid="${esc(u.uid)}" data-name="${esc(u.name)}"
+      style="padding:10px 16px;cursor:pointer;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:bold">${esc(u.name)}</div>
+        ${u.email ? `<div style="font-size:0.8rem;color:var(--light-text)">${esc(u.email)}</div>` : ""}
+      </div>
+      <button class="btn print-btn" style="font-size:0.8rem;padding:4px 12px;flex-shrink:0">Assign</button>
+    </div>`).join("");
+}
+
+async function openAssignModal(gameId, slotType) {
+  assignTarget = { gameId, slotType };
+  const game = allGames.find(g => g.id === gameId);
+  const label = document.getElementById("assignSlotLabel");
+  if (label && game) {
+    label.textContent = `${slotType} slot — ${game.city || ""} ${fmtDate(game.date)} ${fmtTime(game.time)}`;
+  }
+  document.getElementById("assignSearch").value = "";
+  document.getElementById("assignMessage").textContent = "";
+
+  await loadApprovedUmpires();
+  renderAssignList();
+  document.getElementById("assignModal").style.display = "flex";
+  document.getElementById("assignSearch").focus();
+}
+
+async function doAssign(uid, name) {
+  if (!assignTarget) return;
+  const { gameId, slotType } = assignTarget;
+  const msgEl = document.getElementById("assignMessage");
+  msgEl.textContent = "Saving…";
+  msgEl.className   = "signup-message info";
+
+  try {
+    const gameRef = doc(db, "games", gameId);
+    const snap    = await getDoc(gameRef);
+    if (!snap.exists()) throw new Error("Game not found.");
+    const slots = (snap.data().umpireSlots || []).map(s =>
+      s.type === slotType ? { ...s, assignedUid: uid, assignedName: name } : s
+    );
+    await updateDoc(gameRef, { umpireSlots: slots });
+    const g = allGames.find(g => g.id === gameId);
+    if (g) g.umpireSlots = slots;
+    document.getElementById("assignModal").style.display = "none";
+    renderAdminGames();
+  } catch (err) {
+    msgEl.textContent = err.message;
+    msgEl.className   = "signup-message error";
+  }
+}
+
+document.getElementById("assignSearch").addEventListener("input", function () {
+  renderAssignList(this.value);
+});
+
+document.getElementById("assignUmpireList").addEventListener("click", e => {
+  const row = e.target.closest(".assign-umpire-row");
+  if (!row) return;
+  doAssign(row.dataset.uid, row.dataset.name);
+});
+
+document.getElementById("cancelAssignBtn").addEventListener("click", () => {
+  document.getElementById("assignModal").style.display = "none";
+});
+
+document.getElementById("assignModal").addEventListener("click", e => {
+  if (e.target === document.getElementById("assignModal"))
+    document.getElementById("assignModal").style.display = "none";
+});
 
 // ── Add game form ─────────────────────────────────────────────────────────────
 
@@ -623,6 +729,9 @@ document.addEventListener("click", e => {
 
   const unassignBtn = e.target.closest(".unassign-btn");
   if (unassignBtn) { unassignSlot(unassignBtn.dataset.gameId, unassignBtn.dataset.slotType); return; }
+
+  const assignBtn = e.target.closest(".assign-btn");
+  if (assignBtn) { openAssignModal(assignBtn.dataset.gameId, assignBtn.dataset.slotType); return; }
 
   const syncTeamBtn = e.target.closest(".sync-team-btn");
   if (syncTeamBtn) {

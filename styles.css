@@ -948,3 +948,7 @@ th {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.assign-umpire-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}

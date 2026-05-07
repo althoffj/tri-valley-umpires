@@ -16,6 +16,7 @@ import {
 let currentUser    = null;
 let currentProfile = null; // umpires/{uid} document data
 let currentIsAdmin = false;
+let currentAdminDoc = null; // admins/{uid} document data
 
 // Resolves once the initial auth state check completes
 let authReadyResolve;
@@ -29,16 +30,18 @@ onAuthStateChanged(auth, async (user) => {
         getDoc(doc(db, "umpires", user.uid)),
         getDoc(doc(db, "admins", user.uid))
       ]);
-      currentProfile = umpireSnap.exists() ? umpireSnap.data() : null;
-      currentIsAdmin = adminSnap.exists();
+      currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
+      currentIsAdmin  = adminSnap.exists();
+      currentAdminDoc = adminSnap.exists() ? adminSnap.data() : null;
     } catch {
       currentProfile = null;
       currentIsAdmin = false;
     }
   } else {
-    currentUser    = null;
-    currentProfile = null;
-    currentIsAdmin = false;
+    currentUser     = null;
+    currentProfile  = null;
+    currentIsAdmin  = false;
+    currentAdminDoc = null;
   }
   authReadyResolve();
   applyAuthGate();
@@ -49,6 +52,10 @@ onAuthStateChanged(auth, async (user) => {
 export function isLoggedIn()   { return currentUser !== null; }
 export function isApproved()   { return currentProfile?.approved === true; }
 export function isAdmin()      { return currentIsAdmin; }
+export function isSuperAdmin() {
+  if (!currentIsAdmin) return false;
+  return currentAdminDoc?.superAdmin === true || (currentAdminDoc?.roles || []).length === 0;
+}
 export function getCurrentUser()    { return currentUser; }
 export function getCurrentProfile() { return currentProfile; }
 

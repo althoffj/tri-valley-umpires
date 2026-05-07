@@ -9,6 +9,14 @@
       ]
     },
     {
+      "collectionGroup": "umpires",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "approved", "order": "ASCENDING" },
+        { "fieldPath": "name",     "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "games",
       "queryScope": "COLLECTION",
       "fields": [
