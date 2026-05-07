@@ -5,7 +5,9 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   doc,
@@ -88,6 +90,29 @@ export async function login(email, password) {
 export async function logout() { await signOut(auth); }
 
 export async function sendResetEmail(email) { await sendPasswordResetEmail(auth, email); }
+
+export async function googleSignIn() {
+  const provider = new GoogleAuthProvider();
+  const credential = await signInWithPopup(auth, provider);
+  const user = credential.user;
+
+  const snap = await getDoc(doc(db, "umpires", user.uid));
+  if (!snap.exists()) {
+    // No profile — could be a new Google user who hasn't registered yet,
+    // or an existing email/password user whose UID doesn't match.
+    await signOut(auth);
+    throw new Error(
+      "No account found for this Google account. Please complete the acknowledgment form to register, or sign in with your email and password if you already have an account."
+    );
+  }
+  const profile = snap.data();
+  if (profile.approved === false) {
+    await signOut(auth);
+    throw new Error("Your account has not yet been approved. Please wait for administrator approval.");
+  }
+  currentProfile = profile;
+  return credential;
+}
 
 export async function updateProfile(fields) {
   if (!currentUser) throw new Error("Not signed in.");
@@ -270,6 +295,16 @@ function initAuthUI() {
           <strong style="font-size:1.05rem">Sign In</strong>
           <button class="auth-dropdown-close" id="authCloseBtn" aria-label="Close">&#x2715;</button>
         </div>
+        <button type="button" id="hmGoogleBtn"
+          style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 16px;border:1px solid #555;border-radius:8px;background:#fff;color:#222;font-size:0.95rem;font-weight:500;cursor:pointer;margin-bottom:16px">
+          <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/><path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.962L3.964 6.294C4.672 4.167 6.656 3.58 9 3.58z"/></svg>
+          Continue with Google
+        </button>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+          <hr style="flex:1;border:none;border-top:1px solid #444" />
+          <span style="color:var(--light-text);font-size:0.8rem">or</span>
+          <hr style="flex:1;border:none;border-top:1px solid #444" />
+        </div>
         <form id="hmLoginForm" novalidate>
           <label for="hmEmail">Email</label>
           <input type="email" id="hmEmail" autocomplete="email" required />
@@ -380,6 +415,24 @@ function initAuthUI() {
   document.getElementById("hmBackToLoginBtn")?.addEventListener("click", () => {
     document.getElementById("hmLoginMsg").textContent = "";
     showView("authLoginView");
+  });
+
+  // Google sign-in button
+  document.getElementById("hmGoogleBtn")?.addEventListener("click", async () => {
+    const msg = document.getElementById("hmLoginMsg");
+    const btn = document.getElementById("hmGoogleBtn");
+    btn.disabled    = true;
+    msg.textContent = "Signing in with Google…";
+    msg.className   = "signup-message info";
+    try {
+      await googleSignIn();
+      msg.textContent = "";
+      closeDropdown();
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.className   = "signup-message error";
+      btn.disabled    = false;
+    }
   });
 
   // Sign-in form
