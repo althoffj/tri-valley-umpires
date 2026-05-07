@@ -77,11 +77,11 @@ the spreadsheet.
 
 Current web app URL:
 
-`https://script.google.com/macros/s/AKfycbxSq4Oqrcg1GNvGpNmqU-T7X0tORYma7n-5e79UVNfF7sDBNbbIauMlyC4cl73NFH0/exec`
+`https://script.google.com/macros/s/AKfycbxG9irOvcLQfiPi-O7BtwP_Kt8QL6At0pJpM6393iEeE10AX4ZbuGGtmGbky8Lv9Vhu/exec`
 
 Current deployment ID:
 
-`AKfycbxSq4Oqrcg1GNvGpNmqU-T7X0tORYma7n-5e79UVNfF7sDBNbbIauMlyC4cl73NFH0`
+`AKfycbxG9irOvcLQfiPi-O7BtwP_Kt8QL6At0pJpM6393iEeE10AX4ZbuGGtmGbky8Lv9Vhu`
 
 The script intentionally contains both entrypoints:
 
