@@ -30,6 +30,96 @@ function setMsg(id, text, type = "info") {
   el.className   = `signup-message ${type}`;
 }
 
+// In-memory cache so edit forms can read full field objects without DOM scraping
+let facilitiesCache = {}; // { [facilityId]: facilityData }
+
+// ── Field form helpers ────────────────────────────────────────────────────────
+
+// Generates the inner rows of an add or edit field form.
+// prefix: "add" | "edit", fId: facility id, f: existing field data (or null)
+function fieldFormRows(prefix, fId, f = {}) {
+  const p = `${prefix}Field`;
+  const id = fId;
+  const chk = (key) => f[key] ? "checked" : "";
+  const val = (key) => esc(f[key] || "");
+
+  return `
+    <div class="form-row">
+      <div class="form-group">
+        <label for="${p}Name_${id}" style="margin-top:0">Field Name</label>
+        <input type="text" id="${p}Name_${id}" value="${val("name")}" placeholder="e.g. NH-North" />
+      </div>
+    </div>
+
+    <div class="form-row" style="margin-top:12px">
+      <div class="form-group">
+        <label style="margin-top:0;margin-bottom:4px">Amenities</label>
+        <div class="check-list" style="margin-top:4px">
+          <label><input type="checkbox" id="${p}Concession_${id}" ${chk("concessionStand")} /> Concession Stand</label>
+          <label><input type="checkbox" id="${p}Bathrooms_${id}" ${chk("bathrooms")} /> Bathrooms</label>
+          <label><input type="checkbox" id="${p}Portapotty_${id}" ${chk("portapotty")} /> Porta-Potty</label>
+          <label><input type="checkbox" id="${p}Lights_${id}" ${chk("lights")} /> Lights</label>
+          <label><input type="checkbox" id="${p}Scoreboard_${id}" ${chk("scoreboard")} /> Scoreboard</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label style="margin-top:0;margin-bottom:4px">Pitching Mound</label>
+        <div class="check-list" style="margin-top:4px">
+          <label><input type="checkbox" id="${p}FixedMound_${id}" ${chk("fixedMound")} /> Fixed Mound</label>
+          <label><input type="checkbox" id="${p}PortableMound_${id}" ${chk("portableMound")} /> Portable Mound</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-row" style="margin-top:12px">
+      <div class="form-group">
+        <label for="${p}Basepath_${id}" style="margin-top:0">Basepath Length</label>
+        <input type="text" id="${p}Basepath_${id}" value="${val("basepathLength")}" placeholder="e.g. 60 ft" />
+      </div>
+      <div class="form-group">
+        <label for="${p}Pitching_${id}" style="margin-top:0">Pitching Distance</label>
+        <input type="text" id="${p}Pitching_${id}" value="${val("pitchingDistance")}" placeholder="e.g. 44 ft" />
+      </div>
+    </div>
+
+    <div class="form-row" style="margin-top:4px">
+      <div class="form-group">
+        <label for="${p}Dimensions_${id}" style="margin-top:0">Field Dimensions</label>
+        <input type="text" id="${p}Dimensions_${id}" value="${val("fieldDimensions")}" placeholder="e.g. 200ft LF, 225ft CF" />
+      </div>
+    </div>
+
+    <div class="form-row" style="margin-top:4px">
+      <div class="form-group">
+        <label for="${p}Notes_${id}" style="margin-top:0">Notes</label>
+        <input type="text" id="${p}Notes_${id}" value="${val("notes")}" placeholder="Any additional notes" />
+      </div>
+    </div>`;
+}
+
+// Reads all field form inputs and returns a field data object
+function readFieldForm(prefix, fId) {
+  const p  = `${prefix}Field`;
+  const id = fId;
+  const v  = (elId) => document.getElementById(elId)?.value.trim() || "";
+  const c  = (elId) => document.getElementById(elId)?.checked || false;
+
+  return {
+    name:             v(`${p}Name_${id}`),
+    concessionStand:  c(`${p}Concession_${id}`),
+    bathrooms:        c(`${p}Bathrooms_${id}`),
+    portapotty:       c(`${p}Portapotty_${id}`),
+    lights:           c(`${p}Lights_${id}`),
+    scoreboard:       c(`${p}Scoreboard_${id}`),
+    fixedMound:       c(`${p}FixedMound_${id}`),
+    portableMound:    c(`${p}PortableMound_${id}`),
+    basepathLength:   v(`${p}Basepath_${id}`),
+    pitchingDistance: v(`${p}Pitching_${id}`),
+    fieldDimensions:  v(`${p}Dimensions_${id}`),
+    notes:            v(`${p}Notes_${id}`),
+  };
+}
+
 // ── Facilities List ───────────────────────────────────────────────────────────
 
 async function loadFacilities() {
@@ -41,9 +131,12 @@ async function loadFacilities() {
 
     if (snap.empty) {
       listEl.innerHTML = `<p style="color:var(--light-text)">No facilities added yet. Click "Add Facility" to create one.</p>`;
+      facilitiesCache = {};
       return;
     }
 
+    facilitiesCache = {};
+    snap.docs.forEach(d => { facilitiesCache[d.id] = d.data(); });
     listEl.innerHTML = snap.docs.map(d => renderFacilityCard(d.id, d.data())).join("");
   } catch (err) {
     listEl.innerHTML = `<p style="color:#ffb4b4">Error loading facilities: ${esc(err.message)}</p>`;
@@ -51,8 +144,35 @@ async function loadFacilities() {
   }
 }
 
+// Renders amenity badge chips for a field
+function fieldAmenityBadges(f) {
+  const items = [
+    [f.concessionStand,  "Concessions"],
+    [f.bathrooms,        "Bathrooms"],
+    [f.portapotty,       "Porta-Potty"],
+    [f.lights,           "Lights"],
+    [f.scoreboard,       "Scoreboard"],
+    [f.fixedMound,       "Fixed Mound"],
+    [f.portableMound,    "Portable Mound"],
+  ].filter(([on]) => on).map(([, label]) =>
+    `<span style="display:inline-block;background:#2a3a2a;color:#8fc;border:1px solid #3a5a3a;border-radius:10px;padding:1px 8px;font-size:0.75rem;white-space:nowrap">${label}</span>`
+  );
+  return items.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${items.join("")}</div>` : "";
+}
+
+// Renders measurement line for a field
+function fieldMeasurements(f) {
+  const parts = [];
+  if (f.basepathLength)   parts.push(`Basepath: ${esc(f.basepathLength)}`);
+  if (f.pitchingDistance) parts.push(`Pitching: ${esc(f.pitchingDistance)}`);
+  if (f.fieldDimensions)  parts.push(esc(f.fieldDimensions));
+  return parts.length
+    ? `<div style="font-size:0.82rem;color:var(--light-text);margin-top:3px">${parts.join(" · ")}</div>`
+    : "";
+}
+
 function renderFacilityCard(id, data) {
-  const fields = data.fields || [];
+  const fields  = data.fields || [];
   const mapsLink = data.googleMapsUrl
     ? `<a href="${esc(data.googleMapsUrl)}" target="_blank" rel="noopener" style="font-size:0.85rem">View on Google Maps</a>`
     : "";
@@ -60,11 +180,13 @@ function renderFacilityCard(id, data) {
   const fieldsList = fields.length
     ? `<ul class="facility-fields-list">
         ${fields.map((f, i) => `
-          <li data-field-index="${i}" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-            <span>
+          <li data-field-index="${i}" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:8px 0">
+            <div style="min-width:0">
               <strong>${esc(f.name)}</strong>
-              ${f.notes ? `<span style="color:var(--light-text);font-size:0.85rem"> — ${esc(f.notes)}</span>` : ""}
-            </span>
+              ${fieldMeasurements(f)}
+              ${fieldAmenityBadges(f)}
+              ${f.notes ? `<div style="font-size:0.82rem;color:var(--light-text);margin-top:2px">${esc(f.notes)}</div>` : ""}
+            </div>
             <span style="white-space:nowrap;flex-shrink:0">
               <button class="btn print-btn edit-field-btn"
                 data-facility-id="${esc(id)}" data-field-index="${i}"
@@ -133,18 +255,10 @@ function renderFacilityCard(id, data) {
         ${fieldsList}
 
         <!-- Add field inline form (hidden) -->
-        <div id="addFieldForm_${esc(id)}" style="display:none;margin-top:12px;padding:12px;background:#1a1a1a;border-radius:6px;border:1px solid #444">
-          <div class="form-row">
-            <div class="form-group">
-              <label for="addFieldName_${esc(id)}" style="margin-top:0">Field Name</label>
-              <input type="text" id="addFieldName_${esc(id)}" placeholder="e.g. NH-North" />
-            </div>
-            <div class="form-group">
-              <label for="addFieldNotes_${esc(id)}" style="margin-top:0">Notes (optional)</label>
-              <input type="text" id="addFieldNotes_${esc(id)}" placeholder="e.g. Pitching rubber: 44ft" />
-            </div>
-          </div>
-          <div class="page-actions" style="margin-top:8px">
+        <div id="addFieldForm_${esc(id)}" style="display:none;margin-top:12px;padding:16px;background:#1a1a1a;border-radius:6px;border:1px solid #444">
+          <strong style="color:#ccc;font-size:0.9rem">New Field</strong>
+          ${fieldFormRows("add", id)}
+          <div class="page-actions" style="margin-top:12px">
             <button class="btn save-add-field-btn" data-facility-id="${esc(id)}"
               style="font-size:0.82rem;padding:5px 12px">Add Field</button>
             <button class="btn print-btn cancel-add-field-btn" data-facility-id="${esc(id)}"
@@ -154,19 +268,11 @@ function renderFacilityCard(id, data) {
         </div>
 
         <!-- Edit field inline form (hidden) -->
-        <div id="editFieldForm_${esc(id)}" style="display:none;margin-top:12px;padding:12px;background:#1a1a1a;border-radius:6px;border:1px solid #444">
+        <div id="editFieldForm_${esc(id)}" style="display:none;margin-top:12px;padding:16px;background:#1a1a1a;border-radius:6px;border:1px solid #444">
+          <strong style="color:#ccc;font-size:0.9rem">Edit Field</strong>
           <input type="hidden" id="editFieldIndex_${esc(id)}" value="" />
-          <div class="form-row">
-            <div class="form-group">
-              <label for="editFieldName_${esc(id)}" style="margin-top:0">Field Name</label>
-              <input type="text" id="editFieldName_${esc(id)}" />
-            </div>
-            <div class="form-group">
-              <label for="editFieldNotes_${esc(id)}" style="margin-top:0">Notes</label>
-              <input type="text" id="editFieldNotes_${esc(id)}" />
-            </div>
-          </div>
-          <div class="page-actions" style="margin-top:8px">
+          ${fieldFormRows("edit", id)}
+          <div class="page-actions" style="margin-top:12px">
             <button class="btn save-edit-field-btn" data-facility-id="${esc(id)}"
               style="font-size:0.82rem;padding:5px 12px">Save Field</button>
             <button class="btn print-btn cancel-edit-field-btn" data-facility-id="${esc(id)}"
@@ -206,11 +312,7 @@ document.getElementById("saveAddFacilityBtn").addEventListener("click", async ()
 
   try {
     await addDoc(collection(db, "facilities"), {
-      name,
-      address,
-      googleMapsUrl: mapsUrl,
-      fields: [],
-      createdAt: serverTimestamp()
+      name, address, googleMapsUrl: mapsUrl, fields: [], createdAt: serverTimestamp()
     });
     setMsg("addFacilityMessage", "Facility added!", "success");
     document.getElementById("facilityName").value    = "";
@@ -262,10 +364,9 @@ async function deleteFacility(facilityId) {
 // ── Field CRUD helpers ────────────────────────────────────────────────────────
 
 async function addField(facilityId) {
-  const name  = document.getElementById(`addFieldName_${facilityId}`)?.value.trim();
-  const notes = document.getElementById(`addFieldNotes_${facilityId}`)?.value.trim();
+  const field = readFieldForm("add", facilityId);
 
-  if (!name) {
+  if (!field.name) {
     const msgEl = document.getElementById(`addFieldMsg_${facilityId}`);
     if (msgEl) { msgEl.textContent = "Field name is required."; msgEl.className = "signup-message error"; }
     return;
@@ -275,7 +376,7 @@ async function addField(facilityId) {
     const ref  = doc(db, "facilities", facilityId);
     const snap = await getDoc(ref);
     if (!snap.exists()) return;
-    const fields = [...(snap.data().fields || []), { name, notes: notes || "" }];
+    const fields = [...(snap.data().fields || []), field];
     await updateDoc(ref, { fields });
     await loadFacilities();
   } catch (err) {
@@ -284,7 +385,7 @@ async function addField(facilityId) {
   }
 }
 
-function openEditFieldForm(facilityId, fieldIndex, currentName, currentNotes) {
+function openEditFieldForm(facilityId, fieldIndex) {
   // Hide add-field form if open
   const addForm = document.getElementById(`addFieldForm_${facilityId}`);
   if (addForm) addForm.style.display = "none";
@@ -292,23 +393,42 @@ function openEditFieldForm(facilityId, fieldIndex, currentName, currentNotes) {
   const editForm = document.getElementById(`editFieldForm_${facilityId}`);
   if (!editForm) return;
 
+  // Use cached facility data to populate the form
+  const cachedData = facilitiesCache[facilityId];
+  const f = cachedData?.fields?.[fieldIndex] || {};
+
   document.getElementById(`editFieldIndex_${facilityId}`).value = fieldIndex;
-  document.getElementById(`editFieldName_${facilityId}`).value  = currentName;
-  document.getElementById(`editFieldNotes_${facilityId}`).value = currentNotes;
+
+  // Populate each field — use element IDs from fieldFormRows("edit", ...)
+  const p  = "editField";
+  const id = facilityId;
+  const set = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ""; };
+  const chk = (elId, val) => { const el = document.getElementById(elId); if (el) el.checked = !!val; };
+
+  set(`${p}Name_${id}`,       f.name);
+  set(`${p}Basepath_${id}`,   f.basepathLength);
+  set(`${p}Pitching_${id}`,   f.pitchingDistance);
+  set(`${p}Dimensions_${id}`, f.fieldDimensions);
+  set(`${p}Notes_${id}`,      f.notes);
+
+  chk(`${p}Concession_${id}`,   f.concessionStand);
+  chk(`${p}Bathrooms_${id}`,    f.bathrooms);
+  chk(`${p}Portapotty_${id}`,   f.portapotty);
+  chk(`${p}Lights_${id}`,       f.lights);
+  chk(`${p}Scoreboard_${id}`,   f.scoreboard);
+  chk(`${p}FixedMound_${id}`,   f.fixedMound);
+  chk(`${p}PortableMound_${id}`, f.portableMound);
+
   editForm.style.display = "";
 }
 
 async function saveEditField(facilityId) {
   const indexInput = document.getElementById(`editFieldIndex_${facilityId}`);
-  const nameInput  = document.getElementById(`editFieldName_${facilityId}`);
-  const notesInput = document.getElementById(`editFieldNotes_${facilityId}`);
   const msgEl      = document.getElementById(`editFieldMsg_${facilityId}`);
-
   const fieldIndex = parseInt(indexInput?.value, 10);
-  const name       = nameInput?.value.trim();
-  const notes      = notesInput?.value.trim() || "";
+  const field      = readFieldForm("edit", facilityId);
 
-  if (!name) {
+  if (!field.name) {
     if (msgEl) { msgEl.textContent = "Field name is required."; msgEl.className = "signup-message error"; }
     return;
   }
@@ -318,7 +438,7 @@ async function saveEditField(facilityId) {
     const snap = await getDoc(ref);
     if (!snap.exists()) return;
     const fields = [...(snap.data().fields || [])];
-    fields[fieldIndex] = { name, notes };
+    fields[fieldIndex] = field;
     await updateDoc(ref, { fields });
     await loadFacilities();
   } catch (err) {
@@ -344,7 +464,6 @@ async function deleteField(facilityId, fieldIndex) {
 // ── Event delegation ──────────────────────────────────────────────────────────
 
 document.addEventListener("click", e => {
-  // Edit facility button
   const editFacBtn = e.target.closest(".edit-facility-btn");
   if (editFacBtn) {
     const id   = editFacBtn.dataset.facilityId;
@@ -353,7 +472,6 @@ document.addEventListener("click", e => {
     return;
   }
 
-  // Cancel facility edit
   const cancelFacEdit = e.target.closest(".cancel-facility-edit-btn");
   if (cancelFacEdit) {
     const id   = cancelFacEdit.dataset.facilityId;
@@ -362,27 +480,22 @@ document.addEventListener("click", e => {
     return;
   }
 
-  // Save facility edit
   const saveFacEdit = e.target.closest(".save-facility-edit-btn");
   if (saveFacEdit) { saveFacilityEdit(saveFacEdit.dataset.facilityId); return; }
 
-  // Delete facility
   const delFacBtn = e.target.closest(".delete-facility-btn");
   if (delFacBtn) { deleteFacility(delFacBtn.dataset.facilityId); return; }
 
-  // Show add-field form
   const showAddFieldBtn = e.target.closest(".show-add-field-btn");
   if (showAddFieldBtn) {
     const id      = showAddFieldBtn.dataset.facilityId;
     const addForm = document.getElementById(`addFieldForm_${id}`);
     if (addForm) addForm.style.display = addForm.style.display === "none" ? "" : "none";
-    // Hide edit-field form if open
     const editForm = document.getElementById(`editFieldForm_${id}`);
     if (editForm) editForm.style.display = "none";
     return;
   }
 
-  // Cancel add field
   const cancelAddField = e.target.closest(".cancel-add-field-btn");
   if (cancelAddField) {
     const id = cancelAddField.dataset.facilityId;
@@ -391,24 +504,15 @@ document.addEventListener("click", e => {
     return;
   }
 
-  // Save add field
   const saveAddField = e.target.closest(".save-add-field-btn");
   if (saveAddField) { addField(saveAddField.dataset.facilityId); return; }
 
-  // Edit field button
   const editFieldBtn = e.target.closest(".edit-field-btn");
   if (editFieldBtn) {
-    const id    = editFieldBtn.dataset.facilityId;
-    const idx   = parseInt(editFieldBtn.dataset.fieldIndex, 10);
-    // Read current values from rendered DOM
-    const li    = editFieldBtn.closest("li");
-    const name  = li?.querySelector("strong")?.textContent || "";
-    const notes = li?.querySelector("span > span")?.textContent?.replace(/^ — /, "") || "";
-    openEditFieldForm(id, idx, name, notes);
+    openEditFieldForm(editFieldBtn.dataset.facilityId, parseInt(editFieldBtn.dataset.fieldIndex, 10));
     return;
   }
 
-  // Cancel edit field
   const cancelEditField = e.target.closest(".cancel-edit-field-btn");
   if (cancelEditField) {
     const id   = cancelEditField.dataset.facilityId;
@@ -417,11 +521,9 @@ document.addEventListener("click", e => {
     return;
   }
 
-  // Save edit field
   const saveEditFieldBtn = e.target.closest(".save-edit-field-btn");
   if (saveEditFieldBtn) { saveEditField(saveEditFieldBtn.dataset.facilityId); return; }
 
-  // Delete field
   const delFieldBtn = e.target.closest(".delete-field-btn");
   if (delFieldBtn) {
     deleteField(delFieldBtn.dataset.facilityId, parseInt(delFieldBtn.dataset.fieldIndex, 10));
