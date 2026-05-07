@@ -738,4 +738,49 @@ authReadyPromise.then(() => {
   loadGames();
   loadPayRates();
   loadTeamCalendars();
+  loadIncidents();
 });
+
+// ── Incident Reports ──────────────────────────────────────────────────────────
+
+async function loadIncidents() {
+  const listEl = document.getElementById("incidentList");
+  const noteEl = document.getElementById("incidentNote");
+  if (!listEl) return;
+
+  try {
+    const snap = await getDocs(
+      query(collection(db, "incidentReports"), orderBy("submittedAt", "desc"))
+    );
+
+    if (snap.empty) {
+      noteEl.textContent = "No incident reports submitted yet.";
+      listEl.innerHTML = "";
+      return;
+    }
+
+    noteEl.textContent = `${snap.size} report${snap.size === 1 ? "" : "s"} on file.`;
+
+    listEl.innerHTML = snap.docs.map(d => {
+      const r = d.data();
+      const date = r.submittedAt?.toDate
+        ? r.submittedAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+        : "—";
+      const gameLabel = [r.gameDate ? r.gameDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$2/$3/$1") : "", r.gameCity, r.gameDivision].filter(Boolean).join(" · ");
+      return `
+        <div class="document-note" style="border-left-color:#f7c87e;margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+            <strong style="color:white">${esc(r.incidentType ?? "Incident")}</strong>
+            <span style="color:var(--light-text);font-size:0.85rem">${esc(date)}</span>
+          </div>
+          <p style="margin:0 0 4px"><span style="color:var(--light-text)">Reported by:</span> ${esc(r.reporterName ?? "")}</p>
+          ${gameLabel ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Game:</span> ${esc(gameLabel)}</p>` : ""}
+          ${r.involvedParties ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Involved:</span> ${esc(r.involvedParties)}</p>` : ""}
+          <p style="margin:8px 0 0;white-space:pre-wrap">${esc(r.description ?? "")}</p>
+        </div>`;
+    }).join("");
+  } catch (err) {
+    console.error(err);
+    listEl.innerHTML = '<p style="color:#ffb4b4">Error loading incident reports.</p>';
+  }
+}

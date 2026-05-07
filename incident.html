@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Incident Report - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=5" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Incident Report</h1>
+  </div>
+
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="expectations.html">Expectations</a>
+    <a href="principles_of_umpiring.html">Principles</a>
+    <a href="rule_breakdown.html">Rules</a>
+    <a href="pregame-meeting.html">Plate Meeting</a>
+    <a href="schedule.html">Schedule &amp; Signups</a>
+    <a href="fields.html" data-auth-approved style="display:none">Fields</a>
+    <a href="incident.html" data-auth-approved style="display:none">Incident Report</a>
+      <a href="form.html" data-auth-guest>Acknowledgment</a>
+    <a href="admin.html" data-auth-admin style="display:none">Admin</a>
+  </nav>
+
+  <!-- Approved umpires and admins -->
+  <div class="form-container" data-auth-approved style="display:none">
+
+    <div class="page-actions">
+      <a href="schedule.html" class="back-btn">Back to Schedule</a>
+    </div>
+
+    <h1>Submit an Incident Report</h1>
+
+    <div class="document-note">
+      <p>Use this form to report any ejections, unsportsmanlike conduct, unsafe situations, or other notable incidents that occurred during a game you umpired. Reports are reviewed by the league administrator only.</p>
+    </div>
+
+    <form id="incidentForm" novalidate>
+
+      <label for="gameSelect">Game *</label>
+      <select id="gameSelect" required style="width:100%;padding:14px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:16px;box-sizing:border-box">
+        <option value="">Loading your games…</option>
+      </select>
+      <p class="field-error" id="gameSelectError"></p>
+
+      <label for="incidentType">Incident Type *</label>
+      <select id="incidentType" required style="width:100%;padding:14px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:16px;box-sizing:border-box">
+        <option value="">-- Select type --</option>
+        <option value="Ejection">Ejection</option>
+        <option value="Unsportsmanlike Conduct">Unsportsmanlike Conduct</option>
+        <option value="Unsafe Conditions">Unsafe Conditions</option>
+        <option value="Rule Dispute">Rule Dispute</option>
+        <option value="Other">Other</option>
+      </select>
+      <p class="field-error" id="incidentTypeError"></p>
+
+      <label for="involvedParties">Involved Parties</label>
+      <input type="text" id="involvedParties" placeholder="e.g. Coach Smith (Crooks 12U), Player #14" />
+      <p style="color:var(--light-text);font-size:0.85rem;margin:4px 0 0">Names, roles, and team affiliations of anyone involved.</p>
+
+      <label for="description">Description *</label>
+      <textarea id="description" required rows="6"
+        style="width:100%;padding:14px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:16px;box-sizing:border-box;resize:vertical;font-family:inherit"
+        placeholder="Describe what happened, the sequence of events, and any actions you took…"></textarea>
+      <p class="field-error" id="descriptionError"></p>
+
+      <p id="incidentMessage" class="signup-message" aria-live="polite" style="margin-top:16px"></p>
+
+      <div class="page-actions" style="margin-top:8px">
+        <button type="submit" class="btn" id="submitIncidentBtn">Submit Report</button>
+      </div>
+
+    </form>
+
+  </div>
+
+  <!-- Guest / pending fallback -->
+  <div class="container" data-auth-guest>
+    <div class="document-note">
+      <p>Incident reports are only available to approved umpires. <a href="form.html">Register here</a> or sign in via the <strong>☰ menu</strong> (top right).</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      <span data-auth-approved style="display:none">
+        Questions? Post in
+        <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+        | Jeff Althoff: 605-380-0229 (urgent only) |
+      </span>
+      <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+      | <a href="https://www.minndak.org/" target="_blank">Minndak Baseball League</a>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=5"></script>
+  <script type="module" src="incident.js?v=5"></script>
+</body>
+</html>

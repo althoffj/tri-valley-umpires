@@ -48,5 +48,11 @@ service cloud.firestore {
       allow read, write: if request.auth.uid == uid;
       allow read:        if isAdmin();
     }
+
+    // Incident reports: approved umpires can create; only admins can read
+    match /incidentReports/{reportId} {
+      allow create: if isApproved();
+      allow read, update, delete: if isAdmin();
+    }
   }
 }
