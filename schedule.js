@@ -211,6 +211,7 @@ function renderCount() {
 // ── Game Day bar ──────────────────────────────────────────────────────────────
 
 let facilitiesCache = null;
+let shedCodesCache  = null;
 
 async function getFacilities() {
   if (facilitiesCache) return facilitiesCache;
@@ -219,6 +220,16 @@ async function getFacilities() {
     facilitiesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (_) { facilitiesCache = []; }
   return facilitiesCache;
+}
+
+async function getShedCodes() {
+  if (shedCodesCache) return shedCodesCache;
+  try {
+    const snap = await getDocs(collection(db, "facilityCodes"));
+    shedCodesCache = {};
+    snap.docs.forEach(d => { shedCodesCache[d.id] = d.data().shedCode || ""; });
+  } catch (_) { shedCodesCache = {}; }
+  return shedCodesCache;
 }
 
 function matchFacility(facilities, cityName) {
@@ -247,7 +258,7 @@ async function checkIn(gameId, slotType) {
     await updateDoc(gameRef, { umpireSlots: slots });
     const g = games.find(g => g.id === gameId);
     if (g) g.umpireSlots = slots;
-    if (btn) { btn.textContent = "✓ Checked In"; btn.className = "btn check-in-btn"; }
+    renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "Check In"; }
     alert(err.message);
@@ -285,7 +296,7 @@ async function renderGameDayBar() {
 
   if (todayGames.length === 0) { bar.style.display = "none"; return; }
 
-  const facilities = await getFacilities();
+  const [facilities, shedCodes] = await Promise.all([getFacilities(), getShedCodes()]);
 
   // Fetch weather for all games in parallel before rendering
   const weatherMap = {};
@@ -308,6 +319,10 @@ async function renderGameDayBar() {
            ${wx.icon} ${wx.temp}°F &middot; ${esc(wx.label)} &middot; ${wx.wind} mph wind
          </div>`
       : "";
+    const shedCode    = facility ? (shedCodes[facility.id] || "") : "";
+    const shedHtml    = checkedIn && shedCode
+      ? `<div class="game-day-shed-code">🔑 Shed Code: <span>${esc(shedCode)}</span></div>`
+      : "";
 
     return `
     <div class="game-day-card" data-game-id="${esc(game.id)}">
@@ -318,6 +333,7 @@ async function renderGameDayBar() {
         &mdash; ${esc(game.field || "")} &mdash; ${esc(game.time || "TBD")}
       </div>
       ${wxHtml}
+      ${shedHtml}
       <div class="game-day-actions">
         <a href="${esc(mapsUrl)}" class="btn" target="_blank" rel="noopener">Directions</a>
         ${partnerSlot

@@ -79,6 +79,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Facility shed codes: signed-in approved umpires and admins can read; only admins can write
+    match /facilityCodes/{facilityId} {
+      allow read: if isApproved() || isAdmin();
+      allow write: if isAdmin();
+    }
+
     // Field issue reports: any approved umpire can submit; only admins can update/delete
     match /fieldIssues/{issueId} {
       allow read:   if isApproved() || isAdmin();

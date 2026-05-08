@@ -1,8 +1,11 @@
 // fields.js — Dynamic facility/field info loaded from Firestore
 import { db } from "./firebase.js";
+import { authReadyPromise, isApproved, isAdmin } from "./auth.js";
 import {
   collection,
   getDocs,
+  doc,
+  getDoc,
   orderBy,
   query
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -145,11 +148,16 @@ function renderFacility(facility) {
     ? `<p><strong>Address:</strong> ${esc(facility.address)}</p>` : "";
   const notesLine = facility.notes
     ? `<p style="margin-bottom:0"><strong>Notes:</strong> ${esc(facility.notes)}</p>` : "";
+  const shedCodeHtml = facility.shedCode
+    ? `<div style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;background:#1a2a1a;border:1px solid #2a6a2a;border-radius:6px;padding:8px 14px">
+         🔑 <strong>Shed Code:</strong> <span style="font-family:monospace;font-size:1.1rem;letter-spacing:0.12em">${esc(facility.shedCode)}</span>
+       </div>`
+    : "";
 
   return `
     <h2 style="margin-top:48px">${esc(facility.name)}</h2>
     ${issuesBanner(facility.activeIssues)}
-    ${(addressLine || notesLine) ? `<div class="document-note">${addressLine}${notesLine}</div>` : ""}
+    ${(addressLine || notesLine || shedCodeHtml) ? `<div class="document-note">${addressLine}${notesLine}${shedCodeHtml ? `<div style="margin-top:${(addressLine || notesLine) ? "8px" : "0"}">${shedCodeHtml}</div>` : ""}</div>` : ""}
     ${fieldsHtml ? `<div class="form-row" style="gap:24px;flex-wrap:wrap;align-items:stretch">${fieldsHtml}</div>` : ""}`;
 }
 
@@ -160,12 +168,25 @@ async function loadFacilities() {
   if (!container) return;
 
   try {
-    const snap = await getDocs(query(collection(db, "facilities"), orderBy("name")));
-    if (snap.empty) {
+    await authReadyPromise;
+    const canSeeCodes = isApproved() || isAdmin();
+
+    const [facSnap, codesSnap] = await Promise.all([
+      getDocs(query(collection(db, "facilities"), orderBy("name"))),
+      canSeeCodes ? getDocs(collection(db, "facilityCodes")) : Promise.resolve(null)
+    ]);
+
+    if (facSnap.empty) {
       container.innerHTML = `<p style="color:var(--light-text)">No facilities have been added yet.</p>`;
       return;
     }
-    container.innerHTML = snap.docs.map(d => renderFacility({ id: d.id, ...d.data() })).join("");
+
+    const shedCodes = {};
+    if (codesSnap) codesSnap.docs.forEach(d => { shedCodes[d.id] = d.data().shedCode || ""; });
+
+    container.innerHTML = facSnap.docs
+      .map(d => renderFacility({ id: d.id, ...d.data(), shedCode: shedCodes[d.id] || "" }))
+      .join("");
   } catch (e) {
     container.innerHTML = `<p style="color:#ffb4b4">Error loading facilities: ${esc(e.message)}</p>`;
     console.error(e);
