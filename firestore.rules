@@ -15,6 +15,11 @@ service cloud.firestore {
         get(/databases/$(database)/documents/umpires/$(request.auth.uid)).data.approved == true;
     }
 
+    function isSuperAdmin() {
+      return isAdmin() &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.superAdmin == true;
+    }
+
     // Games: anyone can read; only admins can create/delete;
     // approved umpires can update umpireSlots on non-cancelled games (claim/cancel slots)
     match /games/{gameId} {
@@ -68,10 +73,10 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
-    // Facilities: public read (used on coach request form); only admins can write
+    // Facilities: public read; only super admins can write
     match /facilities/{facilityId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSuperAdmin();
     }
 
     // Field issue reports: any approved umpire can submit; only admins can update/delete

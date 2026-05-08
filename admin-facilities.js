@@ -1,6 +1,6 @@
 // admin-facilities.js — Facilities CRUD with per-facility fields management
 import { db } from "./firebase.js";
-import { authReadyPromise, isAdmin } from "./auth.js";
+import { authReadyPromise, isAdmin, isSuperAdmin } from "./auth.js";
 import {
   collection,
   getDocs,
@@ -445,12 +445,12 @@ function renderFacilityCard(id, data) {
           ${data.notes ? `<div style="font-size:0.85rem;color:var(--light-text);margin-top:6px">${esc(data.notes)}</div>` : ""}
           ${issuesBanner(data.activeIssues)}
         </div>
-        <div style="display:flex;gap:6px;flex-shrink:0">
+        ${isSuperAdmin() ? `<div style="display:flex;gap:6px;flex-shrink:0">
           <button class="btn print-btn edit-facility-btn" data-facility-id="${esc(id)}"
             style="font-size:0.82rem;padding:5px 12px">Edit</button>
           <button class="btn delete-facility-btn" data-facility-id="${esc(id)}"
             style="font-size:0.82rem;padding:5px 12px;background:#5a1a1a">Delete</button>
-        </div>
+        </div>` : ""}
       </div>
 
       <!-- Edit facility inline form (hidden) -->
@@ -1028,6 +1028,12 @@ authReadyPromise.then(() => {
   }
   document.getElementById("adminContent").style.display = "";
   document.getElementById("noAccess").style.display = "none";
+
+  // Only super admins can add/edit/delete facilities
+  if (!isSuperAdmin()) {
+    const addBtn = document.getElementById("showAddFacilityBtn");
+    if (addBtn) addBtn.style.display = "none";
+  }
 
   loadFacilities();
   loadFieldIssues();
