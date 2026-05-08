@@ -73,10 +73,10 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
-    // Facilities: public read; only super admins can write
+    // Facilities: public read; admins can write
     match /facilities/{facilityId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow write: if isAdmin();
     }
 
     // Field issue reports: any approved umpire can submit; only admins can update/delete
