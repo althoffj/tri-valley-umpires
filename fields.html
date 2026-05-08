@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#601929">
   <title>Field Information - Tri-Valley Baseball Umpires</title>
   <link rel="stylesheet" href="styles.css?v=8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://www.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://www.google.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com;">
 </head>
 <body>
   <div class="header">
@@ -22,23 +22,22 @@
     <a href="rule_breakdown.html">Rules</a>
     <a href="pregame-meeting.html">Plate Meeting</a>
     <a href="schedule.html">Schedule &amp; Signups</a>
-    <a href="fields.html" data-auth-approved style="display:none">Fields</a>
+    <a href="fields.html">Fields</a>
     <a href="availability.html" data-auth-approved style="display:none">Availability</a>
     <a href="incident.html" data-auth-approved style="display:none">Incident Report</a>
     <a href="earnings.html" data-auth-approved style="display:none">My Earnings</a>
-      <a href="field-issues.html" data-auth-approved style="display:none">Field Issues</a>
-      <a href="form.html" data-auth-guest>Acknowledgment</a>
+    <a href="field-issues.html" data-auth-approved style="display:none">Field Issues</a>
+    <a href="form.html" data-auth-guest>Acknowledgment</a>
     <a href="request-umpire.html">Request Umpire</a>
   </nav>
 
-  <!-- Shown only to approved umpires and admins -->
-  <div class="container" data-auth-approved style="display:none">
+  <div class="container">
 
     <div id="facilitiesContent">
       <p style="color:var(--light-text)">Loading facilities…</p>
     </div>
 
-    <!-- ── General Notes ─────────────────────────────────────────── -->
+    <!-- ── General Notes ─────────────────────────────────────── -->
     <h2 style="margin-top:48px">General Notes</h2>
     <ul>
       <li><strong>Arrive 20–30 minutes early</strong> to set up bases and check field conditions before the coaches' plate meeting.</li>
@@ -46,13 +45,6 @@
       <li>Equipment bags (bases, lineup cards) are typically stored in the concession stand or scorer's booth.</li>
     </ul>
 
-  </div>
-
-  <!-- Fallback for guests / pending users -->
-  <div class="container" data-auth-guest>
-    <div class="document-note">
-      <p>Field information is only available to approved umpires. <a href="form.html">Register here</a> or sign in via the <strong>☰ menu</strong> (top right).</p>
-    </div>
   </div>
 
   <div class="footer">

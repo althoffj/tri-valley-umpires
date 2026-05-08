@@ -1,6 +1,5 @@
 // fields.js — Dynamic facility/field info loaded from Firestore
 import { db } from "./firebase.js";
-import { authReadyPromise } from "./auth.js";
 import {
   collection,
   getDocs,
@@ -173,4 +172,4 @@ async function loadFacilities() {
   }
 }
 
-authReadyPromise.then(loadFacilities);
+loadFacilities();
