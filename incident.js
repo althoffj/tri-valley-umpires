@@ -1,5 +1,5 @@
 // incident.js — submit incident reports against games the umpire worked
-import { db } from "./firebase.js";
+import { app, db } from "./firebase.js";
 import {
   authReadyPromise,
   isApproved,
@@ -15,6 +15,15 @@ import {
   orderBy,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+// Storage is initialized here only — not in the shared firebase.js
+const storage = getStorage(app);
 
 function esc(v) {
   return String(v ?? "")
@@ -50,7 +59,7 @@ function clearErrors() {
     "gameSelectError", "incidentTypeError", "descriptionError",
     "ejectedRoleError", "ejectionReasonError",
     "injuredPartyError", "injuryDescriptionError",
-    "conditionTypeError"
+    "conditionTypeError", "photosError"
   ].forEach(id => fieldError(id, ""));
 }
 
@@ -60,6 +69,38 @@ function updateTypeFields(type) {
   document.getElementById("ejectionFields").style.display = type === "Ejection"          ? "" : "none";
   document.getElementById("injuryFields").style.display   = type === "Injury"             ? "" : "none";
   document.getElementById("unsafeFields").style.display   = type === "Unsafe Conditions"  ? "" : "none";
+}
+
+// ── Photo preview ─────────────────────────────────────────────────────────────
+
+function updatePhotoPreview(files) {
+  const preview = document.getElementById("photoPreview");
+  if (!preview) return;
+  preview.innerHTML = "";
+  [...files].slice(0, 3).forEach(file => {
+    const url = URL.createObjectURL(file);
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = file.name;
+    img.style.cssText = "width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #555";
+    img.onload = () => URL.revokeObjectURL(url);
+    preview.appendChild(img);
+  });
+}
+
+// ── Upload photos to Firebase Storage ────────────────────────────────────────
+
+async function uploadPhotos(files, uid) {
+  if (!files || files.length === 0) return [];
+  const timestamp = Date.now();
+  const uploads = [...files].slice(0, 3).map(async (file, i) => {
+    const ext      = file.name.split(".").pop() || "jpg";
+    const path     = `incidentPhotos/${uid}/${timestamp}_${i}.${ext}`;
+    const fileRef  = ref(storage, path);
+    await uploadBytes(fileRef, file);
+    return getDownloadURL(fileRef);
+  });
+  return Promise.all(uploads);
 }
 
 // ── Load games the umpire has worked ─────────────────────────────────────────
@@ -114,21 +155,29 @@ async function handleSubmit(e) {
   const gameSelect   = document.getElementById("gameSelect");
   const incidentType = document.getElementById("incidentType");
   const description  = document.getElementById("description");
+  const photoInput   = document.getElementById("incidentPhotos");
   const type         = incidentType.value;
+  const files        = photoInput?.files ?? [];
 
   let valid = true;
   if (!gameSelect.value)         { fieldError("gameSelectError",   "Please select a game.");           valid = false; }
   if (!type)                     { fieldError("incidentTypeError", "Please select an incident type."); valid = false; }
   if (!description.value.trim()) { fieldError("descriptionError",  "Please describe the incident.");   valid = false; }
 
+  // Photo count validation
+  if (files.length > 3) {
+    fieldError("photosError", "Maximum 3 photos allowed. Please remove some.");
+    valid = false;
+  }
+
   // Type-specific validation
   if (type === "Ejection") {
-    if (!val("ejectedRole"))    { fieldError("ejectedRoleError",    "Please select the role.");          valid = false; }
+    if (!val("ejectedRole"))    { fieldError("ejectedRoleError",    "Please select the role.");           valid = false; }
     if (!val("ejectionReason")) { fieldError("ejectionReasonError", "Please enter the ejection reason."); valid = false; }
   }
   if (type === "Injury") {
-    if (!val("injuredParty"))       { fieldError("injuredPartyError",       "Please select who was injured."); valid = false; }
-    if (!val("injuryDescription"))  { fieldError("injuryDescriptionError",  "Please describe the injury.");    valid = false; }
+    if (!val("injuredParty"))      { fieldError("injuredPartyError",      "Please select who was injured."); valid = false; }
+    if (!val("injuryDescription")) { fieldError("injuryDescriptionError", "Please describe the injury.");    valid = false; }
   }
   if (type === "Unsafe Conditions") {
     if (!val("conditionType")) { fieldError("conditionTypeError", "Please describe the unsafe condition."); valid = false; }
@@ -142,7 +191,22 @@ async function handleSubmit(e) {
 
   const btn = document.getElementById("submitIncidentBtn");
   btn.disabled = true;
-  setMsg("Submitting…", "info");
+
+  // Upload photos first (if any)
+  let photoUrls = [];
+  if (files.length > 0) {
+    setMsg(`Uploading ${files.length} photo${files.length > 1 ? "s" : ""}…`, "info");
+    try {
+      photoUrls = await uploadPhotos(files, user.uid);
+    } catch (err) {
+      console.error("Photo upload failed:", err);
+      setMsg("Photo upload failed. Please try again or remove the photos.", "error");
+      btn.disabled = false;
+      return;
+    }
+  }
+
+  setMsg("Submitting report…", "info");
 
   // Build base report
   const report = {
@@ -159,6 +223,8 @@ async function handleSubmit(e) {
       : user.email,
     submittedAt: serverTimestamp()
   };
+
+  if (photoUrls.length > 0) report.photoUrls = photoUrls;
 
   // Attach type-specific structured fields
   if (type === "Ejection") {
@@ -180,8 +246,8 @@ async function handleSubmit(e) {
   }
   if (type === "Unsafe Conditions") {
     report.unsafeConditions = {
-      conditionType:  val("conditionType"),
-      gameStatus:     document.getElementById("gameSuspended")?.value || "Continued"
+      conditionType: val("conditionType"),
+      gameStatus:    document.getElementById("gameSuspended")?.value || "Continued"
     };
   }
 
@@ -189,6 +255,7 @@ async function handleSubmit(e) {
     await addDoc(collection(db, "incidentReports"), report);
     setMsg("Report submitted. An administrator will review it.", "success");
     document.getElementById("incidentForm").reset();
+    document.getElementById("photoPreview").innerHTML = "";
     updateTypeFields("");
     await loadMyGames();
   } catch (err) {
@@ -203,10 +270,26 @@ async function handleSubmit(e) {
 async function init() {
   await authReadyPromise;
   if (!isApproved()) return;
+
+  // Show contextual back link
+  if (isAdmin()) {
+    document.getElementById("backToIncidents")?.style.setProperty("display", "");
+    document.getElementById("backToSchedule")?.style.setProperty("display", "none");
+  }
+
   await loadMyGames();
 
   document.getElementById("incidentType")?.addEventListener("change", function () {
     updateTypeFields(this.value);
+  });
+
+  document.getElementById("incidentPhotos")?.addEventListener("change", function () {
+    if (this.files.length > 3) {
+      fieldError("photosError", "Maximum 3 photos. Please remove some.");
+    } else {
+      fieldError("photosError", "");
+    }
+    updatePhotoPreview(this.files);
   });
 
   document.getElementById("incidentForm")?.addEventListener("submit", handleSubmit);

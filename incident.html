@@ -6,8 +6,8 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Incident Report - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=9" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+  <link rel="stylesheet" href="styles.css?v=11" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io https://firebasestorage.googleapis.com blob:; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com https://firebasestorage.googleapis.com;">
 </head>
 <body>
   <div class="header">
@@ -21,7 +21,8 @@
   <div class="form-container" data-auth-approved style="display:none">
 
     <div class="page-actions">
-      <a href="schedule.html" class="back-btn">Back to Schedule</a>
+      <a href="admin-incidents.html" class="back-btn" id="backToIncidents" style="display:none">Back to Incidents</a>
+      <a href="schedule.html" class="back-btn" id="backToSchedule">Back to Schedule</a>
     </div>
 
     <h1>Submit an Incident Report</h1>
@@ -141,6 +142,12 @@
         placeholder="Describe what happened, the sequence of events, and any actions you took…"></textarea>
       <p class="field-error" id="descriptionError"></p>
 
+      <label for="incidentPhotos">Photos <span style="font-weight:normal;color:var(--light-text)">(optional — up to 3 images, 10 MB each)</span></label>
+      <input type="file" id="incidentPhotos" accept="image/*" multiple
+        style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box" />
+      <div id="photoPreview" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"></div>
+      <p class="field-error" id="photosError"></p>
+
       <p id="incidentMessage" class="signup-message" aria-live="polite" style="margin-top:16px"></p>
 
       <div class="page-actions" style="margin-top:8px">
@@ -170,8 +177,8 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=13"></script>
-  <script type="module" src="incident.js?v=8"></script>
+  <script type="module" src="auth.js?v=14"></script>
+  <script type="module" src="incident.js?v=9"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=2"></script>
   <script type="module" src="nav.js?v=1"></script>

@@ -77,12 +77,21 @@ function renderAgenda(games, uid, approved) {
   listEl.innerHTML = games.map(g => {
     const slots = g.umpireSlots ?? [];
     const dateLabel = g.date === today ? "Today" : fmtDate(g.date);
-    const teams = [g.homeTeam, g.awayTeam].filter(Boolean).join(" vs ");
+    const teams = (g.homeTeam && g.awayTeam)
+      ? (g.isAway ? `${g.awayTeam} @ ${g.homeTeam}` : `${g.homeTeam} vs ${g.awayTeam}`)
+      : (g.homeTeam || g.awayTeam || "");
     const accent = uid && slots.some(s => s.assignedUid === uid) ? "#b8f2c4" : "var(--accent)";
 
     const slotRows = slots.map(s => {
       const cls = s.type === "Plate" ? "plate" : s.type === "Field" ? "field" : "extra";
       const badge = `<span class="badge badge-${cls}">${s.type}</span>`;
+      // Never expose umpire names or pay rates to guests / unapproved viewers
+      if (!approved) {
+        const status = s.assignedUid
+          ? `<span style="color:#b8f2c4;font-size:0.85rem">Assigned</span>`
+          : `<span style="color:#ffcc80;font-size:0.82rem">Open</span>`;
+        return `<div>${badge} ${status}</div>`;
+      }
       const pay = s.payRate != null ? ` <span style="color:var(--light-text);font-size:0.75rem">$${Number(s.payRate).toFixed(0)}</span>` : "";
       const isMe = uid && s.assignedUid === uid;
       if (s.assignedName) {
@@ -94,7 +103,7 @@ function renderAgenda(games, uid, approved) {
     return `<div style="border-left:3px solid ${accent};padding:8px 0 8px 10px;margin-bottom:10px">
       <div style="font-size:0.78rem;color:var(--light-text)">${dateLabel}${g.time ? " · " + fmtTime(g.time) : ""}</div>
       <div style="font-weight:bold;color:white;font-size:0.9rem">${g.city ?? ""} ${g.division ?? ""}</div>
-      ${teams ? `<div style="font-size:0.82rem;color:var(--light-text)">${teams}</div>` : ""}
+      ${teams ? `<div style="font-size:0.82rem;color:var(--light-text)">${g.isAway ? '<span style="font-size:0.7rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px">AWAY</span>' : ""}${teams}</div>` : ""}
       ${g.field ? `<div style="font-size:0.8rem;color:var(--light-text)">${g.field}</div>` : ""}
       <div style="margin-top:5px;font-size:0.85rem">${slotRows || '<span style="color:var(--light-text);font-size:0.82rem">No umpire slots</span>'}</div>
     </div>`;
