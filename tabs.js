@@ -4,10 +4,9 @@ import { authReadyPromise, isApproved, isAdmin } from "./auth.js";
 const activePage = (() => {
   const page = window.location.pathname.split("/").pop() || "index.html";
   if (page.startsWith("admin")) return "admin";
-  if (page === "schedule.html")  return "schedule";
-  if (page === "fields.html")    return "fields";
-  if (page === "availability.html") return "availability";
-  if (page === "incident.html" || page === "field-issues.html") return "reports";
+  if (["schedule.html", "calendar.html", "availability.html"].includes(page)) return "games";
+  if (["fields.html", "field-issues.html"].includes(page)) return "fields";
+  if (["incident.html", "field-issues.html"].includes(page)) return "reports";
   return "home";
 })();
 
@@ -22,8 +21,8 @@ function injectTabBar() {
   bar.className = "mobile-tabs";
   bar.setAttribute("aria-label", "Mobile navigation");
   bar.innerHTML = `
-    ${a("mt-home",     "index.html",    "Home",     activePage === "home")}
-    ${a("mt-schedule", "schedule.html", "Schedule", activePage === "schedule")}
+    ${a("mt-home",  "index.html",    "Home",  activePage === "home")}
+    ${a("mt-games", "schedule.html", "Games", activePage === "games")}
     <a href="fields.html"   class="mobile-tab${activePage === "fields"   ? " active" : ""}" id="mt-fields"   style="display:none"><span>Fields</span></a>
     <a href="incident.html" class="mobile-tab${activePage === "reports"  ? " active" : ""}" id="mt-reports"  style="display:none"><span>Reports</span></a>
     <a href="admin.html"    class="mobile-tab${activePage === "admin"    ? " active" : ""}" id="mt-admin"    style="display:none"><span>Admin</span></a>

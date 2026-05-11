@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Training - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=9" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Training Resources</h1>
+  </div>
+
+  <nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <div class="container">
+    <h2>Umpire Training</h2>
+    <p style="color:var(--light-text);margin-bottom:28px">
+      Everything you need to prepare for the season. Review all materials before your first game.
+    </p>
+
+    <div class="training-grid">
+
+      <a href="expectations.html" class="training-card">
+        <div class="training-card-icon">📋</div>
+        <div class="training-card-body">
+          <h3>Expectations &amp; Responsibilities</h3>
+          <p>Official umpire contract — conduct, preparation, compensation, and accountability standards.</p>
+          <span class="training-card-link">Read document →</span>
+        </div>
+      </a>
+
+      <a href="principles_of_umpiring.html" class="training-card">
+        <div class="training-card-icon">⚖️</div>
+        <div class="training-card-body">
+          <h3>Principles of Umpiring</h3>
+          <p>Core mechanics, positioning, and judgment principles for calling a consistent game.</p>
+          <span class="training-card-link">Read document →</span>
+        </div>
+      </a>
+
+      <a href="rule_breakdown.html" class="training-card">
+        <div class="training-card-icon">📖</div>
+        <div class="training-card-body">
+          <h3>Rule Breakdown</h3>
+          <p>Key rules and local league modifications you need to know before stepping on the field.</p>
+          <span class="training-card-link">Read document →</span>
+        </div>
+      </a>
+
+      <a href="pregame-meeting.html" class="training-card">
+        <div class="training-card-icon">🤝</div>
+        <div class="training-card-body">
+          <h3>Plate Meeting Guide</h3>
+          <p>Step-by-step walkthrough of the pregame plate meeting with coaches from both teams.</p>
+          <span class="training-card-link">Read document →</span>
+        </div>
+      </a>
+
+    </div>
+
+    <div class="document-note" style="margin-top:36px">
+      <p>
+        <strong>New umpire?</strong> Complete the <a href="form.html">acknowledgment form</a> to confirm you've reviewed all training materials. Your account will be approved once the form is on file.
+      </p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      <a href="https://www.trivalleyball.com" target="_blank">Tri-Valley Baseball Association</a>
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+      | <a href="https://www.minndak.org/" target="_blank">Minndak Baseball League</a>
+      | Official Umpire Portal
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=9"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=2"></script>
+  <script type="module" src="nav.js?v=1"></script>
+</body>
+</html>

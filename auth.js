@@ -164,6 +164,8 @@ export function applyAuthGate() {
 
   // Sync hamburger dropdown to new auth state
   updateDropdownState();
+  // Signal nav.js (and any other listeners) that auth state has changed
+  document.dispatchEvent(new CustomEvent("tvbu:authchanged"));
 }
 
 // ── Auth dropdown ─────────────────────────────────────────────────────────────
@@ -249,6 +251,9 @@ function updateDropdownState() {
     // Show Admin Panel link only for admins
     const adminLink = document.getElementById("hmAdminLink");
     if (adminLink) adminLink.style.display = isAdmin() ? "" : "none";
+    // Show My Earnings link for approved umpires and admins
+    const earningsLink = document.getElementById("hmEarningsLink");
+    if (earningsLink) earningsLink.style.display = (isApproved() || isAdmin()) ? "" : "none";
     // Show Calendar link for approved umpires and admins
     const calLink = document.getElementById("hmCalendarLink");
     if (calLink) calLink.style.display = (isApproved() || isAdmin()) ? "" : "none";
@@ -256,6 +261,8 @@ function updateDropdownState() {
     showView("authLoginView");
     const adminLink = document.getElementById("hmAdminLink");
     if (adminLink) adminLink.style.display = "none";
+    const earningsLink = document.getElementById("hmEarningsLink");
+    if (earningsLink) earningsLink.style.display = "none";
     const calLink = document.getElementById("hmCalendarLink");
     if (calLink) calLink.style.display = "none";
   }
@@ -343,6 +350,7 @@ function initAuthUI() {
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <a id="hmAdminLink" href="admin.html" class="btn print-btn" style="width:100%;display:none;text-align:center">Admin Panel</a>
+          <a id="hmEarningsLink" href="earnings.html" class="btn print-btn" style="width:100%;display:none;text-align:center">My Earnings</a>
           <a id="hmCalendarLink" href="calendar.html" class="btn print-btn" style="width:100%;display:none;text-align:center">Calendar</a>
           <button type="button" class="btn print-btn" id="hmInstallBtn" style="width:100%;display:none">Install App</button>
           <div id="hmIOSInstallMsg" style="display:none;font-size:0.82rem;color:#ccc;padding:8px 10px;background:rgba(255,255,255,0.07);border-radius:8px;line-height:1.5;text-align:center">
