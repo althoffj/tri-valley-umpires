@@ -45,10 +45,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Admins collection: own doc self-read (breaks circular dependency); write = admin
+    // Admins collection: own doc self-read (breaks circular dependency)
+    // write requires super-admin for creating/deleting admins; regular admins can update their own doc
     match /admins/{uid} {
-      allow read:  if request.auth.uid == uid || isAdmin();
-      allow write: if isAdmin();
+      allow read:   if request.auth.uid == uid || isAdmin();
+      allow create, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin() || (isAdmin() && request.auth.uid == uid);
     }
 
     // FCM notification tokens: own doc only

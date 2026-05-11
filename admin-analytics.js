@@ -1,6 +1,6 @@
 import { db }                        from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
-import { collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, getDocs, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 async function init() {
   await authReadyPromise;
@@ -12,7 +12,7 @@ async function init() {
   document.getElementById("adminContent").style.display = "block";
 
   const [gamesSnap, umpiresSnap] = await Promise.all([
-    getDocs(query(collection(db, "games"), orderBy("date", "asc"))),
+    getDocs(query(collection(db, "games"), where("needsUmpires", "==", true), orderBy("date", "asc"))),
     getDocs(collection(db, "umpires"))
   ]);
 
