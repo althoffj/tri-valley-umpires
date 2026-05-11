@@ -1422,6 +1422,10 @@ th {
   border-bottom: 3px solid var(--accent);
 }
 
+nav > a.active {
+  border-bottom: 3px solid var(--accent);
+}
+
 .nav-trigger .nav-caret {
   font-size: 0.65em;
   opacity: 0.7;
