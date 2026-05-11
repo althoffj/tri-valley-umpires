@@ -433,29 +433,61 @@ exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
   const div     = after?.division ?? before?.division ?? "";
   const channel = /10U/i.test(div) ? hooks.ch10u : /12U/i.test(div) ? hooks.ch12u : null;
 
-  let msg = null;
+  // ── 1. Structural game changes → jeff + channel ──────────────────────────────
+  let broadcastMsg = null;
+
   if (!before && after) {
-    msg = `🆕 New game added: ${gameLabel(after)}`;
+    broadcastMsg = `🆕 New game added: ${gameLabel(after)}`;
   } else if (before && !after) {
-    msg = `🗑️ Game deleted: ${gameLabel(before)}`;
+    broadcastMsg = `🗑️ Game deleted: ${gameLabel(before)}`;
   } else if (before && after) {
     if (!before.cancelled && after.cancelled) {
-      msg = `❌ Game cancelled: ${gameLabel(after)}`;
+      broadcastMsg = `❌ Game cancelled: ${gameLabel(after)}`;
     } else if (before.cancelled && !after.cancelled) {
-      msg = `✅ Game reinstated: ${gameLabel(after)}`;
+      broadcastMsg = `✅ Game reinstated: ${gameLabel(after)}`;
     } else {
-      // Only notify on field changes meaningful to umpires
       const changed = ["date","time","field","city","division"].some(k => before[k] !== after[k]);
-      if (changed) msg = `✏️ Game updated: ${gameLabel(after)}`;
+      if (changed) broadcastMsg = `✏️ Game updated: ${gameLabel(after)}`;
     }
   }
 
-  if (!msg) return;
+  // ── 2. Slot assignment changes → jeff only ───────────────────────────────────
+  let jeffMsg = null;
 
-  await Promise.allSettled([
-    hooks.jeff  ? postSlack(hooks.jeff,  msg) : null,
-    channel     ? postSlack(channel,     msg) : null
-  ].filter(Boolean));
+  if (before && after && !after.cancelled) {
+    const beforeSlots = before.umpireSlots || [];
+    const afterSlots  = after.umpireSlots  || [];
+    const signups  = [];
+    const cancels  = [];
+
+    for (let i = 0; i < afterSlots.length; i++) {
+      const b = beforeSlots[i] || {};
+      const a = afterSlots[i];
+      if (!b.assignedUid && a.assignedUid) {
+        signups.push(`${a.type}: ${a.assignedName || a.assignedUid}`);
+      } else if (b.assignedUid && !a.assignedUid) {
+        cancels.push(`${b.type}: ${b.assignedName || b.assignedUid}`);
+      }
+    }
+
+    if (signups.length) {
+      jeffMsg = `📋 Signed up — ${signups.join(", ")} · ${gameLabel(after)}`;
+    } else if (cancels.length) {
+      jeffMsg = `↩️ Cancelled — ${cancels.join(", ")} · ${gameLabel(after)}`;
+    }
+  }
+
+  // ── Send notifications ───────────────────────────────────────────────────────
+  const sends = [];
+  if (broadcastMsg) {
+    if (hooks.jeff)  sends.push(postSlack(hooks.jeff,  broadcastMsg));
+    if (channel)     sends.push(postSlack(channel,     broadcastMsg));
+  }
+  if (jeffMsg && hooks.jeff) {
+    sends.push(postSlack(hooks.jeff, jeffMsg));
+  }
+
+  if (sends.length) await Promise.allSettled(sends);
 });
 
 // ── FCM broadcast ─────────────────────────────────────────────────────────────
@@ -498,7 +530,7 @@ exports.sendBroadcast = onCall({ cors: CORS }, async request => {
 
 // ── Phase 12: day-of reminders at 7 AM ───────────────────────────────────────
 
-exports.sendDayOfReminders = onSchedule("every day 07:00", async () => {
+exports.sendDayOfReminders = onSchedule("0 7 * * *", async () => {
   const db    = getFirestore();
   const hooks = await getSlackWebhooks(db);
   if (!hooks.jeff && !hooks.ch10u && !hooks.ch12u) return;
