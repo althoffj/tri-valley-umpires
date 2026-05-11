@@ -550,6 +550,64 @@ exports.onIncidentReport = onDocumentWritten("incidentReports/{reportId}", async
   await postSlack(hooks.jeff, msg).catch(() => {});
 });
 
+// ── Notify umpires about open slots ──────────────────────────────────────────
+
+exports.notifyOpenSlots = onCall({ cors: ["https://tri-valley-baseball-umpires.web.app", "https://tri-valley-baseball-umpires.firebaseapp.com"] }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in.");
+  const db       = getFirestore();
+  const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { gameId } = request.data || {};
+  if (!gameId) throw new HttpsError("invalid-argument", "gameId required.");
+
+  const gameSnap = await db.doc(`games/${gameId}`).get();
+  if (!gameSnap.exists) throw new HttpsError("not-found", "Game not found.");
+  const game = gameSnap.data();
+  if (game.cancelled) throw new HttpsError("failed-precondition", "Game is cancelled.");
+
+  const open = (game.umpireSlots || []).filter(s => !s.assignedUid);
+  if (open.length === 0) throw new HttpsError("failed-precondition", "No open slots.");
+
+  const slotTypes = open.map(s => s.type).join(", ");
+  const label     = gameLabel(game);
+  const msg       = `⚾ Umpires needed — ${slotTypes} slot${open.length !== 1 ? "s" : ""} open · ${label}\n${game.notes ? "📋 " + game.notes + "\n" : ""}Sign up: https://tri-valley-baseball-umpires.web.app/schedule.html`;
+
+  const hooks = await getSlackWebhooks(db);
+  const div   = game.division ?? "";
+  const channel = /10U/i.test(div) ? hooks.ch10u : /12U/i.test(div) ? hooks.ch12u : null;
+
+  const sends = [];
+  if (hooks.jeff)  sends.push(postSlack(hooks.jeff,  msg));
+  if (channel)     sends.push(postSlack(channel,     msg));
+  if (sends.length) await Promise.allSettled(sends);
+
+  // Push notification to all registered tokens
+  const tokensSnap = await db.collection("notifications").get();
+  const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
+  let pushed = 0;
+  if (tokens.length > 0) {
+    const pushMsg  = `${slotTypes} slot${open.length !== 1 ? "s" : ""} open · ${fmtDateSlack(game.date)} ${game.city ?? ""} ${game.division ?? ""}`;
+    const result   = await getMessaging().sendEachForMulticast({
+      tokens,
+      notification: { title: "⚾ Umpires needed", body: pushMsg },
+      webpush: { fcmOptions: { link: "https://tri-valley-baseball-umpires.web.app/schedule.html" } }
+    });
+    pushed = result.successCount;
+    // Clean up stale tokens
+    const stale = result.responses.map((r, i) => r.error ? tokens[i] : null).filter(Boolean);
+    if (stale.length > 0) {
+      const batch = db.batch();
+      for (const snap of tokensSnap.docs) {
+        if (stale.includes(snap.data().token)) batch.delete(snap.ref);
+      }
+      await batch.commit();
+    }
+  }
+
+  return { slacked: sends.length, pushed };
+});
+
 // ── FCM broadcast ─────────────────────────────────────────────────────────────
 
 const CORS = ["https://tri-valley-baseball-umpires.web.app", "https://tri-valley-baseball-umpires.firebaseapp.com"];

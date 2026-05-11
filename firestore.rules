@@ -21,12 +21,14 @@ service cloud.firestore {
     }
 
     // Games: anyone can read; only admins can create/delete;
-    // approved umpires can update umpireSlots on non-cancelled games (claim/cancel slots)
+    // approved umpires may update ONLY the umpireSlots field on non-cancelled games
     match /games/{gameId} {
       allow read: if true;
       allow create, delete: if isAdmin();
       allow update: if isAdmin() ||
-        (isApproved() && resource.data.cancelled == false);
+        (isApproved() &&
+         resource.data.cancelled == false &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['umpireSlots']));
     }
 
     // Umpires: own profile read/create; admin can read/update all

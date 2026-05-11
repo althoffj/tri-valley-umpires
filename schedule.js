@@ -327,6 +327,9 @@ async function renderGameDayBar() {
     const shedHtml    = checkedIn && shedCode
       ? `<div class="game-day-shed-code">🔑 Shed Code: <span>${esc(shedCode)}</span></div>`
       : "";
+    const gameNotes   = game.notes
+      ? `<div style="margin:6px 0;padding:5px 10px;background:rgba(255,224,102,0.1);border-left:3px solid #ffe066;border-radius:0 4px 4px 0;font-size:0.85rem;color:#ffe066">📋 ${esc(game.notes)}</div>`
+      : "";
 
     return `
     <div class="game-day-card" data-game-id="${esc(game.id)}">
@@ -337,6 +340,7 @@ async function renderGameDayBar() {
         &mdash; ${esc(game.field || "")} &mdash; ${esc(game.time || "TBD")}
       </div>
       ${wxHtml}
+      ${gameNotes}
       ${shedHtml}
       <div class="game-day-actions">
         <a href="${esc(mapsUrl)}" class="btn" target="_blank" rel="noopener">Directions</a>
@@ -592,10 +596,12 @@ async function openModal(gameId, slotType) {
   const pay = slotPay ? `$${Number(slotPay).toFixed(2)}` : "TBD";
   const teams = (game.homeTeam && game.awayTeam)
     ? `${esc(game.homeTeam)} vs ${esc(game.awayTeam)}<br>` : "";
+  const notesHtml = game.notes
+    ? `<div style="margin-top:8px;padding:6px 10px;background:rgba(255,224,102,0.1);border-left:3px solid #ffe066;border-radius:0 4px 4px 0;font-size:0.88rem;color:#ffe066">📋 ${esc(game.notes)}</div>` : "";
   document.getElementById("modalGameDetail").innerHTML =
     `<strong>${esc(game.city)}</strong> &mdash; ${esc(game.division)} ${typeBadge(slotType)}<br>
      ${teams}${esc(fmtDate(game.date))} at ${esc(game.time || "TBD")} &mdash; ${esc(game.field || "TBD")}<br>
-     Pay rate: <strong>${pay}</strong>`;
+     Pay rate: <strong>${pay}</strong>${notesHtml}`;
 
   const msgEl = document.getElementById("signupMessage");
   msgEl.textContent = "";

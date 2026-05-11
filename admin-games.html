@@ -288,6 +288,15 @@
       <label>Umpire Slots &amp; Pay</label>
       <div id="editSlotPays" style="margin-top:8px;margin-bottom:16px"></div>
 
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editGameNotes">Notes for umpires <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+          <textarea id="editGameNotes" rows="2"
+            placeholder="e.g. Park on north side. Field may be damp — wear cleats."
+            style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
+        </div>
+      </div>
+
       <div class="page-actions">
         <button type="button" class="btn" id="saveEditGameBtn">Save Changes</button>
         <button type="button" class="btn print-btn" id="cancelEditGameBtn">Cancel</button>
@@ -315,7 +324,7 @@
   </div>
 
   <script type="module" src="auth.js?v=10"></script>
-  <script type="module" src="admin-games.js?v=11"></script>
+  <script type="module" src="admin-games.js?v=12"></script>
   <script type="module" src="/pwa.js?v=2"></script>
   <script type="module" src="/tabs.js?v=3"></script>
   <script type="module" src="nav.js?v=2"></script>

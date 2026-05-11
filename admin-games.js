@@ -189,6 +189,15 @@ function renderAdminGames() {
       ? `<div style="color:#ffcc80;font-size:0.78rem;margin-top:4px">⚠ GameChanger event missing — verify with city</div>` : "";
     const linkedBadge = g.icsLinks?.length
       ? `<div style="color:var(--light-text);font-size:0.72rem;margin-top:2px">GC linked</div>` : "";
+    const notesHtml = g.notes
+      ? `<div style="color:#ffe066;font-size:0.78rem;margin-top:4px" title="Admin notes">📋 ${esc(g.notes)}</div>` : "";
+
+    // Show Notify button when game has open slots
+    const openSlotCount = !g.cancelled ? (g.umpireSlots || []).filter(s => !s.assignedUid).length : 0;
+    const notifyBtn = openSlotCount > 0
+      ? `<button class="btn print-btn notify-slots-btn" style="margin-bottom:4px;display:block;width:100%;font-size:0.8rem"
+           data-game-id="${esc(g.id)}">Notify (${openSlotCount} open)</button>`
+      : "";
 
     return `
     <tr style="${g.cancelled ? "opacity:0.55" : ""}${g.possibleChange ? ";background:rgba(255,204,0,0.06)" : ""}">
@@ -198,13 +207,14 @@ function renderAdminGames() {
       <td>${esc(g.division || "—")}</td>
       <td>${esc(g.type || "—")}</td>
       <td>${esc(g.field || "—")}${linkedBadge}</td>
-      <td>${g.cancelled ? '<span style="color:#ffb4b4">Cancelled</span>' : slotHtml}${changeWarning}</td>
+      <td>${g.cancelled ? '<span style="color:#ffb4b4">Cancelled</span>' : slotHtml}${changeWarning}${notesHtml}</td>
       <td style="white-space:nowrap;vertical-align:top">
         ${g.cancelled ? "" : `
           <button class="btn print-btn edit-game-btn" style="margin-bottom:4px;display:block;width:100%"
             data-game-id="${esc(g.id)}">Edit</button>
           <button class="btn print-btn cancel-game-btn" style="margin-bottom:4px;display:block;width:100%"
-            data-game-id="${esc(g.id)}">Cancel</button>`}
+            data-game-id="${esc(g.id)}">Cancel</button>
+          ${notifyBtn}`}
         <button class="btn delete-game-btn" style="display:block;width:100%;background:#5a1a1a"
           data-game-id="${esc(g.id)}">Delete</button>
       </td>
@@ -244,6 +254,26 @@ async function unassignSlot(gameId, slotType) {
   }
 }
 
+async function notifyOpenSlots(gameId) {
+  const game = allGames.find(g => g.id === gameId);
+  if (!game) return;
+  const open = (game.umpireSlots || []).filter(s => !s.assignedUid);
+  if (open.length === 0) { alert("No open slots on this game."); return; }
+  const slotTypes = open.map(s => s.type).join(", ");
+  const label = `${fmtDate(game.date)} at ${fmtTime(game.time)} — ${game.city || ""} ${game.division || ""}${game.field ? " · " + game.field : ""}`;
+  if (!confirm(`Send Slack + push notification to all umpires about open slots?\n\n${label}\nOpen: ${slotTypes}`)) return;
+
+  try {
+    const functions  = getFunctions(app, "us-central1");
+    const notifyFn   = httpsCallable(functions, "notifyOpenSlots");
+    await notifyFn({ gameId });
+    const btnEl = document.querySelector(`.notify-slots-btn[data-game-id="${gameId}"]`);
+    if (btnEl) { btnEl.textContent = "Notified ✓"; btnEl.disabled = true; }
+  } catch (err) {
+    alert("Notification failed: " + err.message);
+  }
+}
+
 async function deleteGame(gameId) {
   const game = allGames.find(g => g.id === gameId);
   if (!game) return;
@@ -270,6 +300,7 @@ function openEditModal(gameId) {
   document.getElementById("editGameType").value      = game.type || "Regular";
   document.getElementById("editHomeTeam").value      = game.homeTeam || "";
   document.getElementById("editAwayTeam").value      = game.awayTeam || "";
+  document.getElementById("editGameNotes").value     = game.notes || "";
 
   // Set facility select and trigger field cascade
   const editFacSel = document.getElementById("editGameFacility");
@@ -347,6 +378,7 @@ async function saveGameEdit() {
       awayTeam:   document.getElementById("editAwayTeam").value.trim(),
       facilityId: facilityId,
       needsUmpires: true,
+      notes:      document.getElementById("editGameNotes").value.trim(),
     };
 
     // Rebuild umpire slots from checkboxes + pay inputs
@@ -778,6 +810,9 @@ document.addEventListener("click", e => {
 
   const assignBtn = e.target.closest(".assign-btn");
   if (assignBtn) { openAssignModal(assignBtn.dataset.gameId, assignBtn.dataset.slotType); return; }
+
+  const notifyBtn = e.target.closest(".notify-slots-btn");
+  if (notifyBtn) { notifyOpenSlots(notifyBtn.dataset.gameId); return; }
 
   const syncTeamBtn = e.target.closest(".sync-team-btn");
   if (syncTeamBtn) {
