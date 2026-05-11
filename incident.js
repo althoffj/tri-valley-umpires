@@ -30,6 +30,8 @@ function fmtDate(dateISO) {
   return `${m}/${d}/${y}`;
 }
 
+function val(id) { return (document.getElementById(id)?.value || "").trim(); }
+
 function setMsg(text, type = "info") {
   const el = document.getElementById("incidentMessage");
   if (!el) return;
@@ -43,8 +45,23 @@ function fieldError(id, msg) {
 }
 
 function clearErrors() {
-  ["gameSelectError", "incidentTypeError", "descriptionError"].forEach(id => fieldError(id, ""));
+  [
+    "gameSelectError", "incidentTypeError", "descriptionError",
+    "ejectedRoleError", "ejectionReasonError",
+    "injuredPartyError", "injuryDescriptionError",
+    "conditionTypeError"
+  ].forEach(id => fieldError(id, ""));
 }
+
+// ── Show / hide type-specific sections ───────────────────────────────────────
+
+function updateTypeFields(type) {
+  document.getElementById("ejectionFields").style.display = type === "Ejection"          ? "" : "none";
+  document.getElementById("injuryFields").style.display   = type === "Injury"             ? "" : "none";
+  document.getElementById("unsafeFields").style.display   = type === "Unsafe Conditions"  ? "" : "none";
+}
+
+// ── Load games the umpire has worked ─────────────────────────────────────────
 
 async function loadMyGames() {
   const user = getCurrentUser();
@@ -86,19 +103,35 @@ async function loadMyGames() {
   }
 }
 
+// ── Submit ────────────────────────────────────────────────────────────────────
+
 async function handleSubmit(e) {
   e.preventDefault();
   clearErrors();
 
-  const gameSelect      = document.getElementById("gameSelect");
-  const incidentType    = document.getElementById("incidentType");
-  const description     = document.getElementById("description");
-  const involvedParties = document.getElementById("involvedParties");
+  const gameSelect   = document.getElementById("gameSelect");
+  const incidentType = document.getElementById("incidentType");
+  const description  = document.getElementById("description");
+  const type         = incidentType.value;
 
   let valid = true;
   if (!gameSelect.value)         { fieldError("gameSelectError",   "Please select a game.");           valid = false; }
-  if (!incidentType.value)       { fieldError("incidentTypeError", "Please select an incident type."); valid = false; }
+  if (!type)                     { fieldError("incidentTypeError", "Please select an incident type."); valid = false; }
   if (!description.value.trim()) { fieldError("descriptionError",  "Please describe the incident.");   valid = false; }
+
+  // Type-specific validation
+  if (type === "Ejection") {
+    if (!val("ejectedRole"))    { fieldError("ejectedRoleError",    "Please select the role.");          valid = false; }
+    if (!val("ejectionReason")) { fieldError("ejectionReasonError", "Please enter the ejection reason."); valid = false; }
+  }
+  if (type === "Injury") {
+    if (!val("injuredParty"))       { fieldError("injuredPartyError",       "Please select who was injured."); valid = false; }
+    if (!val("injuryDescription"))  { fieldError("injuryDescriptionError",  "Please describe the injury.");    valid = false; }
+  }
+  if (type === "Unsafe Conditions") {
+    if (!val("conditionType")) { fieldError("conditionTypeError", "Please describe the unsafe condition."); valid = false; }
+  }
+
   if (!valid) return;
 
   const user        = getCurrentUser();
@@ -109,24 +142,52 @@ async function handleSubmit(e) {
   btn.disabled = true;
   setMsg("Submitting…", "info");
 
-  try {
-    await addDoc(collection(db, "incidentReports"), {
-      gameId:          gameSelect.value,
-      gameDate:        selectedOpt.dataset.date     ?? "",
-      gameCity:        selectedOpt.dataset.city     ?? "",
-      gameDivision:    selectedOpt.dataset.division ?? "",
-      incidentType:    incidentType.value,
-      involvedParties: involvedParties.value.trim(),
-      description:     description.value.trim(),
-      reportedBy:      user.uid,
-      reporterName:    profile
-        ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
-        : user.email,
-      submittedAt: serverTimestamp()
-    });
+  // Build base report
+  const report = {
+    gameId:          gameSelect.value,
+    gameDate:        selectedOpt.dataset.date     ?? "",
+    gameCity:        selectedOpt.dataset.city     ?? "",
+    gameDivision:    selectedOpt.dataset.division ?? "",
+    incidentType:    type,
+    involvedParties: val("involvedParties"),
+    description:     description.value.trim(),
+    reportedBy:      user.uid,
+    reporterName:    profile
+      ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim() || (profile.name ?? user.email)
+      : user.email,
+    submittedAt: serverTimestamp()
+  };
 
+  // Attach type-specific structured fields
+  if (type === "Ejection") {
+    report.ejection = {
+      role:   val("ejectedRole"),
+      name:   val("ejectedName"),
+      team:   val("ejectedTeam"),
+      reason: val("ejectionReason")
+    };
+  }
+  if (type === "Injury") {
+    report.injury = {
+      party:       val("injuredParty"),
+      name:        val("injuredName"),
+      team:        val("injuredTeam"),
+      description: val("injuryDescription"),
+      emsCalled:   document.getElementById("emsCalled")?.value || "No"
+    };
+  }
+  if (type === "Unsafe Conditions") {
+    report.unsafeConditions = {
+      conditionType:  val("conditionType"),
+      gameStatus:     document.getElementById("gameSuspended")?.value || "Continued"
+    };
+  }
+
+  try {
+    await addDoc(collection(db, "incidentReports"), report);
     setMsg("Report submitted. An administrator will review it.", "success");
     document.getElementById("incidentForm").reset();
+    updateTypeFields("");
     await loadMyGames();
   } catch (err) {
     console.error(err);
@@ -135,10 +196,17 @@ async function handleSubmit(e) {
   }
 }
 
+// ── Init ──────────────────────────────────────────────────────────────────────
+
 async function init() {
   await authReadyPromise;
   if (!isApproved()) return;
   await loadMyGames();
+
+  document.getElementById("incidentType")?.addEventListener("change", function () {
+    updateTypeFields(this.value);
+  });
+
   document.getElementById("incidentForm")?.addEventListener("submit", handleSubmit);
 }
 

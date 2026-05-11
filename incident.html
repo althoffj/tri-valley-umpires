@@ -42,12 +42,94 @@
       <select id="incidentType" required style="width:100%;padding:14px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:16px;box-sizing:border-box">
         <option value="">-- Select type --</option>
         <option value="Ejection">Ejection</option>
+        <option value="Injury">Injury</option>
         <option value="Unsportsmanlike Conduct">Unsportsmanlike Conduct</option>
         <option value="Unsafe Conditions">Unsafe Conditions</option>
         <option value="Rule Dispute">Rule Dispute</option>
         <option value="Other">Other</option>
       </select>
       <p class="field-error" id="incidentTypeError"></p>
+
+      <!-- ── Ejection fields ─────────────────────────────────────── -->
+      <div id="ejectionFields" style="display:none">
+        <div style="background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.3);border-radius:8px;padding:16px;margin-bottom:16px">
+          <p style="font-weight:bold;color:#ff9999;margin:0 0 12px">Ejection Details</p>
+          <label for="ejectedRole">Role of Ejected Person *</label>
+          <select id="ejectedRole" style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box;margin-bottom:10px">
+            <option value="">-- Select --</option>
+            <option value="Player">Player</option>
+            <option value="Coach">Coach</option>
+            <option value="Manager">Manager</option>
+            <option value="Spectator">Spectator</option>
+          </select>
+          <p class="field-error" id="ejectedRoleError"></p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label for="ejectedName">Name (if known)</label>
+              <input type="text" id="ejectedName" placeholder="e.g. Coach Smith" style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box" />
+            </div>
+            <div>
+              <label for="ejectedTeam">Team</label>
+              <input type="text" id="ejectedTeam" placeholder="e.g. Crooks 12U" style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box" />
+            </div>
+          </div>
+          <div style="margin-top:10px">
+            <label for="ejectionReason">Reason for Ejection *</label>
+            <input type="text" id="ejectionReason" placeholder="e.g. Arguing balls/strikes, threatening language" style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box" />
+            <p class="field-error" id="ejectionReasonError"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Injury fields ───────────────────────────────────────── -->
+      <div id="injuryFields" style="display:none">
+        <div style="background:rgba(255,165,0,0.08);border:1px solid rgba(255,165,0,0.3);border-radius:8px;padding:16px;margin-bottom:16px">
+          <p style="font-weight:bold;color:#ffcc80;margin:0 0 12px">Injury Details</p>
+          <label for="injuredParty">Injured Person *</label>
+          <select id="injuredParty" style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box;margin-bottom:10px">
+            <option value="">-- Select --</option>
+            <option value="Player">Player</option>
+            <option value="Umpire">Umpire</option>
+            <option value="Coach">Coach</option>
+            <option value="Spectator">Spectator</option>
+          </select>
+          <p class="field-error" id="injuredPartyError"></p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div>
+              <label for="injuredName">Name (if known)</label>
+              <input type="text" id="injuredName" placeholder="e.g. Player #14" style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box" />
+            </div>
+            <div>
+              <label for="injuredTeam">Team / Role</label>
+              <input type="text" id="injuredTeam" placeholder="e.g. Colton 10U" style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box" />
+            </div>
+          </div>
+          <label for="injuryDescription">Injury Description *</label>
+          <input type="text" id="injuryDescription" placeholder="e.g. Hit by pitch, head contact; conscious" style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box;margin-bottom:10px" />
+          <p class="field-error" id="injuryDescriptionError"></p>
+          <label for="emsCalled">EMS / Medical Called?</label>
+          <select id="emsCalled" style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box">
+            <option value="No">No</option>
+            <option value="Yes">Yes</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- ── Unsafe Conditions fields ───────────────────────────── -->
+      <div id="unsafeFields" style="display:none">
+        <div style="background:rgba(255,220,0,0.07);border:1px solid rgba(255,220,0,0.3);border-radius:8px;padding:16px;margin-bottom:16px">
+          <p style="font-weight:bold;color:#ffe066;margin:0 0 12px">Unsafe Conditions Details</p>
+          <label for="conditionType">Type of Unsafe Condition *</label>
+          <input type="text" id="conditionType" placeholder="e.g. Lightning in area, wet/slippery field, equipment hazard" style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box;margin-bottom:10px" />
+          <p class="field-error" id="conditionTypeError"></p>
+          <label for="gameSuspended">Game Status</label>
+          <select id="gameSuspended" style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box">
+            <option value="Continued">Continued (conditions resolved)</option>
+            <option value="Suspended">Suspended temporarily</option>
+            <option value="Postponed">Postponed / called</option>
+          </select>
+        </div>
+      </div>
 
       <label for="involvedParties">Involved Parties</label>
       <input type="text" id="involvedParties" placeholder="e.g. Coach Smith (Crooks 12U), Player #14" />
@@ -89,7 +171,7 @@
   </div>
 
   <script type="module" src="auth.js?v=9"></script>
-  <script type="module" src="incident.js?v=6"></script>
+  <script type="module" src="incident.js?v=7"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=2"></script>
   <script type="module" src="nav.js?v=1"></script>

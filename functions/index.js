@@ -513,6 +513,43 @@ exports.onCancellationRequest = onDocumentWritten("cancellationRequests/{request
   await postSlack(hooks.jeff, msg).catch(() => {});
 });
 
+// ── Incident report notifications ────────────────────────────────────────────
+
+exports.onIncidentReport = onDocumentWritten("incidentReports/{reportId}", async event => {
+  // Only fire on new documents
+  if (event.data.before?.exists || !event.data.after?.exists) return;
+
+  const r   = event.data.after.data();
+  const db  = getFirestore();
+  const hooks = await getSlackWebhooks(db);
+  if (!hooks.jeff) return;
+
+  const gameLabel = [
+    r.gameDate ? fmtDateSlack(r.gameDate) : "",
+    r.gameCity,
+    r.gameDivision
+  ].filter(Boolean).join(" · ");
+
+  let details = "";
+  if (r.ejection) {
+    const ej = r.ejection;
+    details = `\nEjected: ${ej.role || "?"}${ej.name ? " — " + ej.name : ""}${ej.team ? " (" + ej.team + ")" : ""}`;
+    if (ej.reason) details += `\nReason: ${ej.reason}`;
+  } else if (r.injury) {
+    const inj = r.injury;
+    details = `\nInjured: ${inj.party || "?"}${inj.name ? " — " + inj.name : ""}`;
+    if (inj.description) details += ` · ${inj.description}`;
+    details += `\nEMS: ${inj.emsCalled || "No"}`;
+  } else if (r.unsafeConditions) {
+    const uc = r.unsafeConditions;
+    details = `\nCondition: ${uc.conditionType || "?"}`;
+    if (uc.gameStatus) details += ` · Game: ${uc.gameStatus}`;
+  }
+
+  const msg = `🚨 Incident Report — *${r.incidentType || "Incident"}* · ${r.reporterName || r.reportedBy}${gameLabel ? " · " + gameLabel : ""}${details}`;
+  await postSlack(hooks.jeff, msg).catch(() => {});
+});
+
 // ── FCM broadcast ─────────────────────────────────────────────────────────────
 
 const CORS = ["https://tri-valley-baseball-umpires.web.app", "https://tri-valley-baseball-umpires.firebaseapp.com"];

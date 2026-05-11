@@ -327,14 +327,39 @@ async function loadIncidents() {
         r.gameDivision
       ].filter(Boolean).join(" · ");
 
+      // Build structured detail lines based on incident type
+      const structuredLines = [];
+      if (r.ejection) {
+        const ej = r.ejection;
+        if (ej.role)   structuredLines.push(`Ejected: ${esc(ej.role)}${ej.name ? " — " + esc(ej.name) : ""}${ej.team ? " (" + esc(ej.team) + ")" : ""}`);
+        if (ej.reason) structuredLines.push(`Reason: ${esc(ej.reason)}`);
+      }
+      if (r.injury) {
+        const inj = r.injury;
+        if (inj.party)       structuredLines.push(`Injured: ${esc(inj.party)}${inj.name ? " — " + esc(inj.name) : ""}${inj.team ? " (" + esc(inj.team) + ")" : ""}`);
+        if (inj.description) structuredLines.push(`Injury: ${esc(inj.description)}`);
+        structuredLines.push(`EMS called: ${esc(inj.emsCalled || "No")}`);
+      }
+      if (r.unsafeConditions) {
+        const uc = r.unsafeConditions;
+        if (uc.conditionType) structuredLines.push(`Condition: ${esc(uc.conditionType)}`);
+        if (uc.gameStatus)    structuredLines.push(`Game status: ${esc(uc.gameStatus)}`);
+      }
+
+      const typeColor = r.incidentType === "Ejection"         ? "#ff9999"
+                      : r.incidentType === "Injury"           ? "#ffcc80"
+                      : r.incidentType === "Unsafe Conditions"? "#ffe066"
+                      : "#f7c87e";
+
       return `
-        <div class="document-note" style="border-left-color:#f7c87e;margin-bottom:16px">
+        <div class="document-note" style="border-left-color:${typeColor};margin-bottom:16px">
           <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-            <strong style="color:white">${esc(r.incidentType ?? "Incident")}</strong>
+            <strong style="color:${typeColor}">${esc(r.incidentType ?? "Incident")}</strong>
             <span style="color:var(--light-text);font-size:0.85rem">${esc(date)}</span>
           </div>
           <p style="margin:0 0 4px"><span style="color:var(--light-text)">Reported by:</span> ${esc(r.reporterName ?? "")}</p>
           ${gameLabel ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Game:</span> ${esc(gameLabel)}</p>` : ""}
+          ${structuredLines.map(l => `<p style="margin:0 0 3px;font-size:0.92rem">${l}</p>`).join("")}
           ${r.involvedParties ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Involved:</span> ${esc(r.involvedParties)}</p>` : ""}
           <p style="margin:8px 0 0;white-space:pre-wrap">${esc(r.description ?? "")}</p>
         </div>`;
