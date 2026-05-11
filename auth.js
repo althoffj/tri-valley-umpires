@@ -96,16 +96,26 @@ export async function googleSignIn() {
   const credential = await signInWithPopup(auth, provider);
   const user = credential.user;
 
-  const snap = await getDoc(doc(db, "umpires", user.uid));
-  if (!snap.exists()) {
-    // No profile — could be a new Google user who hasn't registered yet,
-    // or an existing email/password user whose UID doesn't match.
-    await signOut(auth);
-    throw new Error(
-      "No account found for this Google account. Please complete the acknowledgment form to register, or sign in with your email and password if you already have an account."
-    );
+  const [umpireSnap, adminSnap] = await Promise.all([
+    getDoc(doc(db, "umpires", user.uid)),
+    getDoc(doc(db, "admins", user.uid))
+  ]);
+
+  // Admin accounts are allowed through even without an umpire profile
+  if (adminSnap.exists()) {
+    currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
+    currentIsAdmin  = true;
+    currentAdminDoc = adminSnap.data();
+    return credential;
   }
-  const profile = snap.data();
+
+  // No umpire profile — new Google user, hand off to registration form
+  if (!umpireSnap.exists()) {
+    window.location.href = "form.html?google=1";
+    return credential; // navigation is in-flight; won't reach callers
+  }
+
+  const profile = umpireSnap.data();
   if (profile.approved === false) {
     await signOut(auth);
     throw new Error("Your account has not yet been approved. Please wait for administrator approval.");

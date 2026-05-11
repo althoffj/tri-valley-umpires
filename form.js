@@ -3,7 +3,8 @@ import { auth, db } from "./firebase.js";
 import {
   createUserWithEmailAndPassword,
   updateProfile,
-  signOut
+  signOut,
+  onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   doc,
@@ -13,6 +14,56 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 emailjs.init("H9Z9Qz-HB-PehAQjp");
+
+// ── Google Sign-In mode ───────────────────────────────────────────────────────
+// When arriving from googleSignIn() redirect (form.html?google=1), the user is
+// already authenticated via Google. Pre-fill their info, hide the password
+// field, and skip createUserWithEmailAndPassword on submit.
+
+let googleUser = null;
+
+if (new URLSearchParams(window.location.search).has("google")) {
+  const unsub = onAuthStateChanged(auth, user => {
+    unsub(); // one-shot
+    if (!user) { window.location.href = "index.html"; return; }
+    googleUser = user;
+
+    // Pre-fill name from Google display name
+    const parts     = (user.displayName || "").trim().split(/\s+/);
+    const firstName = parts[0] || "";
+    const lastName  = parts.slice(1).join(" ");
+    const fnEl = document.getElementById("firstName");
+    const lnEl = document.getElementById("lastName");
+    if (fnEl) { fnEl.value = firstName; }
+    if (lnEl) { lnEl.value = lastName;  }
+
+    // Lock email (already belongs to the Google account)
+    const emailEl = document.getElementById("email");
+    if (emailEl) {
+      emailEl.value    = user.email || "";
+      emailEl.readOnly = true;
+      emailEl.style.cssText += ";opacity:0.6;cursor:not-allowed";
+    }
+
+    // Hide password field (Google account already exists)
+    ["label[for='password']", "#password", "#passwordError"].forEach(sel => {
+      const el = document.querySelector(sel);
+      if (el) el.style.display = "none";
+    });
+
+    // Inject banner above the form fields
+    const banner = document.createElement("div");
+    banner.className = "document-note";
+    banner.style.borderLeftColor = "#4285F4";
+    banner.innerHTML = `<p style="margin:0">
+      <strong>Continuing with Google</strong> — signed in as
+      <strong>${user.email}</strong>. Complete this form to register as an umpire.
+      An administrator will review and approve your account.
+    </p>`;
+    const form = document.getElementById("umpireForm");
+    if (form) form.prepend(banner);
+  });
+}
 
 // ── Load team checkboxes ─────────────────────────────────────────────────────
 
@@ -78,7 +129,7 @@ function validateForm(data) {
     showError("zipError", "Enter a valid ZIP code (e.g. 57001)."); valid = false;
   } else clearError("zipError");
 
-  if (data.password.length < 6) {
+  if (!googleUser && data.password.length < 6) {
     showError("passwordError", "Password must be at least 6 characters."); valid = false;
   } else clearError("passwordError");
 
@@ -151,12 +202,20 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
   let userCredential = null;
 
   try {
-    // 1. Create Firebase Auth account
-    userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-    await updateProfile(userCredential.user, { displayName: fullName });
+    let uid;
 
-    // 2. Write Firestore profile
-    await setDoc(doc(db, "umpires", userCredential.user.uid), {
+    if (googleUser) {
+      // Google path — auth account already exists; just use the existing UID
+      uid = googleUser.uid;
+    } else {
+      // Email/password path — create the Firebase Auth account
+      userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      await updateProfile(userCredential.user, { displayName: fullName });
+      uid = userCredential.user.uid;
+    }
+
+    // Write Firestore profile
+    await setDoc(doc(db, "umpires", uid), {
       name:        fullName,
       firstName:   data.firstName,
       lastName:    data.lastName,
@@ -175,12 +234,12 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
       submittedAt: serverTimestamp()
     });
 
-    // 3. Sign out immediately — user must be approved before logging in
+    // Sign out — user must be approved before logging in
     await signOut(auth);
 
   } catch (err) {
-    // Roll back Auth account if Firestore write already failed
-    if (userCredential?.user) {
+    // Roll back only for email/password path (Google account must not be deleted)
+    if (!googleUser && userCredential?.user) {
       try { await userCredential.user.delete(); } catch (_) {}
     }
 
