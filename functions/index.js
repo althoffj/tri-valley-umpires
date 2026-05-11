@@ -175,6 +175,9 @@ function buildAdminWelcomeEmail({ name, email, isSA, roles, isNew, resetLink }) 
   };
 }
 
+// ── CORS allowlist ────────────────────────────────────────────────────────────
+const CORS = ["https://tri-valley-baseball-umpires.web.app", "https://tri-valley-baseball-umpires.firebaseapp.com"];
+
 // ── ICS fetch (server-side, no CORS restrictions) ─────────────────────────────
 
 function fetchICS(rawUrl, redirects = 3) {
@@ -1127,8 +1130,6 @@ exports.notifyOpenSlots = onCall({ cors: ["https://tri-valley-baseball-umpires.w
 });
 
 // ── FCM broadcast ─────────────────────────────────────────────────────────────
-
-const CORS = ["https://tri-valley-baseball-umpires.web.app", "https://tri-valley-baseball-umpires.firebaseapp.com"];
 
 exports.sendBroadcast = onCall({ cors: CORS }, async request => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in.");
