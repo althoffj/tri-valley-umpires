@@ -1,10 +1,10 @@
-import { db }        from "./firebase.js";
-import { isAdmin }   from "./auth.js";
+import { db }                        from "./firebase.js";
+import { authReadyPromise, isAdmin } from "./auth.js";
 import { collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 async function init() {
-  const ok = await isAdmin();
-  if (!ok) {
+  await authReadyPromise;
+  if (!isAdmin()) {
     document.getElementById("adminContent").style.display = "none";
     document.getElementById("noAccess").style.display = "block";
     return;

@@ -393,6 +393,30 @@ function initAuthUI() {
                 style="width:100%" />
             </div>
           </div>
+          <div style="margin-top:14px">
+            <label for="profileMaxGames" style="margin-bottom:4px">Max games per week <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+            <input type="number" id="profileMaxGames" min="0" max="14" step="1" placeholder="e.g. 3"
+              style="width:80px;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px" />
+          </div>
+
+          <div style="margin-top:14px">
+            <label style="margin-bottom:6px">Equipment <span style="color:var(--light-text);font-weight:normal">(check all you own)</span></label>
+            <div id="profileEquipment" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:0.9rem">
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px"><input type="checkbox" value="Chest Protector" /> Chest Protector</label>
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px"><input type="checkbox" value="Mask" /> Mask</label>
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px"><input type="checkbox" value="Ball Bag" /> Ball Bag</label>
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px"><input type="checkbox" value="Plate Shoes" /> Plate Shoes</label>
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px"><input type="checkbox" value="Base Shoes" /> Base Shoes</label>
+              <label style="font-weight:normal;display:flex;align-items:center;gap:6px"><input type="checkbox" value="Shin Guards" /> Shin Guards</label>
+            </div>
+          </div>
+
+          <div style="margin-top:14px">
+            <label for="profileNotes">Notes for admin <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+            <textarea id="profileNotes" rows="2" placeholder="e.g. Prefer weeknight games, available all summer…"
+              style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
+          </div>
+
           <div style="margin-top:16px">
             <button type="submit" class="btn" style="width:100%">Save Changes</button>
           </div>
@@ -532,6 +556,13 @@ function initAuthUI() {
     document.getElementById("profileCity").value        = profile.city || "";
     document.getElementById("profileStateInput").value  = profile.state || "";
     document.getElementById("profileZip").value         = profile.zip || "";
+    document.getElementById("profileMaxGames").value    = profile.maxGamesPerWeek != null ? profile.maxGamesPerWeek : "";
+    document.getElementById("profileNotes").value       = profile.notes || "";
+    // Populate equipment checkboxes
+    const owned = new Set(profile.equipment || []);
+    document.querySelectorAll("#profileEquipment input[type=checkbox]").forEach(cb => {
+      cb.checked = owned.has(cb.value);
+    });
     document.getElementById("hmProfileMsg").textContent = "";
     showView("authProfileView");
   });
@@ -545,13 +576,19 @@ function initAuthUI() {
     msg.textContent = "Saving…";
     msg.className   = "signup-message info";
     try {
+      const maxVal = document.getElementById("profileMaxGames").value.trim();
+      const equipment = [...document.querySelectorAll("#profileEquipment input[type=checkbox]")]
+        .filter(cb => cb.checked).map(cb => cb.value);
       const fields = {
-        name:   document.getElementById("profileName").value.trim(),
-        phone:  document.getElementById("profilePhone").value.trim(),
-        street: document.getElementById("profileStreet").value.trim(),
-        city:   document.getElementById("profileCity").value.trim(),
-        state:  document.getElementById("profileStateInput").value.trim().toUpperCase(),
-        zip:    document.getElementById("profileZip").value.trim(),
+        name:            document.getElementById("profileName").value.trim(),
+        phone:           document.getElementById("profilePhone").value.trim(),
+        street:          document.getElementById("profileStreet").value.trim(),
+        city:            document.getElementById("profileCity").value.trim(),
+        state:           document.getElementById("profileStateInput").value.trim().toUpperCase(),
+        zip:             document.getElementById("profileZip").value.trim(),
+        maxGamesPerWeek: maxVal !== "" ? parseInt(maxVal, 10) : null,
+        equipment,
+        notes:           document.getElementById("profileNotes").value.trim(),
       };
       await updateProfile(fields);
       msg.textContent = "Profile updated!";

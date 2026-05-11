@@ -229,9 +229,15 @@ async function loadRoster() {
 
     tbody.innerHTML = snap.docs.map(d => {
       const p = { id: d.id, ...d.data() };
+      const equipList  = (p.equipment || []).join(", ") || "—";
+      const maxGames   = p.maxGamesPerWeek != null ? `Max ${p.maxGamesPerWeek}/wk` : "";
+      const noteText   = p.notes ? `<div style="color:var(--light-text);font-size:0.78rem;margin-top:2px;font-style:italic">${esc(p.notes)}</div>` : "";
+      const equipHtml  = p.equipment?.length
+        ? `<div style="color:var(--light-text);font-size:0.78rem;margin-top:2px">${esc(equipList)}${maxGames ? " · " + esc(maxGames) : ""}</div>`
+        : (maxGames ? `<div style="color:var(--light-text);font-size:0.78rem;margin-top:2px">${esc(maxGames)}</div>` : "");
       return `
         <tr>
-          <td>${esc(p.name)}</td>
+          <td>${esc(p.name)}${equipHtml}${noteText}</td>
           <td><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></td>
           <td>${esc(p.phone || "—")}</td>
           <td style="font-size:0.85rem">${esc(p.street || "")}, ${esc(p.city || "")} ${esc(p.state || "")} ${esc(p.zip || "")}</td>

@@ -101,7 +101,18 @@
         </p>
       </div>
 
-      <table class="rule-table">
+      <div style="margin-bottom:16px">
+        <input type="search" id="ruleSearch" placeholder="Search rules… (e.g. bunt, steal, pitching)"
+          style="width:100%;padding:12px 14px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:8px;font-size:1rem;box-sizing:border-box"
+          autocomplete="off" />
+        <p id="ruleSearchCount" style="color:var(--light-text);font-size:0.85rem;margin:6px 0 0;min-height:1.2em"></p>
+      </div>
+
+      <p id="ruleNoResults" style="display:none;text-align:center;color:var(--light-text);padding:24px">
+        No rules match your search.
+      </p>
+
+      <table class="rule-table" id="ruleTable">
         <thead>
           <tr>
             <th>Rule Category</th>
@@ -233,7 +244,79 @@
       </p>
     </div>
 
-    <script type="module" src="auth.js?v=9"></script>
+    <script>
+    (function() {
+      const input    = document.getElementById("ruleSearch");
+      const table    = document.getElementById("ruleTable");
+      const noResult = document.getElementById("ruleNoResults");
+      const countEl  = document.getElementById("ruleSearchCount");
+      if (!input || !table) return;
+
+      const rows = Array.from(table.querySelectorAll("tbody tr"));
+      const totalRows = rows.length;
+
+      // Snapshot original innerHTML of every cell before any mutation
+      rows.forEach(row => {
+        row.querySelectorAll("td").forEach(td => {
+          if (!td.dataset.orig) td.dataset.orig = td.innerHTML;
+        });
+      });
+
+      function escRe(s) {
+        return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+
+      function highlight(html, term) {
+        if (!term) return html;
+        // Avoid highlighting inside HTML tags by replacing only text nodes
+        return html.replace(
+          new RegExp(`(${escRe(term)})(?![^<]*>)`, "gi"),
+          '<mark style="background:#b8870a;color:#fff;border-radius:2px;padding:0 2px">$1</mark>'
+        );
+      }
+
+      input.addEventListener("input", function() {
+        const term = this.value.trim().toLowerCase();
+
+        // Restore originals first
+        rows.forEach(row => {
+          row.querySelectorAll("td").forEach(td => {
+            td.innerHTML = td.dataset.orig;
+          });
+        });
+
+        if (!term) {
+          rows.forEach(r => r.style.display = "");
+          noResult.style.display = "none";
+          countEl.textContent = "";
+          table.style.display = "";
+          return;
+        }
+
+        let visible = 0;
+        rows.forEach(row => {
+          const text = row.textContent.toLowerCase();
+          if (text.includes(term)) {
+            row.style.display = "";
+            visible++;
+            // Apply highlights
+            row.querySelectorAll("td").forEach(td => {
+              td.innerHTML = highlight(td.dataset.orig, this.value.trim());
+            });
+          } else {
+            row.style.display = "none";
+          }
+        });
+
+        noResult.style.display  = visible === 0 ? "" : "none";
+        table.style.display     = visible === 0 ? "none" : "";
+        countEl.textContent     = visible === totalRows
+          ? ""
+          : `${visible} of ${totalRows} rule${totalRows !== 1 ? "s" : ""} match`;
+      });
+    })();
+    </script>
+    <script type="module" src="auth.js?v=10"></script>
     <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=2"></script>
   <script type="module" src="nav.js?v=1"></script>
