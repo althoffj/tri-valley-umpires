@@ -567,8 +567,30 @@ async function openModal(gameId, slotType) {
   document.getElementById("signupModal").style.display = "";
   document.getElementById("confirmSignupBtn").disabled = false;
 
-  // Conflict check — runs async after modal opens so it doesn't delay display
+  // Conflict checks — run async after modal opens so they don't delay display
   if (isLoggedIn()) {
+    const uid = getCurrentUser()?.uid;
+
+    // 1. Hard block: already signed up for another game at the exact same date + time
+    if (uid && game.date && game.time) {
+      const collision = games.find(g =>
+        g.id !== gameId &&
+        g.date === game.date &&
+        g.time === game.time &&
+        !g.cancelled &&
+        (g.umpireSlots || []).some(s => s.assignedUid === uid)
+      );
+      if (collision) {
+        const colCity = collision.city ? ` (${collision.city})` : "";
+        msgEl.textContent =
+          `⛔ You're already assigned to another game at this time${colCity}. You cannot double-book.`;
+        msgEl.className = "signup-message error";
+        document.getElementById("confirmSignupBtn").disabled = true;
+        return; // skip team conflict check — hard block takes precedence
+      }
+    }
+
+    // 2. Soft warning: umpire's player team may have a game on this date
     const conflicts = await getTeamDatesForGame(game.date);
     if (conflicts.length > 0) {
       msgEl.textContent = `⚠️ Possible conflict — ${conflicts.join(", ")} may have a game on this date. Verify your availability before confirming.`;

@@ -432,16 +432,26 @@ function renderAssignList(filter = "") {
     return;
   }
 
+  const gameTime = assignTarget?.gameTime || "";
   list.innerHTML = shown.map(u => {
-    const unavail  = gameDate && umpireUnavailable[u.uid]?.has(gameDate);
-    const warning  = unavail
-      ? `<span style="font-size:0.75rem;color:#fca;background:#5a2000;border-radius:4px;padding:2px 7px;margin-left:8px">Unavailable</span>`
-      : "";
+    const unavail   = gameDate && umpireUnavailable[u.uid]?.has(gameDate);
+    // Check if umpire is already assigned to a different game at the exact same date + time
+    const conflict  = gameDate && gameTime && allGames.some(g =>
+      g.id !== assignTarget?.gameId &&
+      g.date === gameDate &&
+      g.time === gameTime &&
+      !g.cancelled &&
+      (g.umpireSlots || []).some(s => s.assignedUid === u.uid)
+    );
+    const badges = [
+      unavail  ? `<span style="font-size:0.75rem;color:#fca;background:#5a2000;border-radius:4px;padding:2px 7px">Unavailable</span>` : "",
+      conflict ? `<span style="font-size:0.75rem;color:#f88;background:#4a0000;border-radius:4px;padding:2px 7px">Conflict</span>` : "",
+    ].filter(Boolean).join(" ");
     return `
     <div class="assign-umpire-row" data-uid="${esc(u.uid)}" data-name="${esc(u.name)}"
       style="padding:10px 16px;cursor:pointer;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center">
       <div>
-        <div style="font-weight:bold;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${esc(u.name)}${warning}</div>
+        <div style="font-weight:bold;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${esc(u.name)}${badges ? ` ${badges}` : ""}</div>
         ${u.email ? `<div style="font-size:0.8rem;color:var(--light-text)">${esc(u.email)}</div>` : ""}
       </div>
       <button class="btn print-btn" style="font-size:0.8rem;padding:4px 12px;flex-shrink:0">Assign</button>
@@ -451,7 +461,7 @@ function renderAssignList(filter = "") {
 
 async function openAssignModal(gameId, slotType) {
   const game = allGames.find(g => g.id === gameId);
-  assignTarget = { gameId, slotType, gameDate: game?.date || "" };
+  assignTarget = { gameId, slotType, gameDate: game?.date || "", gameTime: game?.time || "" };
   const label = document.getElementById("assignSlotLabel");
   if (label && game) {
     label.textContent = `${slotType} slot — ${game.city || ""} ${fmtDate(game.date)} ${fmtTime(game.time)}`;
@@ -532,6 +542,8 @@ document.getElementById("addGameForm").addEventListener("submit", async function
   const type       = document.getElementById("gameType").value;
   const field      = getFieldValue("gameFieldSelect", "gameField");
   const facilityId = document.getElementById("gameFacility")?.value || "";
+  const homeTeam   = document.getElementById("gameHomeTeam")?.value.trim() || "";
+  const awayTeam   = document.getElementById("gameAwayTeam")?.value.trim() || "";
 
   // Build slots with per-slot pay from inline inputs
   const umpireSlots = checkedTypes.map(t => {
@@ -541,13 +553,16 @@ document.getElementById("addGameForm").addEventListener("submit", async function
   });
 
   try {
-    await addDoc(collection(db, "games"), {
+    const gameData = {
       city, division, date, time, type, field, facilityId,
       umpireSlots,
       needsUmpires: true,
       cancelled: false,
       createdAt: serverTimestamp()
-    });
+    };
+    if (homeTeam) gameData.homeTeam = homeTeam;
+    if (awayTeam) gameData.awayTeam = awayTeam;
+    await addDoc(collection(db, "games"), gameData);
     setMsg("addGameMessage", "Game added!", "success");
     this.reset();
     // Reset field cascade back to text input
@@ -557,6 +572,10 @@ document.getElementById("addGameForm").addEventListener("submit", async function
     if (fieldInp) fieldInp.style.display = "";
     document.querySelectorAll("#gameUmpireTypes input[type=checkbox]").forEach(cb => cb.checked = false);
     document.querySelectorAll(".slot-pay-input").forEach(inp => { inp.disabled = true; inp.value = ""; });
+    const homeTeamInp = document.getElementById("gameHomeTeam");
+    if (homeTeamInp) homeTeamInp.value = "";
+    const awayTeamInp = document.getElementById("gameAwayTeam");
+    if (awayTeamInp) awayTeamInp.value = "";
     await loadGames();
   } catch (err) {
     setMsg("addGameMessage", err.message, "error");
