@@ -467,6 +467,233 @@ exports.syncGamesScheduled = onSchedule("every 6 hours", async () => {
   await runSync();
 });
 
+// ── Scheduling Assistant helpers ──────────────────────────────────────────────
+
+function timeToMinutes(t) {
+  if (!t) return null;
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + (m || 0);
+}
+
+function gamesOverlap(g1, g2, durMap) {
+  if (g1.date !== g2.date) return false;
+  const f1 = (g1.field || "").trim().toLowerCase();
+  const f2 = (g2.field || "").trim().toLowerCase();
+  if (!f1 || !f2 || f1 !== f2) return false;
+  const s1 = timeToMinutes(g1.time);
+  const s2 = timeToMinutes(g2.time);
+  if (s1 === null || s2 === null) return false;
+  const d1 = durMap[g1.division] ?? durMap["default"] ?? 90;
+  const d2 = durMap[g2.division] ?? durMap["default"] ?? 90;
+  // Strict inequality: butted-up start times (s2 === s1+d1) are fine
+  return s1 < s2 + d2 && s2 < s1 + d1;
+}
+
+/** Build fieldName.toLowerCase() → { lights, supportedDivisions } index */
+async function buildFieldIndex(db) {
+  const snap = await db.collection("facilities").get();
+  const idx = {};
+  snap.docs.forEach(d => {
+    (d.data().fields || []).forEach(f => {
+      if (f.name) idx[f.name.trim().toLowerCase()] = f;
+    });
+  });
+  return idx;
+}
+
+// ── previewCalendarImport ─────────────────────────────────────────────────────
+
+exports.previewCalendarImport = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db = getFirestore();
+
+  const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  // Load config
+  const [teamsSnap, schedulingSnap, gamesSnap, fieldIndex] = await Promise.all([
+    db.doc("config/teamCalendars").get(),
+    db.doc("config/scheduling").get(),
+    db.collection("games").get(),
+    buildFieldIndex(db),
+  ]);
+
+  const teams    = teamsSnap.exists  ? (teamsSnap.data().teams || [])  : [];
+  const schedCfg = schedulingSnap.exists ? schedulingSnap.data() : {};
+  const durMap   = schedCfg.gameDurationMinutes || { "10U": 90, "12U": 90, "14U": 120, "HS JV": 120, "HS Varsity": 150, default: 90 };
+  const lateStartCutoff = timeToMinutes(schedCfg.lateStartCutoff || "19:30");
+
+  // Index existing games
+  const existingGames    = gamesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const existingExtIdSet = new Set(existingGames.map(g => g.externalId).filter(Boolean));
+  const today            = todayISO();
+
+  const ready = [], conflicts = [], duplicates = [], warnings = [];
+
+  for (const team of teams) {
+    let icsText;
+    try { icsText = await fetchICS(team.icsUrl); }
+    catch (err) { warnings.push({ source: team.name, message: `Failed to fetch: ${err.message}` }); continue; }
+
+    const events   = parseVEvents(icsText);
+    const division = inferDivision(team.name);
+
+    for (const ev of events) {
+      if (!ev.date || ev.date < today) continue; // skip past events
+
+      // Skip if no location (can't determine field)
+      const rawLocation = ev.location || "";
+      const field = rawLocation.split(",")[0].trim(); // take everything before first comma
+
+      const candidate = {
+        source:      "calendar",
+        sourceLabel: team.name,
+        sourceType:  team.type || "gamechanger",
+        externalId:  ev.uid,
+        date:        ev.date,
+        time:        ev.time || "",
+        field,
+        division,
+        homeTeam:    ev.homeTeam || "",
+        awayTeam:    ev.awayTeam || "",
+        isAway:      ev.isAway || false,
+        city:        team.city || "",
+        gameType:    "Regular",
+        needsUmpires: true,
+        cancelled:   false,
+        umpireSlots: [],
+      };
+
+      // ── Duplicate check ──────────────────────────────────────────────────────
+      if (ev.uid && existingExtIdSet.has(ev.uid)) {
+        duplicates.push({ ...candidate, _reason: "Already imported" });
+        continue;
+      }
+
+      const fieldKey  = field.toLowerCase();
+      const fieldObj  = fieldIndex[fieldKey] || null;
+      const gameConflicts = [];
+
+      // ── Conflict: field time overlap ─────────────────────────────────────────
+      for (const existing of existingGames) {
+        if (!existing.cancelled && gamesOverlap(candidate, existing, durMap)) {
+          gameConflicts.push({
+            type:    "field_overlap",
+            label:   "Field time overlap",
+            color:   "#e53935",
+            with: {
+              id:       existing.id,
+              date:     existing.date,
+              time:     existing.time,
+              field:    existing.field,
+              division: existing.division,
+              city:     existing.city,
+            }
+          });
+        }
+      }
+
+      // Also check against other candidates in this same batch
+      for (const other of [...ready, ...conflicts.map(c => c.game)]) {
+        if (other && gamesOverlap(candidate, other, durMap)) {
+          gameConflicts.push({
+            type:  "batch_overlap",
+            label: "Overlaps another incoming game",
+            color: "#e53935",
+            with: { date: other.date, time: other.time, field: other.field, division: other.division, sourceLabel: other.sourceLabel }
+          });
+          break;
+        }
+      }
+
+      // ── Conflict: no lights / late start ────────────────────────────────────
+      if (candidate.time && fieldObj !== null) {
+        const startMin = timeToMinutes(candidate.time);
+        if (startMin !== null && !fieldObj.lights && startMin > lateStartCutoff) {
+          gameConflicts.push({
+            type:  "no_lights",
+            label: `Starts after ${schedCfg.lateStartCutoff || "19:30"} — field has no lights`,
+            color: "#f57c00",
+          });
+        }
+      }
+
+      // ── Warning: division mismatch ───────────────────────────────────────────
+      if (fieldObj) {
+        const supported = fieldObj.supportedDivisions || [];
+        if (supported.length && !supported.includes(division)) {
+          gameConflicts.push({
+            type:  "division_mismatch",
+            label: `${division} not in supported divisions for ${field} (${supported.join(", ")})`,
+            color: "#f9a825",
+          });
+        }
+      }
+
+      if (gameConflicts.length === 0) {
+        ready.push(candidate);
+      } else {
+        conflicts.push({ game: candidate, issues: gameConflicts });
+      }
+    }
+  }
+
+  return { ready, conflicts, duplicates, warnings };
+});
+
+// ── commitCalendarImport ──────────────────────────────────────────────────────
+
+exports.commitCalendarImport = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db = getFirestore();
+
+  const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { games } = request.data;
+  if (!Array.isArray(games) || games.length === 0) throw new HttpsError("invalid-argument", "games array required.");
+
+  // Load default slot types
+  const paySnap      = await db.doc("config/payRates").get();
+  const payData      = paySnap.exists ? paySnap.data() : {};
+  const defaultSlots = (payData.defaultSlotTypes || []).map(type => ({
+    type, assignedUid: null, assignedName: null, paid: false, payRate: payData[type.toLowerCase()] || 0
+  }));
+
+  // Dedup against already-existing externalIds
+  const gamesSnap        = await db.collection("games").get();
+  const existingExtIdSet = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
+
+  const batch = db.batch();
+  let added = 0;
+  for (const g of games) {
+    if (g.externalId && existingExtIdSet.has(g.externalId)) continue; // race-condition guard
+    const ref = db.collection("games").doc();
+    batch.set(ref, {
+      source:      g.source      || "calendar",
+      externalId:  g.externalId  || null,
+      date:        g.date,
+      time:        g.time        || "",
+      field:       g.field       || "",
+      city:        g.city        || "",
+      division:    g.division    || "",
+      gameType:    g.gameType    || "Regular",
+      homeTeam:    g.homeTeam    || "",
+      awayTeam:    g.awayTeam    || "",
+      isAway:      g.isAway      || false,
+      needsUmpires: true,
+      cancelled:   false,
+      umpireSlots: g.umpireSlots?.length ? g.umpireSlots : defaultSlots,
+      notes:       g.notes       || "",
+      importedAt:  new Date().toISOString(),
+      importedBy:  request.auth.uid,
+    });
+    added++;
+  }
+  await batch.commit();
+  return { added };
+});
+
 // ── Callable: admin panel "Sync" button ───────────────────────────────────────
 
 exports.syncGamesNow = onCall(

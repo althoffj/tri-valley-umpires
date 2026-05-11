@@ -22,6 +22,7 @@
     <nav class="admin-subnav">
       <a href="admin.html">Overview</a>
       <a href="admin-games.html">Games</a>
+      <a href="admin-scheduler.html">Scheduler</a>
       <a href="admin-tournament.html">Tournaments</a>
       <a href="admin-payroll.html">Payroll</a>
       <a href="admin-facilities.html">Facilities</a>
@@ -68,6 +69,51 @@
         <button type="submit" class="btn">Save Default Slot Types</button>
       </div>
       <p id="defaultSlotTypesMessage" class="signup-message" aria-live="polite"></p>
+    </form>
+
+    <!-- ── Scheduling Rules ─────────────────────────────────────────────── -->
+    <h2>Scheduling Rules</h2>
+    <div class="document-note">
+      <p>Game durations are used by the Scheduling Assistant to detect field-time conflicts. The late-start cutoff applies to fields without lights.</p>
+    </div>
+    <form id="schedulingConfigForm" class="signup-form">
+      <label style="margin-bottom:6px">Game Duration (minutes) by Division</label>
+      <div class="form-row" style="flex-wrap:wrap;gap:8px">
+        <div class="form-group form-group--sm">
+          <label for="dur10U" style="font-weight:normal">10U</label>
+          <input type="number" id="dur10U" min="30" max="300" step="5" placeholder="90" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="dur12U" style="font-weight:normal">12U</label>
+          <input type="number" id="dur12U" min="30" max="300" step="5" placeholder="90" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="dur14U" style="font-weight:normal">14U</label>
+          <input type="number" id="dur14U" min="30" max="300" step="5" placeholder="120" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="durHSJV" style="font-weight:normal">HS JV</label>
+          <input type="number" id="durHSJV" min="30" max="300" step="5" placeholder="120" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="durHSVar" style="font-weight:normal">HS Varsity</label>
+          <input type="number" id="durHSVar" min="30" max="300" step="5" placeholder="150" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="durDefault" style="font-weight:normal">Default</label>
+          <input type="number" id="durDefault" min="30" max="300" step="5" placeholder="90" />
+        </div>
+      </div>
+      <div class="form-row" style="margin-top:12px">
+        <div class="form-group form-group--sm">
+          <label for="lateStartCutoff">Latest start — no lights (HH:MM, 24h)</label>
+          <input type="time" id="lateStartCutoff" value="19:30" />
+        </div>
+      </div>
+      <div class="page-actions" style="margin-top:16px">
+        <button type="submit" class="btn">Save Scheduling Rules</button>
+      </div>
+      <p id="schedulingConfigMessage" class="signup-message" aria-live="polite"></p>
     </form>
 
     <!-- ── Slack Webhooks ────────────────────────────────────────────────── -->

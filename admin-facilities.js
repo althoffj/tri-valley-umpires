@@ -173,6 +173,20 @@ function fieldFormRows(prefix, fId, f = {}) {
       </div>
     </div>
 
+    ${formSection("Supported Divisions")}
+    <div style="font-size:0.82rem;color:var(--light-text);margin-bottom:8px">Which age groups can play on this field? Used by the Scheduling Assistant to flag mismatches.</div>
+    ${(() => {
+      const divs = Array.isArray(f.supportedDivisions) ? f.supportedDivisions : [];
+      const dc = (div) => divs.includes(div) ? "checked" : "";
+      return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 24px;margin-top:8px">
+        <label class="check-list-item"><input type="checkbox" id="${p}Div10U_${id}" ${dc("10U")} /> 10U</label>
+        <label class="check-list-item"><input type="checkbox" id="${p}Div12U_${id}" ${dc("12U")} /> 12U</label>
+        <label class="check-list-item"><input type="checkbox" id="${p}Div14U_${id}" ${dc("14U")} /> 14U</label>
+        <label class="check-list-item"><input type="checkbox" id="${p}DivHSJV_${id}" ${dc("HS JV")} /> HS JV</label>
+        <label class="check-list-item"><input type="checkbox" id="${p}DivHSVar_${id}" ${dc("HS Varsity")} /> HS Varsity</label>
+      </div>`;
+    })()}
+
     ${formSection("Amenities")}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin-top:8px">
       <label class="check-list-item"><input type="checkbox" id="${p}Concession_${id}" ${chk("concessionStand")} /> Concession Stand</label>
@@ -259,8 +273,16 @@ function readFieldForm(prefix, fId) {
     label:    row.querySelector(".pm-label")?.value.trim() || "",
   })).filter(m => m.distance || m.type);
 
+  const DIVS = ["10U","12U","14U","HS JV","HS Varsity"];
+  const divMap = { "10U": `${p}Div10U_${id}`, "12U": `${p}Div12U_${id}`,
+                   "14U": `${p}Div14U_${id}`, "HS JV": `${p}DivHSJV_${id}`,
+                   "HS Varsity": `${p}DivHSVar_${id}` };
+  const supportedDivisions = DIVS.filter(d => c(divMap[d]));
+
   return {
     name:             v(`${p}Name_${id}`),
+    // Scheduling
+    supportedDivisions,
     // Measurements
     basepaths,
     pitchingMounds,
@@ -332,6 +354,15 @@ function issuesBanner(text, style = "") {
     <span style="color:#f5c842;font-weight:bold;font-size:0.8rem">⚠ Active Issues</span>
     <div style="color:#f5c842;font-size:0.85rem;margin-top:4px;white-space:pre-wrap">${esc(text)}</div>
   </div>`;
+}
+
+function fieldDivisionBadges(f) {
+  const divs = Array.isArray(f.supportedDivisions) ? f.supportedDivisions : [];
+  if (!divs.length) return "";
+  const badges = divs.map(d =>
+    `<span style="display:inline-block;background:#1a2a3a;color:#7ec8f7;border:1px solid #2a4a6a;border-radius:10px;padding:1px 8px;font-size:0.75rem;white-space:nowrap">${d}</span>`
+  ).join("");
+  return `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${badges}</div>`;
 }
 
 function fieldAmenityBadges(f) {
@@ -426,6 +457,7 @@ function renderFacilityCard(id, data, shedCode = "") {
             <div style="min-width:0;flex:1">
               <strong>${esc(f.name)}</strong>
               ${fieldInfoBlock(f)}
+              ${fieldDivisionBadges(f)}
               ${fieldAmenityBadges(f)}
               ${f.notes ? `<div style="font-size:0.82rem;color:var(--light-text);margin-top:2px">${esc(f.notes)}</div>` : ""}
               ${issuesBanner(f.activeIssues)}
@@ -704,6 +736,12 @@ function openEditFieldForm(facilityId, fieldIndex) {
   set(`${p}Equipment_${id}`,        f.equipmentStorage);
   set(`${p}Sun_${id}`,              f.sunNotes);
   set(`${p}GroundRules_${id}`,      f.groundRules);
+  // Supported divisions
+  const divs = Array.isArray(f.supportedDivisions) ? f.supportedDivisions : [];
+  const divIdMap = { "10U": `${p}Div10U_${id}`, "12U": `${p}Div12U_${id}`,
+                     "14U": `${p}Div14U_${id}`, "HS JV": `${p}DivHSJV_${id}`,
+                     "HS Varsity": `${p}DivHSVar_${id}` };
+  Object.entries(divIdMap).forEach(([div, elId]) => chk(elId, divs.includes(div)));
   // Issues & notes
   set(`${p}Issues_${id}`,           f.activeIssues);
   set(`${p}Notes_${id}`,            f.notes);

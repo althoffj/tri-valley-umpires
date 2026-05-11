@@ -98,6 +98,46 @@ document.getElementById("defaultSlotTypesForm").addEventListener("submit", async
   }
 });
 
+// ── Scheduling Rules ──────────────────────────────────────────────────────────
+
+const SCHEDULING_DEFAULTS = { "10U": 90, "12U": 90, "14U": 120, "HS JV": 120, "HS Varsity": 150, default: 90 };
+const DUR_IDS = { "10U": "dur10U", "12U": "dur12U", "14U": "dur14U", "HS JV": "durHSJV", "HS Varsity": "durHSVar", default: "durDefault" };
+
+async function loadSchedulingConfig() {
+  try {
+    const snap = await getDoc(doc(db, "config", "scheduling"));
+    const d = snap.exists() ? snap.data() : {};
+    const dur = d.gameDurationMinutes || {};
+    Object.entries(DUR_IDS).forEach(([div, elId]) => {
+      const el = document.getElementById(elId);
+      if (el) el.value = dur[div] ?? SCHEDULING_DEFAULTS[div] ?? 90;
+    });
+    const cutoffEl = document.getElementById("lateStartCutoff");
+    if (cutoffEl) cutoffEl.value = d.lateStartCutoff ?? "19:30";
+  } catch (_) {}
+}
+
+document.getElementById("schedulingConfigForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn = this.querySelector("button[type='submit']");
+  btn.disabled = true;
+  setMsg("schedulingConfigMessage", "Saving…", "info");
+  try {
+    const gameDurationMinutes = {};
+    Object.entries(DUR_IDS).forEach(([div, elId]) => {
+      const val = parseInt(document.getElementById(elId)?.value);
+      gameDurationMinutes[div] = isNaN(val) ? SCHEDULING_DEFAULTS[div] : val;
+    });
+    const lateStartCutoff = document.getElementById("lateStartCutoff").value || "19:30";
+    await setDoc(doc(db, "config", "scheduling"), { gameDurationMinutes, lateStartCutoff });
+    setMsg("schedulingConfigMessage", "Scheduling rules saved.", "success");
+  } catch (err) {
+    setMsg("schedulingConfigMessage", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // ── Slack Webhooks ────────────────────────────────────────────────────────────
 
 async function loadSlackWebhooks() {
@@ -171,5 +211,6 @@ authReadyPromise.then(() => {
   document.getElementById("noAccess").style.display = "none";
 
   loadPayRates();
+  loadSchedulingConfig();
   loadSlackWebhooks();
 });

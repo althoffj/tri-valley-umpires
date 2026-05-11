@@ -1513,3 +1513,120 @@ nav > a.active {
   color: #f0b6c3;
   font-weight: 600;
 }
+
+/* ── Scheduling Assistant ──────────────────────────────────────────────────── */
+
+.scheduler-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 14px 18px;
+  background: var(--container);
+  border-radius: 8px;
+  border: 1px solid #333;
+}
+
+.sched-summary-item {
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sched-summary-item strong {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.scheduler-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 0;
+}
+
+.scheduler-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--light-text);
+  cursor: pointer;
+  font-size: 0.92rem;
+  padding: 8px 14px 10px;
+  margin-bottom: -1px;
+  transition: color 0.15s;
+}
+.scheduler-tab-btn:hover  { color: var(--text); }
+.scheduler-tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+
+.scheduler-tab-panel {
+  margin-top: 16px;
+}
+
+.sched-row-approved td {
+  background: rgba(76,175,80,0.06);
+}
+
+/* Conflict card */
+.sched-conflict-card {
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: var(--container);
+  transition: border-color 0.15s;
+}
+.sched-conflict-card.sched-row-approved {
+  border-color: #4caf5055;
+  background: rgba(76,175,80,0.05);
+}
+
+.sched-conflict-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sched-issue-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sched-issue-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sched-issue-badge {
+  display: inline-block;
+  border: 1px solid;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sched-edited-badge {
+  display: inline-block;
+  background: #1a3a2a;
+  color: #6fcf97;
+  border: 1px solid #2a5a3a;
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 0.75rem;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.sched-edit-panel {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #333;
+}

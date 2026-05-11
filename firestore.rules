@@ -45,7 +45,7 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Config (pay rates, etc.): approved umpires can read; only admins can write
+    // Config (pay rates, scheduling rules, etc.): approved umpires can read; only admins can write
     match /config/{docId} {
       allow read:  if isSignedIn();
       allow write: if isAdmin();

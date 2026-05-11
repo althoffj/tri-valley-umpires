@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Admin: Scheduler - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=12" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html">Games</a>
+      <a href="admin-scheduler.html" class="admin-subnav-active">Scheduler</a>
+      <a href="admin-tournament.html">Tournaments</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-incidents.html">Incidents</a>
+      <a href="admin-config.html">Config</a>
+      <a href="admin-analytics.html">Analytics</a>
+    </nav>
+
+    <h2>Scheduling Assistant</h2>
+    <div class="document-note">
+      <p>Fetches upcoming games from all configured calendar sources (GameChanger and Google Calendar iCal feeds), checks for field conflicts, lighting restrictions, and division mismatches, then lets you review and approve each game before it is added to the schedule.</p>
+      <p style="margin-bottom:0">Configure calendar sources on the <a href="admin-games.html">Games</a> page. Configure game durations and the late-start cutoff on the <a href="admin-config.html">Config</a> page.</p>
+    </div>
+
+    <div class="page-actions">
+      <button type="button" class="btn" id="fetchBtn">Fetch &amp; Preview</button>
+    </div>
+    <p id="fetchMessage" class="signup-message" aria-live="polite"></p>
+
+    <!-- ── Summary bar ─────────────────────────────────────────────────────── -->
+    <div id="previewSummary" style="display:none;margin:16px 0 0">
+      <div id="summaryBar" class="scheduler-summary-bar"></div>
+
+      <!-- ── Tab buttons ────────────────────────────────────────────────────── -->
+      <div class="scheduler-tabs" id="schedulerTabs" style="margin-top:16px"></div>
+
+      <!-- ── Tab panels ─────────────────────────────────────────────────────── -->
+      <div id="tabReady" class="scheduler-tab-panel"></div>
+      <div id="tabConflicts" class="scheduler-tab-panel" style="display:none"></div>
+      <div id="tabDuplicates" class="scheduler-tab-panel" style="display:none"></div>
+      <div id="tabWarnings" class="scheduler-tab-panel" style="display:none"></div>
+
+      <!-- ── Commit button ──────────────────────────────────────────────────── -->
+      <div class="page-actions" id="commitActions" style="display:none;margin-top:16px">
+        <button type="button" class="btn" id="commitBtn">Import Approved Games</button>
+        <span id="approvedCount" style="color:var(--light-text);font-size:0.9rem;align-self:center"></span>
+      </div>
+      <p id="commitMessage" class="signup-message" aria-live="polite"></p>
+    </div>
+
+  </div>
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=16"></script>
+  <script type="module" src="admin-scheduler.js?v=1"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=2"></script>
+  <script type="module" src="nav.js?v=1"></script>
+</body>
+</html>
