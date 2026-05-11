@@ -456,7 +456,7 @@ function renderGameRows() {
       <tr>
         <td>${esc(fmtDate(g.date))} ${dateBadge(g)}</td>
         <td>${esc(g.time || "—")}</td>
-        <td>${esc(g.division || "—")}</td>
+        <td>${esc(g.division || "—")}${g.tournamentId ? ' <span class="badge" style="background:#2d1a4a;color:#c9a0ff;font-size:0.72rem">🏆</span>' : ""}</td>
         <td>${teams}</td>
         <td>${buildTypesCell(g)}</td>
         <td>${esc(g.field || "—")}</td>

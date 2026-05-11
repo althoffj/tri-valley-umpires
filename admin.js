@@ -356,6 +356,24 @@ const ROLE_DEFS = [
     ],
   },
   {
+    key: "tournaments",
+    label: "Tournaments",
+    icon: "🏆",
+    description: "Manage tournament operations — create tournaments, link games, apply rain delays, and swap umpire field assignments.",
+    allowed: [
+      "Create, edit, and delete tournaments",
+      "Link and unlink games to tournaments",
+      "Apply rain delays to all tournament games at once",
+      "Swap umpire assignments between fields",
+      "Update tournament status (Scheduled / Active / Rain Delay / Complete)",
+    ],
+    notAllowed: [
+      "Approve or deny umpire accounts",
+      "Edit pay rates or system config",
+      "Add or remove admin users",
+    ],
+  },
+  {
     key: "superAdmin",
     label: "Super Admin",
     icon: "★",

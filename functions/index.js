@@ -677,3 +677,68 @@ exports.sendDayOfReminders = onSchedule("0 7 * * *", async () => {
     ].filter(Boolean));
   }
 });
+
+// ── Tournament field swap notification ───────────────────────────────────────
+
+exports.notifyTournamentSwap = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in.");
+  const db       = getFirestore();
+  const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { tournamentName, game1, game2, umpires1 = [], umpires2 = [] } = request.data;
+
+  // Collect affected UIDs — the umpires being moved to a new field
+  const affectedUids = [
+    ...umpires1.map(u => u.uid),
+    ...umpires2.map(u => u.uid)
+  ].filter(Boolean);
+
+  // Send Slack notification
+  const hooks = await getSlackWebhooks(db);
+  if (hooks.jeff) {
+    const names1 = umpires1.map(u => u.name).join(", ") || "none";
+    const names2 = umpires2.map(u => u.name).join(", ") || "none";
+    const msg = `🔄 *Field Swap — ${tournamentName}*\n`
+      + `• ${game1.time} ${game1.field ? "(" + game1.field + ")" : ""} ↔ ${game2.time} ${game2.field ? "(" + game2.field + ")" : ""}\n`
+      + `• ${names1} ⇄ ${names2}`;
+    await postSlack(hooks.jeff, msg).catch(() => {});
+  }
+
+  // Send FCM push to affected umpires
+  if (!affectedUids.length) return { sent: 0 };
+
+  const tokenDocs = await Promise.all(
+    affectedUids.map(uid => db.doc(`notifications/${uid}`).get())
+  );
+  const tokens = tokenDocs.map(d => d.exists ? d.data().token : null).filter(Boolean);
+  if (!tokens.length) return { sent: 0 };
+
+  const messaging = getMessaging();
+  const result    = await messaging.sendEachForMulticast({
+    tokens,
+    notification: {
+      title: `⇄ Field Swap — ${tournamentName}`,
+      body:  `Your field assignment has changed. Check the schedule for your new game.`
+    },
+    webpush: { fcmOptions: { link: "/schedule.html" } }
+  });
+
+  // Remove stale tokens
+  const stale = [];
+  result.responses.forEach((r, i) => {
+    if (!r.success && r.error?.code === "messaging/registration-token-not-registered") {
+      stale.push(tokens[i]);
+    }
+  });
+  if (stale.length) {
+    const notifSnap = await db.collection("notifications").get();
+    await Promise.all(
+      notifSnap.docs
+        .filter(d => stale.includes(d.data().token))
+        .map(d => d.ref.delete())
+    );
+  }
+
+  return { sent: result.successCount };
+});

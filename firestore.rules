@@ -77,6 +77,12 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // Tournaments: public read; admins can write
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
     // Facilities: public read; admins can write
     match /facilities/{facilityId} {
       allow read: if true;

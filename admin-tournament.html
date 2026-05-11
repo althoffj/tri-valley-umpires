@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Admin: Tournaments - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=9" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html">Games</a>
+      <a href="admin-tournament.html" class="admin-subnav-active">Tournaments</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-config.html">Config</a>
+      <a href="admin-analytics.html">Analytics</a>
+    </nav>
+
+    <!-- ── Create Tournament ─────────────────────────────────────────────────── -->
+    <h2>Create Tournament</h2>
+    <div class="document-note">
+      <p>Tournaments group related games so you can manage rain delays and umpire field swaps in bulk. Games are linked to a tournament after creation — any existing game can be added.</p>
+    </div>
+    <form id="createTournamentForm" class="signup-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="tName">Tournament Name</label>
+          <input type="text" id="tName" placeholder="e.g. Crooks 10U Spring Tournament" required />
+        </div>
+        <div class="form-group">
+          <label for="tDate">Date</label>
+          <input type="date" id="tDate" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="tLocation">Location</label>
+          <input type="text" id="tLocation" placeholder="e.g. Crooks, SD — Heikkila Park" />
+        </div>
+        <div class="form-group">
+          <label for="tDivision">Division</label>
+          <select id="tDivision">
+            <option value="">-- All / Multiple --</option>
+            <option value="10U">10U</option>
+            <option value="12U">12U</option>
+            <option value="14U">14U</option>
+            <option value="HS JV">HS JV</option>
+            <option value="HS Varsity">HS Varsity</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="tFields">Fields <span style="color:var(--light-text);font-weight:normal">(comma-separated)</span></label>
+          <input type="text" id="tFields" placeholder="e.g. Field 1, Field 2, Field 3" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="tNotes">Notes <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+          <textarea id="tNotes" rows="2"
+            placeholder="e.g. Bring extra baseballs. Parking on north side."
+            style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
+        </div>
+      </div>
+      <div class="page-actions" style="margin-top:12px">
+        <button type="submit" class="btn">Create Tournament</button>
+      </div>
+      <p id="createTournamentMsg" class="signup-message" aria-live="polite"></p>
+    </form>
+
+    <!-- ── Tournament List ───────────────────────────────────────────────────── -->
+    <h2>All Tournaments</h2>
+    <div id="tournamentList">
+      <p style="color:var(--light-text)">Loading…</p>
+    </div>
+
+  </div>
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=10"></script>
+  <script type="module" src="admin-tournament.js?v=1"></script>
+  <script type="module" src="/pwa.js?v=2"></script>
+  <script type="module" src="/tabs.js?v=3"></script>
+  <script type="module" src="nav.js?v=2"></script>
+</body>
+</html>
