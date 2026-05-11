@@ -490,6 +490,29 @@ exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
   if (sends.length) await Promise.allSettled(sends);
 });
 
+// ── Cancellation request notifications ───────────────────────────────────────
+
+exports.onCancellationRequest = onDocumentWritten("cancellationRequests/{requestId}", async event => {
+  const before = event.data.before?.data() ?? null;
+  const after  = event.data.after?.data()  ?? null;
+
+  // Only notify on new pending requests
+  if (!after || after.status !== "pending" || before?.status === "pending") return;
+
+  const db    = getFirestore();
+  const hooks = await getSlackWebhooks(db);
+  if (!hooks.jeff) return;
+
+  const name  = after.name     || after.uid || "Unknown";
+  const slot  = after.slotType || "?";
+  const date  = fmtDateSlack(after.gameDate);
+  const time  = after.gameTime ? fmtTimeSlack(after.gameTime) : "";
+  const where = [after.gameCity, after.gameDivision, after.gameField].filter(Boolean).join(" · ");
+  const msg   = `⚠️ Cancellation request — ${name} wants to cancel ${slot} slot · ${date}${time ? " at " + time : ""}${where ? " · " + where : ""}\nReview: https://tri-valley-baseball-umpires.web.app/admin-games.html`;
+
+  await postSlack(hooks.jeff, msg).catch(() => {});
+});
+
 // ── FCM broadcast ─────────────────────────────────────────────────────────────
 
 const CORS = ["https://tri-valley-baseball-umpires.web.app", "https://tri-valley-baseball-umpires.firebaseapp.com"];

@@ -97,5 +97,16 @@ service cloud.firestore {
       allow read: if isApproved() || isAdmin();
       allow write: if isAdmin();
     }
+
+    // Cancellation requests: umpires create/read/withdraw their own; admins can read all and approve/deny
+    match /cancellationRequests/{requestId} {
+      allow create: if isApproved() && request.resource.data.uid == request.auth.uid;
+      allow read:   if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow update: if isAdmin() ||
+        (isSignedIn() && resource.data.uid == request.auth.uid &&
+         resource.data.status == "pending" &&
+         request.resource.data.status == "withdrawn");
+      allow delete: if isAdmin();
+    }
   }
 }

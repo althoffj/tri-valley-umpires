@@ -134,6 +134,15 @@
       <p id="addGameMessage" class="signup-message" aria-live="polite"></p>
     </form>
 
+    <!-- ── Pending Cancellations ────────────────────────────────────────── -->
+    <div id="pendingCancellationsSection" style="display:none">
+      <h2 style="color:#ffcc80">⏳ Pending Cancellation Requests</h2>
+      <div class="document-note">
+        <p>These umpires have requested to cancel their signup. Approve to remove them from the slot, or deny to keep them assigned.</p>
+      </div>
+      <div id="pendingCancellationsList"></div>
+    </div>
+
     <!-- ── Game List ──────────────────────────────────────────────────────── -->
     <h2>All Games</h2>
     <div class="page-actions">
@@ -306,7 +315,7 @@
   </div>
 
   <script type="module" src="auth.js?v=10"></script>
-  <script type="module" src="admin-games.js?v=10"></script>
+  <script type="module" src="admin-games.js?v=11"></script>
   <script type="module" src="/pwa.js?v=2"></script>
   <script type="module" src="/tabs.js?v=3"></script>
   <script type="module" src="nav.js?v=2"></script>

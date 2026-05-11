@@ -836,8 +836,128 @@ document.addEventListener("click", e => {
       b.classList.toggle("filter-active", b.dataset.filter === gameFilter)
     );
     renderAdminGames();
+    return;
   }
+
+  const approveCancelBtn = e.target.closest(".approve-cancel-btn");
+  if (approveCancelBtn) {
+    approveCancellation(
+      approveCancelBtn.dataset.requestId,
+      approveCancelBtn.dataset.gameId,
+      approveCancelBtn.dataset.slotType,
+      approveCancelBtn.dataset.uid
+    );
+    return;
+  }
+
+  const denyCancelBtn = e.target.closest(".deny-cancel-btn");
+  if (denyCancelBtn) { denyCancellation(denyCancelBtn.dataset.requestId); return; }
 });
+
+// ── Cancellation requests ─────────────────────────────────────────────────────
+
+let pendingCancellations = []; // [{ id, ...data }]
+
+async function loadPendingCancellations() {
+  try {
+    const snap = await getDocs(query(
+      collection(db, "cancellationRequests"),
+      where("status", "==", "pending"),
+      orderBy("requestedAt")
+    ));
+    pendingCancellations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.error("loadPendingCancellations:", err);
+    pendingCancellations = [];
+  }
+  renderPendingCancellations();
+}
+
+function renderPendingCancellations() {
+  const section = document.getElementById("pendingCancellationsSection");
+  const list    = document.getElementById("pendingCancellationsList");
+  if (!section || !list) return;
+
+  if (pendingCancellations.length === 0) {
+    section.style.display = "none";
+    return;
+  }
+
+  section.style.display = "";
+  list.innerHTML = pendingCancellations.map(r => {
+    const gameDate = r.gameDate ? fmtDate(r.gameDate) : "Unknown date";
+    const gameTime = r.gameTime ? fmtTime(r.gameTime) : "";
+    const label    = [r.gameCity, r.gameDivision, r.gameField].filter(Boolean).join(" · ");
+    return `
+    <div class="cancellation-request-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid #333">
+      <div>
+        <div style="font-weight:bold">${esc(r.name || r.uid)}</div>
+        <div style="color:var(--light-text);font-size:0.88rem;margin-top:2px">
+          ${esc(r.slotType)} slot &mdash; ${esc(gameDate)}${gameTime ? " at " + esc(gameTime) : ""}
+          ${label ? `&mdash; ${esc(label)}` : ""}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <button class="btn approve-cancel-btn" style="background:#17351f;color:#b8f2c4;font-size:0.85rem;padding:5px 14px"
+          data-request-id="${esc(r.id)}"
+          data-game-id="${esc(r.gameId)}"
+          data-slot-type="${esc(r.slotType)}"
+          data-uid="${esc(r.uid)}">Approve</button>
+        <button class="btn print-btn deny-cancel-btn" style="font-size:0.85rem;padding:5px 14px"
+          data-request-id="${esc(r.id)}">Deny</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function approveCancellation(requestId, gameId, slotType, uid) {
+  if (!confirm("Approve this cancellation? The umpire will be removed from the slot.")) return;
+  try {
+    // Remove umpire from the game slot
+    const gameRef = doc(db, "games", gameId);
+    const snap    = await getDoc(gameRef);
+    if (!snap.exists()) throw new Error("Game not found.");
+    const slots = (snap.data().umpireSlots || []).map(s =>
+      s.type === slotType && s.assignedUid === uid
+        ? { ...s, assignedUid: null, assignedName: null }
+        : s
+    );
+    await updateDoc(gameRef, { umpireSlots: slots });
+
+    // Update request status
+    await updateDoc(doc(db, "cancellationRequests", requestId), {
+      status:     "approved",
+      resolvedAt: serverTimestamp()
+    });
+
+    // Update local allGames cache
+    const g = allGames.find(g => g.id === gameId);
+    if (g) g.umpireSlots = slots;
+
+    // Remove from local list and re-render both
+    pendingCancellations = pendingCancellations.filter(r => r.id !== requestId);
+    renderPendingCancellations();
+    renderAdminGames();
+  } catch (err) {
+    alert("Failed to approve: " + err.message);
+  }
+}
+
+async function denyCancellation(requestId) {
+  if (!confirm("Deny this cancellation request? The umpire will remain assigned.")) return;
+  try {
+    await updateDoc(doc(db, "cancellationRequests", requestId), {
+      status:     "denied",
+      resolvedAt: serverTimestamp()
+    });
+    pendingCancellations = pendingCancellations.filter(r => r.id !== requestId);
+    renderPendingCancellations();
+  } catch (err) {
+    alert("Failed to deny: " + err.message);
+  }
+}
+
+// Wire approve/deny via event delegation (add to existing document listener below)
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -854,4 +974,5 @@ authReadyPromise.then(() => {
   loadGames();
   loadTeamCalendars();
   loadFacilitiesIntoSelects();
+  loadPendingCancellations();
 });

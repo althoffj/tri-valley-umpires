@@ -14,6 +14,7 @@ import {
   collection,
   getDocs,
   getDoc,
+  addDoc,
   runTransaction,
   updateDoc,
   doc,
@@ -27,6 +28,9 @@ let games = [];
 let activeFilter    = "all";
 let pendingGameId   = null;
 let pendingSlotType = null;
+
+// Pending cancellation requests for the current user: "gameId|slotType" → requestDocId
+let pendingCancels = {};
 
 // Cache: team name → Set of ISO date strings with games
 const teamGameDates = {};
@@ -399,6 +403,17 @@ function buildActionCell(game) {
   return `<div style="display:flex;flex-direction:column;gap:4px">${slots.map(slot => {
     const label = esc(slot.type);
     if (slot.assignedUid === uid) {
+      const cancelKey = `${game.id}|${slot.type}`;
+      if (pendingCancels[cancelKey]) {
+        return `<div style="display:flex;flex-direction:column;gap:3px">
+          <button type="button" class="btn print-btn" disabled
+            style="opacity:0.7;cursor:default;font-size:0.85rem">⏳ Cancel Pending…</button>
+          <button type="button" class="btn withdraw-cancel-btn"
+            data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}"
+            style="font-size:0.78rem;padding:3px 10px;background:transparent;border-color:#666">
+            Withdraw Request</button>
+        </div>`;
+      }
       return `<button type="button" class="btn print-btn cancel-btn"
         data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}">
         Cancel — ${label} (you)</button>`;
@@ -460,16 +475,37 @@ function showLoading() {
   });
 }
 
+async function loadPendingCancels() {
+  const uid = getCurrentUser()?.uid;
+  if (!uid || !isApproved()) { pendingCancels = {}; return; }
+  try {
+    const snap = await getDocs(query(
+      collection(db, "cancellationRequests"),
+      where("uid",    "==", uid),
+      where("status", "==", "pending")
+    ));
+    pendingCancels = {};
+    snap.forEach(d => {
+      const r = d.data();
+      pendingCancels[`${r.gameId}|${r.slotType}`] = d.id;
+    });
+  } catch (err) {
+    console.error("loadPendingCancels:", err);
+  }
+}
+
 async function loadGames() {
   showLoading();
   try {
-    const q = query(
-      collection(db, "games"),
-      where("needsUmpires", "==", true),
-      orderBy("date"),
-      orderBy("time")
-    );
-    const snap = await getDocs(q);
+    const [snap] = await Promise.all([
+      getDocs(query(
+        collection(db, "games"),
+        where("needsUmpires", "==", true),
+        orderBy("date"),
+        orderBy("time")
+      )),
+      loadPendingCancels()
+    ]);
     games = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderGameRows();
   } catch (err) {
@@ -670,35 +706,59 @@ async function claimSlot(gameId, slotType) {
   }
 }
 
-// ── Cancel slot ───────────────────────────────────────────────────────────────
+// ── Cancel slot (request-based) ───────────────────────────────────────────────
 
 async function cancelSlot(gameId, slotType) {
-  const user = getCurrentUser();
-  if (!user) return;
-  if (!confirm(`Cancel your ${slotType} signup for this game?`)) return;
+  const user    = getCurrentUser();
+  const profile = getCurrentProfile();
+  if (!user || !profile) return;
+
+  const key = `${gameId}|${slotType}`;
+  if (pendingCancels[key]) {
+    alert("You already have a pending cancellation request for this slot.");
+    return;
+  }
+
+  if (!confirm(`Request to cancel your ${slotType} signup? An admin must approve before you are removed.`)) return;
+
+  const game = games.find(g => g.id === gameId);
+  if (!game) return;
 
   try {
-    const gameRef = doc(db, "games", gameId);
-    let updatedSlots;
-
-    await runTransaction(db, async tx => {
-      const snap = await tx.get(gameRef);
-      if (!snap.exists()) throw new Error("Game not found.");
-      const slots = snap.data().umpireSlots || [];
-      const slotIdx = slots.findIndex(s => s.type === slotType && s.assignedUid === user.uid);
-      if (slotIdx === -1) throw new Error("You are not signed up for this slot.");
-      updatedSlots = slots.map((s, i) =>
-        i === slotIdx ? { ...s, assignedUid: null, assignedName: null } : s
-      );
-      tx.update(gameRef, { umpireSlots: updatedSlots });
+    const ref = await addDoc(collection(db, "cancellationRequests"), {
+      gameId,
+      slotType,
+      uid:          user.uid,
+      name:         profile.name || user.email,
+      gameDate:     game.date     || "",
+      gameTime:     game.time     || "",
+      gameCity:     game.city     || "",
+      gameDivision: game.division || "",
+      gameField:    game.field    || "",
+      status:       "pending",
+      requestedAt:  serverTimestamp()
     });
-
-    const g = games.find(g => g.id === gameId);
-    if (g) g.umpireSlots = updatedSlots;
+    pendingCancels[key] = ref.id;
     renderGameRows();
   } catch (err) {
-    alert(err.message);
-    await loadGames();
+    alert("Failed to submit cancellation request: " + err.message);
+  }
+}
+
+// ── Withdraw cancellation request ─────────────────────────────────────────────
+
+async function withdrawCancellation(gameId, slotType) {
+  const key = `${gameId}|${slotType}`;
+  const requestId = pendingCancels[key];
+  if (!requestId) return;
+  if (!confirm("Withdraw your cancellation request? You will remain assigned to this game.")) return;
+
+  try {
+    await updateDoc(doc(db, "cancellationRequests", requestId), { status: "withdrawn" });
+    delete pendingCancels[key];
+    renderGameRows();
+  } catch (err) {
+    alert("Failed to withdraw: " + err.message);
   }
 }
 
@@ -714,6 +774,9 @@ document.addEventListener("click", e => {
 
   const cancelBtn = e.target.closest(".cancel-btn");
   if (cancelBtn) { cancelSlot(cancelBtn.dataset.gameId, cancelBtn.dataset.slotType); return; }
+
+  const withdrawBtn = e.target.closest(".withdraw-cancel-btn");
+  if (withdrawBtn) { withdrawCancellation(withdrawBtn.dataset.gameId, withdrawBtn.dataset.slotType); return; }
 
   const filterBtn = e.target.closest(".filter-btn");
   if (filterBtn) {
