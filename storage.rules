@@ -1,0 +1,21 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Incident report photos — approved umpires can upload to their own uid path;
+    // admins can read (and delete) any incident photo
+    match /incidentPhotos/{uid}/{allPaths=**} {
+      allow read:   if request.auth != null && (
+                      request.auth.uid == uid ||
+                      firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+                    );
+      allow create: if request.auth != null &&
+                      request.auth.uid == uid &&
+                      request.resource.size < 10 * 1024 * 1024 &&
+                      request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null &&
+                      firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+
+  }
+}

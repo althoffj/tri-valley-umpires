@@ -1,6 +1,10 @@
 // admin.js — Overview: pending approvals, roster, admin user management
-import { db } from "./firebase.js";
+import { app, db } from "./firebase.js";
 import { authReadyPromise, isAdmin, getCurrentUser } from "./auth.js";
+import {
+  getFunctions,
+  httpsCallable
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 import {
   collection,
   getDocs,
@@ -49,9 +53,10 @@ async function loadCurrentAdminDoc() {
 
 function isSuperAdmin() {
   if (!currentAdminDoc) return false;
-  if (currentAdminDoc.superAdmin === true) return true;
-  const roles = currentAdminDoc.roles || [];
-  return roles.length === 0; // empty roles = super admin
+  if (currentAdminDoc.superAdmin === true)  return true;
+  if (currentAdminDoc.superAdmin === false) return false;
+  // superAdmin field absent → legacy account; empty roles = super admin
+  return (currentAdminDoc.roles || []).length === 0;
 }
 
 // ── Announcements ─────────────────────────────────────────────────────────────
@@ -176,8 +181,14 @@ async function loadPending() {
           <strong>${esc(p.name)}</strong> &mdash; ${esc(p.email)} &mdash; ${esc(p.phone)}<br>
           <span style="color:var(--light-text);font-size:0.85rem">
             ${esc(p.street)}, ${esc(p.city)}, ${esc(p.state)} ${esc(p.zip)}
-            ${p.parentName ? ` | Parent: ${esc(p.parentName)}` : ""}
           </span>
+          ${p.parentName ? `
+          <div style="background:rgba(255,200,100,0.1);border:1px solid rgba(255,200,100,0.3);border-radius:4px;padding:6px 10px;margin-top:8px;font-size:0.85rem">
+            👤 <strong style="color:#ffd580">Minor — Parent/Guardian</strong><br>
+            ${esc(p.parentName)}
+            ${p.parentPhone ? ` · <a href="tel:${esc(p.parentPhone)}" style="color:#ffd580">${esc(p.parentPhone)}</a>` : ""}
+            ${p.parentEmail ? ` · <a href="mailto:${esc(p.parentEmail)}" style="color:#ffd580">${esc(p.parentEmail)}</a>` : ""}
+          </div>` : ""}
           <div class="page-actions" style="margin-top:12px">
             <button class="btn approve-btn" data-uid="${esc(d.id)}">Approve</button>
             <button class="btn print-btn deny-btn" data-uid="${esc(d.id)}" data-name="${esc(p.name)}">Deny</button>
@@ -227,8 +238,11 @@ async function loadRoster() {
       return;
     }
 
+    const superAdmin = isSuperAdmin();
+
     tbody.innerHTML = snap.docs.map(d => {
       const p = { id: d.id, ...d.data() };
+      const isInactive = p.active === false;
       const equipList  = (p.equipment || []).join(", ") || "—";
       const maxGames   = p.maxGamesPerWeek != null ? `Max ${p.maxGamesPerWeek}/wk` : "";
       const certsList  = (p.certifications || []).join(", ");
@@ -237,26 +251,73 @@ async function loadRoster() {
       const equipHtml  = p.equipment?.length
         ? `<div style="color:var(--light-text);font-size:0.78rem;margin-top:2px">${esc(equipList)}${maxGames ? " · " + esc(maxGames) : ""}</div>`
         : (maxGames ? `<div style="color:var(--light-text);font-size:0.78rem;margin-top:2px">${esc(maxGames)}</div>` : "");
+      const parentHtml = p.parentName
+        ? `<div style="background:rgba(255,200,100,0.1);border:1px solid rgba(255,200,100,0.3);border-radius:4px;padding:4px 8px;margin-top:6px;font-size:0.78rem">
+             👤 <strong style="color:#ffd580">Minor</strong> — Parent: ${esc(p.parentName)}
+             ${p.parentPhone ? ` · <a href="tel:${esc(p.parentPhone)}" style="color:#ffd580">${esc(p.parentPhone)}</a>` : ""}
+             ${p.parentEmail ? ` · <a href="mailto:${esc(p.parentEmail)}" style="color:#ffd580">${esc(p.parentEmail)}</a>` : ""}
+           </div>`
+        : "";
+
+      // Status badge
+      let statusBadge;
+      if (isInactive) {
+        statusBadge = '<span class="badge" style="background:#333;color:#aaa">Inactive</span>';
+      } else if (p.approved) {
+        statusBadge = '<span class="badge badge-upcoming">Approved</span>';
+      } else if (p.denied) {
+        statusBadge = '<span class="badge badge-cancelled">Denied</span>';
+      } else {
+        statusBadge = '<span class="badge badge-today">Pending</span>';
+      }
+
+      // Action buttons
+      let actionBtns = "";
+      if (isInactive) {
+        if (superAdmin) {
+          actionBtns += `<button class="btn reactivate-umpire-btn" data-uid="${esc(p.id)}" data-name="${esc(p.name)}">Reactivate</button>`;
+          actionBtns += `<button class="btn print-btn delete-umpire-btn" data-uid="${esc(p.id)}" data-name="${esc(p.name)}"
+            style="background:#5a1a1a;font-size:0.78rem">Delete Account</button>`;
+        }
+      } else if (p.approved) {
+        actionBtns += `<button class="btn print-btn revoke-btn" data-uid="${esc(p.id)}" data-name="${esc(p.name)}">Revoke</button>`;
+        actionBtns += `<button class="btn print-btn set-inactive-btn" data-uid="${esc(p.id)}" data-name="${esc(p.name)}"
+          style="font-size:0.78rem">Set Inactive</button>`;
+      } else if (!p.denied) {
+        actionBtns += `<button class="btn approve-btn" data-uid="${esc(p.id)}">Approve</button>`;
+      } else {
+        // Denied
+        if (superAdmin) {
+          actionBtns += `<button class="btn print-btn delete-umpire-btn" data-uid="${esc(p.id)}" data-name="${esc(p.name)}"
+            style="background:#5a1a1a;font-size:0.78rem">Delete Account</button>`;
+        }
+      }
+      actionBtns += `<button class="btn print-btn edit-account-btn"
+        data-uid="${esc(p.id)}"
+        data-firstname="${esc(p.firstName || "")}"
+        data-lastname="${esc(p.lastName || "")}"
+        data-email="${esc(p.email || "")}"
+        data-phone="${esc(p.phone || "")}"
+        data-street="${esc(p.street || "")}"
+        data-city="${esc(p.city || "")}"
+        data-state="${esc(p.state || "")}"
+        data-zip="${esc(p.zip || "")}"
+        data-certifications="${esc((p.certifications || []).join(", "))}"
+        data-notes="${esc(p.notes || "")}"
+        data-approved="${p.approved ? "1" : "0"}"
+        data-parentname="${esc(p.parentName || "")}"
+        data-parentemail="${esc(p.parentEmail || "")}"
+        data-parentphone="${esc(p.parentPhone || "")}"
+        style="font-size:0.8rem">Edit Account</button>`;
+
       return `
         <tr>
-          <td>${esc(p.name)}${certHtml}${equipHtml}${noteText}</td>
+          <td>${esc(p.name)}${certHtml}${equipHtml}${noteText}${parentHtml}</td>
           <td><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></td>
           <td>${esc(p.phone || "—")}</td>
           <td style="font-size:0.85rem">${esc(p.street || "")}, ${esc(p.city || "")} ${esc(p.state || "")} ${esc(p.zip || "")}</td>
-          <td>
-            ${p.approved
-              ? '<span class="badge badge-upcoming">Approved</span>'
-              : p.denied
-                ? '<span class="badge badge-cancelled">Denied</span>'
-                : '<span class="badge badge-today">Pending</span>'}
-          </td>
-          <td>
-            ${p.approved
-              ? `<button class="btn print-btn revoke-btn" data-uid="${esc(p.id)}" data-name="${esc(p.name)}">Revoke</button>`
-              : !p.denied
-                ? `<button class="btn approve-btn" data-uid="${esc(p.id)}">Approve</button>`
-                : ""}
-          </td>
+          <td>${statusBadge}</td>
+          <td style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">${actionBtns}</td>
         </tr>`;
     }).join("");
   } catch (err) {
@@ -269,6 +330,39 @@ async function revokeUmpire(uid, name) {
   if (!confirm(`Revoke approval for ${name}?`)) return;
   try {
     await updateDoc(doc(db, "umpires", uid), { approved: false });
+    loadRoster();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function setUmpireInactive(uid, name) {
+  if (!confirm(`Set ${name} as inactive? They will no longer be able to sign up for games. You can reactivate them at any time.`)) return;
+  try {
+    await updateDoc(doc(db, "umpires", uid), { active: false });
+    loadRoster();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function reactivateUmpire(uid, name) {
+  if (!confirm(`Reactivate ${name}? They will be able to sign up for games again.`)) return;
+  try {
+    await updateDoc(doc(db, "umpires", uid), { active: true });
+    loadRoster();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function deleteUmpireAccount(uid, name) {
+  if (!confirm(`PERMANENTLY DELETE ${name}'s account?\n\nThis removes their profile and Firebase sign-in credentials. This cannot be undone.`)) return;
+  if (!confirm(`Are you sure? This is permanent and cannot be reversed.`)) return;
+  try {
+    const fns      = getFunctions(app, "us-central1");
+    const deleteFn = httpsCallable(fns, "deleteUmpireAccount");
+    await deleteFn({ uid });
     loadRoster();
   } catch (err) {
     alert(err.message);
@@ -288,9 +382,9 @@ const ROLE_DEFS = [
       "Sync games from GameChanger calendars",
       "Import city schedule",
       "Manage team calendar subscriptions",
+      "Manually assign umpires to slots",
     ],
     notAllowed: [
-      "Manually assign umpires to slots (Super Admin only)",
       "Approve or deny umpire accounts",
       "Edit pay rates or system config",
     ],
@@ -382,9 +476,11 @@ const ROLE_DEFS = [
     description: "Full unrestricted access to every admin section and function.",
     allowed: [
       "All permissions above, plus:",
-      "Manually assign umpires to game slots",
       "Add, edit, and remove admin users",
       "Grant or restrict roles for any admin",
+      "Post and manage announcements",
+      "Edit umpire account details",
+      "Delete umpire accounts and reactivate inactive umpires",
     ],
     notAllowed: [],
   },
@@ -411,10 +507,12 @@ async function loadAdminUsers() {
       const uid  = d.id;
       const data = d.data();
       const ump  = umpireMap[uid] || {};
-      const name  = ump.name  || "<em style='color:var(--light-text)'>Unknown</em>";
-      const email = ump.email || "<em style='color:var(--light-text)'>—</em>";
+      // Non-umpire admins have name/email stored directly in their admin doc
+      const name  = ump.name  || data.name  || "<em style='color:var(--light-text)'>Unknown</em>";
+      const email = ump.email || data.email || "<em style='color:var(--light-text)'>—</em>";
 
-      const isSA    = data.superAdmin === true || (data.roles || []).length === 0;
+      const isSA    = data.superAdmin === true ||
+        (data.superAdmin == null && (data.roles || []).length === 0);
       const roles   = data.roles || [];
       const roleStr = isSA
         ? '<span class="badge" style="background:#601929;color:#fff">Super Admin</span>'
@@ -510,7 +608,8 @@ function openEditPermissionsModal(uid) {
   getDoc(doc(db, "admins", uid)).then(snap => {
     const data   = snap.exists() ? snap.data() : {};
     const roles  = data.roles || [];
-    editPermIsSA = data.superAdmin === true || roles.length === 0;
+    editPermIsSA = data.superAdmin === true ||
+      (data.superAdmin == null && (data.roles || []).length === 0);
     editPermGranted = new Set(editPermIsSA ? [] : roles);
 
     const modal = document.getElementById("editPermModal");
@@ -608,40 +707,47 @@ function toggleAddCard(key) {
 document.getElementById("addAdminForm")?.addEventListener("submit", async function(e) {
   e.preventDefault();
   const email = document.getElementById("addAdminEmail").value.trim().toLowerCase();
+  const name  = document.getElementById("addAdminName")?.value.trim() || "";
   const btn   = this.querySelector("button[type='submit']");
   btn.disabled = true;
-  setMsg("addAdminMessage", "Looking up umpire…", "info");
+  setMsg("addAdminMessage", "Looking up user…", "info");
+
+  const superAdminChecked = addPermIsSA;
+  const selectedRoles     = superAdminChecked ? [] : [...addPermGranted];
 
   try {
-    // Look up UID from umpires collection by email
-    const q = query(collection(db, "umpires"), where("email", "==", email));
+    // First check if there's a matching umpire account
+    const q    = query(collection(db, "umpires"), where("email", "==", email));
     const snap = await getDocs(q);
-    if (snap.empty) {
-      setMsg("addAdminMessage", `No umpire found with email: ${email}`, "error");
-      btn.disabled = false;
-      return;
+
+    if (!snap.empty) {
+      // Umpire exists — grant them admin access directly
+      const uid = snap.docs[0].id;
+      const existing = await getDoc(doc(db, "admins", uid));
+      if (existing.exists()) {
+        setMsg("addAdminMessage", "This user is already an admin.", "warning");
+        btn.disabled = false;
+        return;
+      }
+      await setDoc(doc(db, "admins", uid), {
+        superAdmin: superAdminChecked,
+        roles:      selectedRoles,
+        addedAt:    new Date().toISOString()
+      });
+      setMsg("addAdminMessage", `Admin access granted to ${email}.`, "success");
+    } else {
+      // No umpire profile — use Cloud Function to create or look up Firebase Auth user
+      const fns           = getFunctions(app, "us-central1");
+      const createAdminFn = httpsCallable(fns, "createAdminUser");
+      const result        = await createAdminFn({ email, name, superAdmin: superAdminChecked, roles: selectedRoles });
+      const { isNew } = result.data;
+      if (isNew) {
+        setMsg("addAdminMessage", `New admin account created for ${email}. A welcome email with sign-in instructions has been sent.`, "success");
+      } else {
+        setMsg("addAdminMessage", `Admin access granted to ${email}. A welcome email has been sent.`, "success");
+      }
     }
 
-    const uid = snap.docs[0].id;
-
-    // Check if already an admin
-    const existing = await getDoc(doc(db, "admins", uid));
-    if (existing.exists()) {
-      setMsg("addAdminMessage", "This umpire is already an admin.", "warning");
-      btn.disabled = false;
-      return;
-    }
-
-    const superAdminChecked = addPermIsSA;
-    const selectedRoles     = superAdminChecked ? [] : [...addPermGranted];
-
-    await setDoc(doc(db, "admins", uid), {
-      superAdmin: superAdminChecked,
-      roles: selectedRoles,
-      addedAt: new Date().toISOString()
-    });
-
-    setMsg("addAdminMessage", `Admin added: ${email}`, "success");
     this.reset();
     addPermGranted = new Set();
     addPermIsSA    = false;
@@ -666,6 +772,15 @@ document.addEventListener("click", e => {
   const revokeBtn = e.target.closest(".revoke-btn");
   if (revokeBtn) { revokeUmpire(revokeBtn.dataset.uid, revokeBtn.dataset.name); return; }
 
+  const setInactiveBtn = e.target.closest(".set-inactive-btn");
+  if (setInactiveBtn) { setUmpireInactive(setInactiveBtn.dataset.uid, setInactiveBtn.dataset.name); return; }
+
+  const reactivateBtn = e.target.closest(".reactivate-umpire-btn");
+  if (reactivateBtn) { reactivateUmpire(reactivateBtn.dataset.uid, reactivateBtn.dataset.name); return; }
+
+  const deleteUmpireBtn = e.target.closest(".delete-umpire-btn");
+  if (deleteUmpireBtn) { deleteUmpireAccount(deleteUmpireBtn.dataset.uid, deleteUmpireBtn.dataset.name); return; }
+
   const editRolesBtn = e.target.closest(".edit-admin-roles-btn");
   if (editRolesBtn) { openEditPermissionsModal(editRolesBtn.dataset.uid); return; }
 
@@ -682,7 +797,110 @@ document.addEventListener("click", e => {
   if (e.target.id === "cancelPermBtn") { document.getElementById("editPermModal").style.display = "none"; return; }
   if (e.target === document.getElementById("editPermModal"))
     document.getElementById("editPermModal").style.display = "none";
+
+  const editAccountBtn = e.target.closest(".edit-account-btn");
+  if (editAccountBtn) { openEditAccountModal(editAccountBtn.dataset); return; }
+
+  if (e.target.id === "saveAccountBtn")   { saveAccountEdits(); return; }
+  if (e.target.id === "cancelAccountBtn") { closeEditAccountModal(); return; }
+  if (e.target === document.getElementById("editAccountModal")) closeEditAccountModal();
+
 });
+
+// ── Edit Account Modal ────────────────────────────────────────────────────────
+
+let editAccountUid = null;
+
+function openEditAccountModal(data) {
+  editAccountUid = data.uid;
+  document.getElementById("editAccountTitle").textContent = `Edit Account`;
+  document.getElementById("editFirstName").value      = data.firstname    || "";
+  document.getElementById("editLastName").value       = data.lastname     || "";
+  document.getElementById("editEmail").value          = data.email        || "";
+  document.getElementById("editPhone").value          = data.phone        || "";
+  document.getElementById("editStreet").value         = data.street       || "";
+  document.getElementById("editCity").value           = data.city         || "";
+  document.getElementById("editState").value          = data.state        || "";
+  document.getElementById("editZip").value            = data.zip          || "";
+  document.getElementById("editCertifications").value = data.certifications || "";
+  document.getElementById("editNotes").value          = data.notes        || "";
+  document.getElementById("editApproved").checked     = data.approved === "1";
+
+  // Parent fields — show section if minor (parentname present)
+  const isMinor = !!(data.parentname);
+  document.getElementById("editIsMinor").checked       = isMinor;
+  document.getElementById("editParentSection").style.display = isMinor ? "" : "none";
+  document.getElementById("editParentName").value      = data.parentname  || "";
+  document.getElementById("editParentEmail").value     = data.parentemail || "";
+  document.getElementById("editParentPhone").value     = data.parentphone || "";
+
+  document.getElementById("editAccountMsg").textContent = "";
+  document.getElementById("editAccountMsg").className   = "signup-message";
+  const modal = document.getElementById("editAccountModal");
+  modal.style.display = "flex";
+
+  // Wire minor toggle (one-time per open — remove old listener first)
+  const minorCb = document.getElementById("editIsMinor");
+  minorCb.onchange = () => {
+    document.getElementById("editParentSection").style.display = minorCb.checked ? "" : "none";
+    if (!minorCb.checked) {
+      document.getElementById("editParentName").value  = "";
+      document.getElementById("editParentEmail").value = "";
+      document.getElementById("editParentPhone").value = "";
+    }
+  };
+}
+
+function closeEditAccountModal() {
+  document.getElementById("editAccountModal").style.display = "none";
+  editAccountUid = null;
+}
+
+async function saveAccountEdits() {
+  if (!editAccountUid) return;
+  const btn = document.getElementById("saveAccountBtn");
+  const msg = document.getElementById("editAccountMsg");
+  btn.disabled = true;
+  msg.textContent = "Saving…";
+  msg.className   = "signup-message";
+
+  const certsRaw = document.getElementById("editCertifications").value.trim();
+  const certifications = certsRaw
+    ? certsRaw.split(",").map(s => s.trim()).filter(Boolean)
+    : [];
+
+  try {
+    const functions       = getFunctions(app, "us-central1");
+    const updateAccountFn = httpsCallable(functions, "updateUmpireAccount");
+    const isMinor = document.getElementById("editIsMinor").checked;
+    await updateAccountFn({
+      uid:            editAccountUid,
+      firstName:      document.getElementById("editFirstName").value.trim(),
+      lastName:       document.getElementById("editLastName").value.trim(),
+      email:          document.getElementById("editEmail").value.trim().toLowerCase(),
+      phone:          document.getElementById("editPhone").value.trim(),
+      street:         document.getElementById("editStreet").value.trim(),
+      city:           document.getElementById("editCity").value.trim(),
+      state:          document.getElementById("editState").value.trim().toUpperCase(),
+      zip:            document.getElementById("editZip").value.trim(),
+      certifications,
+      notes:          document.getElementById("editNotes").value.trim(),
+      approved:       document.getElementById("editApproved").checked,
+      parentName:     isMinor ? document.getElementById("editParentName").value.trim()  : "",
+      parentEmail:    isMinor ? document.getElementById("editParentEmail").value.trim().toLowerCase() : "",
+      parentPhone:    isMinor ? document.getElementById("editParentPhone").value.trim() : ""
+    });
+    msg.textContent = "Saved successfully.";
+    msg.className   = "signup-message success";
+    await loadRoster();
+    setTimeout(closeEditAccountModal, 1200);
+  } catch (err) {
+    console.error(err);
+    msg.textContent = err.message || "Error saving changes.";
+    msg.className   = "signup-message error";
+    btn.disabled    = false;
+  }
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Admin - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=9" />
+  <link rel="stylesheet" href="styles.css?v=11" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
 </head>
 <body>
@@ -25,6 +25,7 @@
       <a href="admin-tournament.html">Tournaments</a>
       <a href="admin-payroll.html">Payroll</a>
       <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-incidents.html">Incidents</a>
       <a href="admin-config.html">Config</a>
       <a href="admin-analytics.html">Analytics</a>
     </nav>
@@ -101,10 +102,18 @@
       <form id="addAdminForm" class="signup-form" style="margin-top:12px">
         <div class="form-row">
           <div class="form-group">
-            <label for="addAdminEmail">Umpire Email (to look up UID)</label>
-            <input type="email" id="addAdminEmail" placeholder="umpire@example.com" required />
+            <label for="addAdminName">Full Name</label>
+            <input type="text" id="addAdminName" placeholder="Jane Smith" />
+          </div>
+          <div class="form-group">
+            <label for="addAdminEmail">Email Address</label>
+            <input type="email" id="addAdminEmail" placeholder="admin@example.com" required />
           </div>
         </div>
+        <p style="font-size:0.82rem;color:var(--light-text);margin:0 0 12px">
+          If this person already has an umpire account the email will match it automatically.
+          Otherwise a new admin-only account will be created and you'll receive a one-time setup link to share with them.
+        </p>
         <label style="margin:16px 0 8px;color:#ccc">Permissions — click a card to grant or revoke</label>
         <p style="font-size:0.82rem;color:var(--light-text);margin:0 0 12px">
           All unchecked with no Super Admin = no access. Grant Super Admin to give full unrestricted access.
@@ -134,6 +143,91 @@
     </p>
   </div>
 
+  <!-- ── Edit Account Modal (super admin only) ───────────────────────────── -->
+  <div id="editAccountModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto">
+      <h2 id="editAccountTitle" style="margin-top:0">Edit Account</h2>
+
+      <div class="document-note" style="border-left-color:#f5a623;margin-bottom:20px">
+        <p style="margin:0;font-size:0.88rem">Changing the email address updates the umpire's Firebase sign-in credentials. They will need to use the new email to log in.</p>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editFirstName">First Name</label>
+          <input type="text" id="editFirstName" />
+        </div>
+        <div class="form-group">
+          <label for="editLastName">Last Name</label>
+          <input type="text" id="editLastName" />
+        </div>
+      </div>
+      <label for="editEmail">Email (sign-in address)</label>
+      <input type="email" id="editEmail" />
+      <label for="editPhone">Phone</label>
+      <input type="text" id="editPhone" />
+      <label for="editStreet">Street</label>
+      <input type="text" id="editStreet" />
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editCity">City</label>
+          <input type="text" id="editCity" />
+        </div>
+        <div class="form-group" style="flex:0 0 80px">
+          <label for="editState">State</label>
+          <input type="text" id="editState" maxlength="2" />
+        </div>
+        <div class="form-group" style="flex:0 0 110px">
+          <label for="editZip">ZIP</label>
+          <input type="text" id="editZip" maxlength="10" />
+        </div>
+      </div>
+      <label for="editCertifications">Certifications <span style="font-weight:normal;color:var(--light-text)">(comma-separated)</span></label>
+      <input type="text" id="editCertifications" placeholder="e.g. NFHS, BRD Level 1" />
+      <label for="editNotes">Notes</label>
+      <textarea id="editNotes" rows="2" style="resize:vertical"></textarea>
+
+      <div id="editParentSection" style="display:none;margin-top:8px">
+        <div style="background:rgba(255,200,100,0.08);border:1px solid rgba(255,200,100,0.3);border-radius:8px;padding:14px">
+          <p style="font-weight:bold;color:#ffd580;margin:0 0 12px">👤 Parent / Guardian (minor)</p>
+          <label for="editParentName">Parent Name</label>
+          <input type="text" id="editParentName" placeholder="Full name" />
+          <div class="form-row" style="margin-top:8px">
+            <div class="form-group">
+              <label for="editParentEmail">Parent Email</label>
+              <input type="email" id="editParentEmail" />
+            </div>
+            <div class="form-group">
+              <label for="editParentPhone">Parent Phone</label>
+              <input type="text" id="editParentPhone" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
+          <input type="checkbox" id="editIsMinor" />
+          Umpire is under 18 (show parent fields)
+        </label>
+      </div>
+
+      <div style="margin-top:16px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
+          <input type="checkbox" id="editApproved" />
+          Approved
+        </label>
+      </div>
+
+      <p id="editAccountMsg" class="signup-message" aria-live="polite" style="margin-top:12px"></p>
+
+      <div class="page-actions" style="margin-top:20px">
+        <button type="button" class="btn" id="saveAccountBtn">Save Changes</button>
+        <button type="button" class="btn print-btn" id="cancelAccountBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Edit Permissions Modal ──────────────────────────────────────────── -->
   <div id="editPermModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
     <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:900px;max-height:90vh;overflow-y:auto">
@@ -147,8 +241,8 @@
     </div>
   </div>
 
-  <script type="module" src="auth.js?v=13"></script>
-  <script type="module" src="admin.js?v=12"></script>
+  <script type="module" src="auth.js?v=15"></script>
+  <script type="module" src="admin.js?v=15"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=2"></script>
   <script type="module" src="nav.js?v=1"></script>

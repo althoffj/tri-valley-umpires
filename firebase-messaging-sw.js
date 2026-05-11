@@ -6,7 +6,7 @@ importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 
 // ── App Shell Caching ─────────────────────────────────────────────────────────
 
-const CACHE_NAME = "tvu-shell-v1";
+const CACHE_NAME = "tvu-shell-v2";
 const SHELL_ASSETS = [
   "/",
   "/index.html",

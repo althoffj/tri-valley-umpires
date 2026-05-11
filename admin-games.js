@@ -169,8 +169,11 @@ function renderAdminGames() {
   tbody.innerHTML = visible.map(g => {
     const slots = g.umpireSlots || [];
     const teams = (g.homeTeam && g.awayTeam)
-      ? `<div style="font-size:0.8rem;color:var(--light-text)">${esc(g.homeTeam)} vs ${esc(g.awayTeam)}</div>` : "";
-    const canAssign = isSuperAdmin() && !g.cancelled;
+      ? (g.isAway
+          ? `<div style="font-size:0.8rem;color:var(--light-text)"><span style="font-size:0.7rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px">AWAY</span>${esc(g.awayTeam)} @ ${esc(g.homeTeam)}</div>`
+          : `<div style="font-size:0.8rem;color:var(--light-text)">${esc(g.homeTeam)} vs ${esc(g.awayTeam)}</div>`)
+      : "";
+    const canAssign = isAdmin() && !g.cancelled;
     const slotHtml = slots.length
       ? slots.map((s, i) => `
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;${i > 0 ? "margin-top:4px" : ""}">
@@ -300,6 +303,7 @@ function openEditModal(gameId) {
   document.getElementById("editGameType").value      = game.type || "Regular";
   document.getElementById("editHomeTeam").value      = game.homeTeam || "";
   document.getElementById("editAwayTeam").value      = game.awayTeam || "";
+  document.getElementById("editIsAway").checked      = game.isAway === true;
   document.getElementById("editGameNotes").value     = game.notes || "";
 
   // Set facility select and trigger field cascade
@@ -376,6 +380,7 @@ async function saveGameEdit() {
       field:      getFieldValue("editGameFieldSelect", "editGameField"),
       homeTeam:   document.getElementById("editHomeTeam").value.trim(),
       awayTeam:   document.getElementById("editAwayTeam").value.trim(),
+      isAway:     document.getElementById("editIsAway").checked,
       facilityId: facilityId,
       needsUmpires: true,
       notes:      document.getElementById("editGameNotes").value.trim(),
@@ -743,11 +748,13 @@ async function syncGamesFromCalendars() {
     const syncGamesNow = httpsCallable(functions, "syncGamesNow");
     const { data } = await syncGamesNow();
     const parts = [];
-    if (data.linked)  parts.push(`${data.linked} game${data.linked !== 1 ? "s" : ""} linked to GameChanger`);
-    if (data.flagged) parts.push(`${data.flagged} possible change${data.flagged !== 1 ? "s" : ""} flagged`);
-    if (data.failed)  parts.push(`${data.failed} feed${data.failed !== 1 ? "s" : ""} failed`);
+    if (data.added)     parts.push(`${data.added} new`);
+    if (data.corrected) parts.push(`${data.corrected} corrected`);
+    if (data.linked)    parts.push(`${data.linked} linked`);
+    if (data.flagged)   parts.push(`${data.flagged} possible change${data.flagged !== 1 ? "s" : ""} flagged`);
+    if (data.failed)    parts.push(`${data.failed} feed${data.failed !== 1 ? "s" : ""} failed`);
     setMsg("syncCalMessage", parts.length ? `Sync: ${parts.join(", ")}.` : "Sync complete — nothing new.", data.flagged > 0 ? "warning" : "success");
-    if (data.linked || data.flagged) await loadGames();
+    if (data.linked || data.flagged || data.corrected) await loadGames();
   } catch (err) {
     setMsg("syncCalMessage", `Error: ${err.message}`, "error");
   } finally {
