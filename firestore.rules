@@ -11,13 +11,15 @@ service cloud.firestore {
     }
 
     function isApproved() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/umpires/$(request.auth.uid)).data.approved == true;
+      let d = get(/databases/$(database)/documents/umpires/$(request.auth.uid)).data;
+      return isSignedIn() && d.approved == true && d.get('active', true) != false;
     }
 
     function isSuperAdmin() {
-      return isAdmin() &&
-        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.superAdmin == true;
+      let d = get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
+      // Accept superAdmin:true OR roles:[] — the latter covers accounts created before the
+      // explicit superAdmin flag was introduced.
+      return isAdmin() && (d.superAdmin == true || !('roles' in d) || d.roles.size() == 0);
     }
 
     // Games: anyone can read; only admins can create/delete;
@@ -31,11 +33,15 @@ service cloud.firestore {
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['umpireSlots']));
     }
 
-    // Umpires: own profile read/create; admin can read/update all
+    // Umpires: own profile read/create; admin can read/update all;
+    // approved umpires may update their own non-sensitive fields
     match /umpires/{uid} {
       allow read:   if request.auth.uid == uid || isAdmin();
       allow create: if request.auth.uid == uid;
-      allow update: if isAdmin();
+      allow update: if isAdmin()
+                 || (isSignedIn() && request.auth.uid == uid
+                     && request.resource.data.approved  == resource.data.approved
+                     && request.resource.data.get('active', true) == resource.data.get('active', true));
       allow delete: if isAdmin();
     }
 

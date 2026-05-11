@@ -4,6 +4,7 @@ import {
   authReadyPromise,
   isLoggedIn,
   isApproved,
+  isAdmin,
   getCurrentUser,
   getCurrentProfile
 } from "./auth.js";
@@ -252,16 +253,19 @@ async function checkIn(gameId, slotType) {
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   try {
     const gameRef = doc(db, "games", gameId);
-    const snap    = await getDoc(gameRef);
-    if (!snap.exists()) throw new Error("Game not found.");
-    const slots = (snap.data().umpireSlots || []).map(s =>
-      (s.type === slotType && s.assignedUid === user.uid)
-        ? { ...s, checkedIn: true, checkedInAt: new Date().toISOString() }
-        : s
-    );
-    await updateDoc(gameRef, { umpireSlots: slots });
+    let updatedSlots;
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(gameRef);
+      if (!snap.exists()) throw new Error("Game not found.");
+      updatedSlots = (snap.data().umpireSlots || []).map(s =>
+        (s.type === slotType && s.assignedUid === user.uid)
+          ? { ...s, checkedIn: true, checkedInAt: new Date().toISOString() }
+          : s
+      );
+      tx.update(gameRef, { umpireSlots: updatedSlots });
+    });
     const g = games.find(g => g.id === gameId);
-    if (g) g.umpireSlots = slots;
+    if (g) g.umpireSlots = updatedSlots;
     renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "Check In"; }
@@ -454,7 +458,9 @@ function renderGameRows() {
 
     tbody.innerHTML = visible.map(g => {
       const teams = (g.homeTeam && g.awayTeam)
-        ? `${esc(g.homeTeam)} <span style="color:var(--light-text)">vs</span> ${esc(g.awayTeam)}`
+        ? (g.isAway
+            ? `<span style="font-size:0.72rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px;vertical-align:middle">AWAY</span>${esc(g.awayTeam)} <span style="color:var(--light-text)">@</span> ${esc(g.homeTeam)}`
+            : `${esc(g.homeTeam)} <span style="color:var(--light-text)">vs</span> ${esc(g.awayTeam)}`)
         : "—";
       return `
       <tr>
@@ -599,7 +605,10 @@ async function openModal(gameId, slotType) {
   const slotPay = slot?.payRate ?? game.payRate;
   const pay = slotPay ? `$${Number(slotPay).toFixed(2)}` : "TBD";
   const teams = (game.homeTeam && game.awayTeam)
-    ? `${esc(game.homeTeam)} vs ${esc(game.awayTeam)}<br>` : "";
+    ? (game.isAway
+        ? `<span style="font-size:0.72rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px">AWAY</span>${esc(game.awayTeam)} @ ${esc(game.homeTeam)}<br>`
+        : `${esc(game.homeTeam)} vs ${esc(game.awayTeam)}<br>`)
+    : "";
   const notesHtml = game.notes
     ? `<div style="margin-top:8px;padding:6px 10px;background:rgba(255,224,102,0.1);border-left:3px solid #ffe066;border-radius:0 4px 4px 0;font-size:0.88rem;color:#ffe066">📋 ${esc(game.notes)}</div>` : "";
   document.getElementById("modalGameDetail").innerHTML =

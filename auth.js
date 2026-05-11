@@ -58,11 +58,14 @@ onAuthStateChanged(auth, async (user) => {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export function isLoggedIn()   { return currentUser !== null; }
-export function isApproved()   { return currentProfile?.approved === true || currentIsAdmin; }
+export function isApproved()   { return (currentProfile?.approved === true && currentProfile?.active !== false) || currentIsAdmin; }
 export function isAdmin()      { return currentIsAdmin; }
 export function isSuperAdmin() {
   if (!currentIsAdmin) return false;
-  return currentAdminDoc?.superAdmin === true || (currentAdminDoc?.roles || []).length === 0;
+  if (currentAdminDoc?.superAdmin === true)  return true;
+  if (currentAdminDoc?.superAdmin === false) return false;
+  // superAdmin field absent → legacy account; empty roles = super admin
+  return (currentAdminDoc?.roles || []).length === 0;
 }
 export function getCurrentUser()    { return currentUser; }
 export function getCurrentProfile() { return currentProfile; }
@@ -73,15 +76,32 @@ export function getLoggedInName() {
 
 export async function login(email, password) {
   const credential = await signInWithEmailAndPassword(auth, email, password);
-  const snap = await getDoc(doc(db, "umpires", credential.user.uid));
-  if (!snap.exists()) {
+  const [umpireSnap, adminSnap] = await Promise.all([
+    getDoc(doc(db, "umpires", credential.user.uid)),
+    getDoc(doc(db, "admins", credential.user.uid))
+  ]);
+
+  // Admin accounts are always allowed through, regardless of umpires doc
+  if (adminSnap.exists()) {
+    currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
+    currentIsAdmin  = true;
+    currentAdminDoc = adminSnap.data();
+    return credential;
+  }
+
+  // Non-admin: must have an approved umpires profile
+  if (!umpireSnap.exists()) {
     await signOut(auth);
     throw new Error("Account profile not found. Please contact the league administrator.");
   }
-  const profile = snap.data();
+  const profile = umpireSnap.data();
   if (profile.approved === false) {
     await signOut(auth);
     throw new Error("Your account has not yet been approved. Please wait for administrator approval.");
+  }
+  if (profile.active === false) {
+    await signOut(auth);
+    throw new Error("Your account has been deactivated. Please contact the league administrator.");
   }
   currentProfile = profile;
   return credential;
@@ -119,6 +139,10 @@ export async function googleSignIn() {
   if (profile.approved === false) {
     await signOut(auth);
     throw new Error("Your account has not yet been approved. Please wait for administrator approval.");
+  }
+  if (profile.active === false) {
+    await signOut(auth);
+    throw new Error("Your account has been deactivated. Please contact the league administrator.");
   }
   currentProfile = profile;
   return credential;

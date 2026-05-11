@@ -13,8 +13,6 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-emailjs.init("H9Z9Qz-HB-PehAQjp");
-
 // ── Google Sign-In mode ───────────────────────────────────────────────────────
 // When arriving from googleSignIn() redirect (form.html?google=1), the user is
 // already authenticated via Google. Pre-fill their info, hide the password
@@ -234,7 +232,9 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
       submittedAt: serverTimestamp()
     });
 
-    // Sign out — user must be approved before logging in
+    // Sign out — user must be approved before logging in.
+    // Registration email notifications are sent server-side via the
+    // onUmpireRegistered Cloud Function triggered by the Firestore write above.
     await signOut(auth);
 
   } catch (err) {
@@ -255,26 +255,6 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
     submitBtn.disabled    = false;
     submitBtn.textContent = "Submit Official Acknowledgment";
     return;
-  }
-
-  // 4. Send EmailJS notifications (best-effort — don't block on failure)
-  const emailData = {
-    name:           fullName,
-    email:          data.email,
-    phone:          data.phone,
-    address:        `${data.street}, ${data.city}, ${data.state} ${data.zip}`,
-    signature:      data.signature,
-    parent_name:    data.parentName  || "N/A",
-    parent_email:   data.parentEmail || "",
-    parent_phone:   data.parentPhone || "",
-    datetime:       new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }),
-    main_page_link: "https://tri-valley-baseball-umpires.web.app"
-  };
-
-  try { await emailjs.send("service_vljauqe", "template_om0629c", emailData); } catch (_) {}
-
-  if (data.parentEmail) {
-    try { await emailjs.send("service_vljauqe", "template_n8kehkc", emailData); } catch (_) {}
   }
 
   msgEl.textContent = `Thank you, ${fullName}! Your acknowledgment has been recorded. You'll receive confirmation once an administrator approves your account — this typically takes 1–2 days.`;
