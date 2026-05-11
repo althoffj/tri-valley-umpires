@@ -139,6 +139,10 @@ nav a {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  line-height: normal;
+  box-sizing: border-box;
 }
 
 nav a:hover {

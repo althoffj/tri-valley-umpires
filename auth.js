@@ -58,7 +58,7 @@ onAuthStateChanged(auth, async (user) => {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export function isLoggedIn()   { return currentUser !== null; }
-export function isApproved()   { return currentProfile?.approved === true; }
+export function isApproved()   { return currentProfile?.approved === true || currentIsAdmin; }
 export function isAdmin()      { return currentIsAdmin; }
 export function isSuperAdmin() {
   if (!currentIsAdmin) return false;

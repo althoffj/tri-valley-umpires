@@ -373,12 +373,16 @@ function buildStatusCell(game) {
   if (game.cancelled) return '<span style="color:#ffb4b4">Cancelled</span>';
   const slots = getSlots(game);
   if (!slots.length) return "—";
+  const canSeeDetails = isApproved() || isAdmin();
   return slots.map(s => {
     const cls = s.type === "Plate" ? "plate" : s.type === "Field" ? "field" : "extra";
     const badge = `<span class="badge badge-${cls}">${esc(s.type)}</span>`;
     if (s.assignedName) {
-      const pay = s.payRate != null ? ` <span style="color:var(--light-text);font-size:0.78rem">$${Number(s.payRate).toFixed(0)}</span>` : "";
-      return `<div style="margin-bottom:2px">${badge} ${esc(s.assignedName)}${pay}</div>`;
+      if (canSeeDetails) {
+        const pay = s.payRate != null ? ` <span style="color:var(--light-text);font-size:0.78rem">$${Number(s.payRate).toFixed(0)}</span>` : "";
+        return `<div style="margin-bottom:2px">${badge} ${esc(s.assignedName)}${pay}</div>`;
+      }
+      return `<div style="margin-bottom:2px">${badge} <span style="color:#b8f2c4;font-size:0.85rem">Assigned</span></div>`;
     }
     return `<div style="margin-bottom:2px">${badge} <span style="color:#ffcc80;font-size:0.85rem">Open</span></div>`;
   }).join("");
@@ -401,8 +405,11 @@ function buildActionCell(game) {
 
   const uid      = getCurrentUser()?.uid;
   const slots    = getSlots(game);
-  const loggedIn = isLoggedIn() && isApproved();
+  const approved = isApproved() || isAdmin();
   const alreadyOnGame = uid && slots.some(s => s.assignedUid === uid);
+
+  // Unauthenticated / non-approved visitors see no buttons — status cell already shows open/assigned
+  if (!approved) return "";
 
   return `<div style="display:flex;flex-direction:column;gap:4px">${slots.map(slot => {
     const label = esc(slot.type);
@@ -424,9 +431,6 @@ function buildActionCell(game) {
     }
     if (slot.assignedUid) {
       return `<button type="button" class="btn locked-btn" disabled>${label}: ${esc(slot.assignedName || "Filled")}</button>`;
-    }
-    if (!loggedIn) {
-      return `<a href="index.html" class="btn print-btn">Sign up: ${label}</a>`;
     }
     if (alreadyOnGame) {
       return `<button type="button" class="btn locked-btn" disabled

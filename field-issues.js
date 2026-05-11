@@ -1,6 +1,6 @@
 // field-issues.js — Submit field issue reports; view own submissions
 import { db } from "./firebase.js";
-import { authReadyPromise, getCurrentUser } from "./auth.js";
+import { authReadyPromise, isApproved, isAdmin, getCurrentUser } from "./auth.js";
 import {
   collection,
   getDocs,
@@ -100,6 +100,14 @@ document.getElementById("fieldIssueForm").addEventListener("submit", async funct
   facilityId ? clr("issueFacilityError") : err("issueFacilityError", "Select a facility.");
   severity   ? clr("issueSeverityError")  : err("issueSeverityError",  "Select a severity level.");
   title      ? clr("issueTitleError")     : err("issueTitleError",     "Enter a short description.");
+
+  // If not signed in, reporter name is required
+  const user = getCurrentUser();
+  if (!user) {
+    const rName = document.getElementById("reporterName")?.value.trim() || "";
+    rName ? clr("reporterNameError") : err("reporterNameError", "Please enter your name.");
+  }
+
   if (!valid) return;
 
   const btn = document.getElementById("submitIssueBtn");
@@ -107,8 +115,9 @@ document.getElementById("fieldIssueForm").addEventListener("submit", async funct
   setMsg("issueFormMessage", "Submitting…", "info");
 
   try {
-    const user = getCurrentUser();
-    const fac  = facilitiesData.find(f => f.id === facilityId);
+    const fac          = facilitiesData.find(f => f.id === facilityId);
+    const enteredName  = document.getElementById("reporterName")?.value.trim() || "";
+    const enteredContact = document.getElementById("reporterContact")?.value.trim() || "";
 
     await addDoc(collection(db, "fieldIssues"), {
       facilityId,
@@ -119,8 +128,9 @@ document.getElementById("fieldIssueForm").addEventListener("submit", async funct
       title,
       description,
       status:        "Open",
-      reportedBy:    user.uid,
-      reporterName:  user.displayName || user.email || "",
+      reportedBy:    user?.uid || null,
+      reporterName:  user ? (user.displayName || user.email || "") : enteredName,
+      reporterContact: !user ? enteredContact : "",
       submittedAt:   serverTimestamp(),
       adminNotes:    "",
       resolvedAt:    null,
@@ -132,7 +142,7 @@ document.getElementById("fieldIssueForm").addEventListener("submit", async funct
     this.reset();
     document.getElementById("issueFieldSelect").innerHTML =
       `<option value="">-- General / Whole Complex --</option>`;
-    await loadMyIssues();
+    if (user) await loadMyIssues();
   } catch (err) {
     setMsg("issueFormMessage", err.message, "error");
   } finally {
@@ -196,7 +206,18 @@ async function loadMyIssues() {
 
 authReadyPromise.then(() => {
   const user = getCurrentUser();
-  if (!user) return;
+
+  // Show reporter name fields for non-logged-in visitors
+  const reporterSection = document.getElementById("reporterSection");
+  if (!user && reporterSection) reporterSection.style.display = "";
+
+  // Always load facilities (form is public)
   loadFacilities();
-  loadMyIssues();
+
+  // My Issues section only visible when signed in
+  const mySection = document.getElementById("myIssuesSection");
+  if (user && mySection) {
+    mySection.style.display = "";
+    loadMyIssues();
+  }
 });

@@ -65,9 +65,9 @@ service cloud.firestore {
       allow read:        if isAdmin();
     }
 
-    // Incident reports: approved umpires can create; only admins can read
+    // Incident reports: approved umpires or admins can create; only admins can read
     match /incidentReports/{reportId} {
-      allow create: if isApproved();
+      allow create: if isApproved() || isAdmin();
       allow read, update, delete: if isAdmin();
     }
 
@@ -95,10 +95,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Field issue reports: any approved umpire can submit; only admins can update/delete
+    // Field issue reports: anyone can submit; logged-in users can read their own; admins can read all
     match /fieldIssues/{issueId} {
-      allow read:   if isApproved() || isAdmin();
-      allow create: if isApproved();
+      allow read:   if isAdmin() || isApproved() ||
+                       (isSignedIn() && resource.data.reportedBy == request.auth.uid);
+      allow create: if true;
       allow update, delete: if isAdmin();
     }
 

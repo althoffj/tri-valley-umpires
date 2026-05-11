@@ -17,8 +17,8 @@
 
 <nav id="mainNav" aria-label="Main navigation"></nav>
 
-  <!-- Approved umpires and admins -->
-  <div class="container" data-auth-approved style="display:none">
+  <!-- Public form — no login required to submit -->
+  <div class="container">
 
     <h2>Report a Field Issue</h2>
     <div class="document-note">
@@ -69,6 +69,21 @@
         </div>
       </div>
 
+      <!-- Reporter info — shown only when not signed in -->
+      <div id="reporterSection" style="display:none">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="reporterName">Your Name *</label>
+            <input type="text" id="reporterName" placeholder="e.g. Coach Johnson" maxlength="80" />
+            <p class="field-error" id="reporterNameError"></p>
+          </div>
+          <div class="form-group">
+            <label for="reporterContact">Email or Phone <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+            <input type="text" id="reporterContact" placeholder="For follow-up if needed" maxlength="100" />
+          </div>
+        </div>
+      </div>
+
       <div class="form-row">
         <div class="form-group">
           <label for="issueTitle">Short Description *</label>
@@ -94,19 +109,14 @@
 
     </form>
 
-    <!-- My submitted issues -->
-    <h2 style="margin-top:40px">My Submitted Issues</h2>
-    <div id="myIssuesList">
-      <p style="color:var(--light-text)">Loading…</p>
+    <!-- My submitted issues — shown only when signed in -->
+    <div id="myIssuesSection" style="display:none">
+      <h2 style="margin-top:40px">My Submitted Issues</h2>
+      <div id="myIssuesList">
+        <p style="color:var(--light-text)">Loading…</p>
+      </div>
     </div>
 
-  </div>
-
-  <!-- Guest / pending fallback -->
-  <div class="container" data-auth-guest>
-    <div class="document-note">
-      <p>Field issue reporting is available to approved umpires. <a href="form.html">Register here</a> or sign in via the <strong>☰ menu</strong> (top right).</p>
-    </div>
   </div>
 
   <div class="footer">
@@ -121,8 +131,8 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=10"></script>
-  <script type="module" src="field-issues.js?v=8"></script>
+  <script type="module" src="auth.js?v=11"></script>
+  <script type="module" src="field-issues.js?v=9"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=2"></script>
   <script type="module" src="nav.js?v=1"></script>

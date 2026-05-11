@@ -3,6 +3,7 @@ import { db } from "./firebase.js";
 import {
   authReadyPromise,
   isApproved,
+  isAdmin,
   getCurrentUser,
   getCurrentProfile
 } from "./auth.js";
@@ -78,7 +79,8 @@ async function loadMyGames() {
     const myGames = [];
     snap.forEach(d => {
       const g = { id: d.id, ...d.data() };
-      if ((g.umpireSlots ?? []).some(s => s.assignedUid === user.uid)) {
+      // Admins can file reports for any game; umpires only see their own assigned games
+      if (isAdmin() || (g.umpireSlots ?? []).some(s => s.assignedUid === user.uid)) {
         myGames.push(g);
       }
     });

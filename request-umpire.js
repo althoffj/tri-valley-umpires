@@ -4,10 +4,27 @@ import {
   collection,
   getDocs,
   addDoc,
+  getDoc,
+  doc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 emailjs.init("H9Z9Qz-HB-PehAQjp");
+
+// ── Load default pay rates from config ───────────────────────────────────────
+
+let defaultRates = { plate: 40, field: 30 };
+
+(async () => {
+  try {
+    const snap = await getDoc(doc(db, "config", "payRates"));
+    if (snap.exists()) {
+      const d = snap.data();
+      if (d.plate != null) defaultRates.plate = Number(d.plate);
+      if (d.field != null) defaultRates.field = Number(d.field);
+    }
+  } catch (_) { /* use defaults on error */ }
+})();
 
 // ── Facilities cascade ────────────────────────────────────────────────────────
 
@@ -137,18 +154,6 @@ document.getElementById("coachPhone")?.addEventListener("input", function () {
   this.value = `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
 });
 
-// Enable/disable pay inputs when checkboxes change
-["needPlate","needField"].forEach(id => {
-  document.getElementById(id)?.addEventListener("change", function () {
-    const payId = id === "needPlate" ? "payPlate" : "payField";
-    const payEl = document.getElementById(payId);
-    if (!payEl) return;
-    payEl.disabled = !this.checked;
-    if (this.checked && !payEl.value) {
-      payEl.value = id === "needPlate" ? 40 : 30;
-    }
-  });
-});
 
 document.getElementById("requestForm")?.addEventListener("submit", async function (e) {
   e.preventDefault();
@@ -162,8 +167,8 @@ document.getElementById("requestForm")?.addEventListener("submit", async functio
   const division = document.getElementById("reqDivision").value;
   const needPlate = document.getElementById("needPlate").checked;
   const needField = document.getElementById("needField").checked;
-  const payPlate  = parseFloat(document.getElementById("payPlate").value) || 40;
-  const payField  = parseFloat(document.getElementById("payField").value) || 30;
+  const payPlate  = defaultRates.plate;
+  const payField  = defaultRates.field;
   const coachName  = document.getElementById("coachName").value.trim();
   const coachEmail = document.getElementById("coachEmail").value.trim();
   const coachPhone = document.getElementById("coachPhone").value.trim();

@@ -16,6 +16,62 @@ function esc(v) {
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// ── Weather ───────────────────────────────────────────────────────────────────
+
+const CITY_COORDS = {
+  "Crooks": { lat: 43.6503, lon: -96.8108 },
+  "Colton": { lat: 43.7877, lon: -97.0002 }
+};
+
+const WMO_LABELS = {
+  0: "Clear", 1: "Mainly Clear", 2: "Partly Cloudy", 3: "Overcast",
+  45: "Fog", 48: "Freezing Fog",
+  51: "Light Drizzle", 53: "Drizzle", 55: "Heavy Drizzle",
+  61: "Light Rain", 63: "Rain", 65: "Heavy Rain",
+  71: "Light Snow", 73: "Snow", 75: "Heavy Snow", 77: "Snow Grains",
+  80: "Showers", 81: "Showers", 82: "Heavy Showers",
+  85: "Snow Showers", 86: "Heavy Snow Showers",
+  95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm"
+};
+
+const WMO_ICONS = {
+  0: "☀️", 1: "🌤️", 2: "⛅", 3: "☁️",
+  45: "🌫️", 48: "🌫️",
+  51: "🌦️", 53: "🌦️", 55: "🌦️",
+  61: "🌧️", 63: "🌧️", 65: "🌧️",
+  71: "❄️", 73: "❄️", 75: "❄️", 77: "❄️",
+  80: "🌦️", 81: "🌦️", 82: "🌦️",
+  85: "❄️", 86: "❄️",
+  95: "⛈️", 96: "⛈️", 99: "⛈️"
+};
+
+async function fetchCurrentWeather(facilityName, address) {
+  const text    = `${facilityName} ${address || ""}`.toLowerCase();
+  const cityKey = Object.keys(CITY_COORDS).find(c => text.includes(c.toLowerCase()));
+  if (!cityKey) return null;
+
+  const { lat, lon } = CITY_COORDS[cityKey];
+  try {
+    const url  = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `&current=temperature_2m,weather_code,wind_speed_10m` +
+      `&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    const cur  = data.current;
+    if (!cur) return null;
+    const code = cur.weather_code ?? 0;
+    return {
+      temp:  Math.round(cur.temperature_2m ?? 0),
+      code,
+      wind:  Math.round(cur.wind_speed_10m ?? 0),
+      label: WMO_LABELS[code] ?? "Unknown",
+      icon:  WMO_ICONS[code]  ?? "🌡️"
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── Render helpers ────────────────────────────────────────────────────────────
 
 function row(label, value) {
@@ -138,7 +194,7 @@ function renderFieldCard(field, mapsUrl) {
     </div>`;
 }
 
-function renderFacility(facility) {
+function renderFacility(facility, weather) {
   const fieldsHtml = (facility.fields || [])
     .filter(f => f.name)
     .map(f => renderFieldCard(f, facility.googleMapsUrl))
@@ -153,11 +209,19 @@ function renderFacility(facility) {
          🔑 <strong>Shed Code:</strong> <span style="font-family:monospace;font-size:1.1rem;letter-spacing:0.12em">${esc(facility.shedCode)}</span>
        </div>`
     : "";
+  const weatherHtml = weather
+    ? `<div style="display:inline-flex;align-items:center;gap:8px;background:#1a1a2a;border:1px solid #3a3a5a;border-radius:6px;padding:8px 14px;margin-top:8px;font-size:0.9rem">
+         <span style="font-size:1.3rem">${weather.icon}</span>
+         <span><strong>${esc(weather.label)}</strong> · ${weather.temp}°F · Wind ${weather.wind} mph</span>
+       </div>`
+    : "";
 
   return `
     <h2 style="margin-top:48px">${esc(facility.name)}</h2>
     ${issuesBanner(facility.activeIssues)}
-    ${(addressLine || notesLine || shedCodeHtml) ? `<div class="document-note">${addressLine}${notesLine}${shedCodeHtml ? `<div style="margin-top:${(addressLine || notesLine) ? "8px" : "0"}">${shedCodeHtml}</div>` : ""}</div>` : ""}
+    ${(addressLine || notesLine || shedCodeHtml || weatherHtml)
+      ? `<div class="document-note">${addressLine}${notesLine}${shedCodeHtml ? `<div style="margin-top:${(addressLine || notesLine) ? "8px" : "0"}">${shedCodeHtml}</div>` : ""}${weatherHtml ? `<div style="margin-top:${(addressLine || notesLine || shedCodeHtml) ? "8px" : "0"}">${weatherHtml}</div>` : ""}</div>`
+      : ""}
     ${fieldsHtml ? `<div class="form-row" style="gap:24px;flex-wrap:wrap;align-items:stretch">${fieldsHtml}</div>` : ""}`;
 }
 
@@ -184,8 +248,14 @@ async function loadFacilities() {
     const shedCodes = {};
     if (codesSnap) codesSnap.docs.forEach(d => { shedCodes[d.id] = d.data().shedCode || ""; });
 
-    container.innerHTML = facSnap.docs
-      .map(d => renderFacility({ id: d.id, ...d.data(), shedCode: shedCodes[d.id] || "" }))
+    const facilities = facSnap.docs.map(d => ({ id: d.id, ...d.data(), shedCode: shedCodes[d.id] || "" }));
+
+    const weatherResults = await Promise.all(
+      facilities.map(f => fetchCurrentWeather(f.name, f.address || ""))
+    );
+
+    container.innerHTML = facilities
+      .map((f, i) => renderFacility(f, weatherResults[i]))
       .join("");
   } catch (e) {
     container.innerHTML = `<p style="color:#ffb4b4">Error loading facilities: ${esc(e.message)}</p>`;
