@@ -95,7 +95,7 @@ function renderBasepaths(field) {
   const rows = Array.isArray(field.basepaths) && field.basepaths.length
     ? field.basepaths
     : (field.basepathLength ? [{ label: "", distance: field.basepathLength }] : []);
-  if (!rows.length) return "";
+  if (!rows.length) return row("Base Paths", "—");
   if (rows.length === 1) return row("Base Paths", esc(rows[0].label ? `${rows[0].label}: ${rows[0].distance}` : rows[0].distance));
   const list = rows.map(b => b.label ? `${esc(b.label)}: ${esc(b.distance)}` : esc(b.distance)).join("<br>");
   return row("Base Paths", list);
@@ -109,7 +109,7 @@ function renderPitching(field) {
         distance: field.pitchingDistance,
         label: ""
       }] : []);
-  if (!mounds.length) return "";
+  if (!mounds.length) return row("Pitching", "—");
   if (mounds.length === 1) {
     const m = mounds[0];
     const parts = [m.distance, m.type, m.label].filter(Boolean);
@@ -127,7 +127,7 @@ function renderFences(field) {
   if (field.fenceLF)  parts.push(`LF: ${esc(field.fenceLF)}`);
   if (field.fenceCF)  parts.push(`CF: ${esc(field.fenceCF)}`);
   if (field.fenceRF)  parts.push(`RF: ${esc(field.fenceRF)}`);
-  if (!parts.length)  return "";
+  if (!parts.length)  return row("Fence Distances", "—");
   let val = parts.join(" &nbsp;|&nbsp; ");
   if (field.fenceHeight) val += `<br><span style="font-size:0.85rem;color:#aaa">Height: ${esc(field.fenceHeight)}</span>`;
   if (field.fenceType)   val += `<br><span style="font-size:0.85rem;color:#aaa">Type: ${esc(field.fenceType)}</span>`;
@@ -147,14 +147,14 @@ function renderAmenityBadges(field) {
     badge("Covered Seating",  field.coveredSeating),
     badge("First Aid",        field.firstAid),
   ].filter(Boolean).join("");
-  return items ? `<tr><th>Amenities</th><td>${items}</td></tr>` : "";
+  return `<tr><th>Amenities</th><td>${items || "—"}</td></tr>`;
 }
 
 function renderSurfaces(field) {
   const parts = [];
   if (field.infieldSurface)  parts.push(`Infield: ${esc(field.infieldSurface)}`);
   if (field.outfieldSurface) parts.push(`Outfield: ${esc(field.outfieldSurface)}`);
-  return parts.length ? row("Surface", parts.join(" &nbsp;|&nbsp; ")) : "";
+  return row("Surface", parts.length ? parts.join(" &nbsp;|&nbsp; ") : "—");
 }
 
 function renderFieldCard(field, mapsUrl) {
@@ -162,33 +162,35 @@ function renderFieldCard(field, mapsUrl) {
     field.dimensionLF  ? `LF ${esc(field.dimensionLF)}`  : "",
     field.dimensionCF  ? `CF ${esc(field.dimensionCF)}`  : "",
     field.dimensionRF  ? `RF ${esc(field.dimensionRF)}`  : "",
-  ].filter(Boolean).join(" / ");
+  ].filter(Boolean).join(" / ") || "—";
 
   const dugouts = field.homeDugoutSide
     ? `Home: ${esc(field.homeDugoutSide)} side`
-    : "";
+    : "—";
 
   return `
-    <div class="schedule-section" style="flex:0 1 320px;min-width:260px;max-width:420px;margin-top:0">
+    <div class="schedule-section" style="flex:0 1 320px;min-width:260px;max-width:420px;margin-top:0;display:flex;flex-direction:column">
       <h3 style="margin-top:12px;margin-bottom:8px">${esc(field.name)}</h3>
       ${issuesBanner(field.activeIssues)}
-      <table>
-        <tbody>
-          ${row("Division", field.division ? esc(field.division) : "")}
-          ${renderBasepaths(field)}
-          ${renderPitching(field)}
-          ${renderFences(field)}
-          ${dimensions ? row("Dimensions", dimensions) : ""}
-          ${renderSurfaces(field)}
-          ${dugouts ? row("Dugouts", dugouts) : ""}
-          ${renderAmenityBadges(field)}
-          ${field.equipmentStorage ? row("Equipment", esc(field.equipmentStorage)) : ""}
-          ${field.sunNotes        ? row("Sun/Visibility", esc(field.sunNotes))      : ""}
-          ${field.groundRules     ? row("Ground Rules", esc(field.groundRules))     : ""}
-          ${field.notes           ? row("Notes", esc(field.notes))                  : ""}
-        </tbody>
-      </table>
-      ${mapsUrl ? `<div class="page-actions" style="margin-top:0">
+      <div style="flex:1;overflow-x:auto">
+        <table style="margin:0">
+          <tbody>
+            ${row("Division",       field.division ? esc(field.division) : "—")}
+            ${renderBasepaths(field)}
+            ${renderPitching(field)}
+            ${renderFences(field)}
+            ${row("Dimensions",     dimensions)}
+            ${renderSurfaces(field)}
+            ${row("Dugouts",        dugouts)}
+            ${renderAmenityBadges(field)}
+            ${row("Equipment",      field.equipmentStorage ? esc(field.equipmentStorage) : "—")}
+            ${row("Sun/Visibility", field.sunNotes   ? esc(field.sunNotes)   : "—")}
+            ${row("Ground Rules",   field.groundRules ? esc(field.groundRules) : "—")}
+            ${field.notes ? row("Notes", esc(field.notes)) : ""}
+          </tbody>
+        </table>
+      </div>
+      ${mapsUrl ? `<div class="page-actions" style="margin-top:8px;margin-bottom:0">
         <a href="${esc(mapsUrl)}" target="_blank" class="btn print-btn">Open in Google Maps</a>
       </div>` : ""}
     </div>`;
