@@ -169,7 +169,7 @@ function renderFieldCard(field, mapsUrl) {
     : "";
 
   return `
-    <div class="schedule-section" style="flex:1;min-width:260px;margin-top:0">
+    <div class="schedule-section" style="flex:0 1 320px;min-width:260px;max-width:420px;margin-top:0">
       <h3 style="margin-top:12px;margin-bottom:8px">${esc(field.name)}</h3>
       ${issuesBanner(field.activeIssues)}
       <table>
@@ -222,7 +222,7 @@ function renderFacility(facility, weather) {
     ${(addressLine || notesLine || shedCodeHtml || weatherHtml)
       ? `<div class="document-note">${addressLine}${notesLine}${shedCodeHtml ? `<div style="margin-top:${(addressLine || notesLine) ? "8px" : "0"}">${shedCodeHtml}</div>` : ""}${weatherHtml ? `<div style="margin-top:${(addressLine || notesLine || shedCodeHtml) ? "8px" : "0"}">${weatherHtml}</div>` : ""}</div>`
       : ""}
-    ${fieldsHtml ? `<div class="form-row" style="gap:24px;flex-wrap:wrap;align-items:stretch">${fieldsHtml}</div>` : ""}`;
+    ${fieldsHtml ? `<div class="form-row" style="gap:24px;flex-wrap:wrap;align-items:stretch;justify-content:flex-start">${fieldsHtml}</div>` : ""}`;
 }
 
 // ── Load and render ───────────────────────────────────────────────────────────

@@ -412,6 +412,12 @@ function initAuthUI() {
           </div>
 
           <div style="margin-top:14px">
+            <label for="profileCertifications">Certifications <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+            <input type="text" id="profileCertifications" placeholder="e.g. NFHS Level 1, BPF Certified"
+              style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem;box-sizing:border-box" />
+          </div>
+
+          <div style="margin-top:14px">
             <label for="profileNotes">Notes for admin <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
             <textarea id="profileNotes" rows="2" placeholder="e.g. Prefer weeknight games, available all summer…"
               style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
@@ -556,8 +562,9 @@ function initAuthUI() {
     document.getElementById("profileCity").value        = profile.city || "";
     document.getElementById("profileStateInput").value  = profile.state || "";
     document.getElementById("profileZip").value         = profile.zip || "";
-    document.getElementById("profileMaxGames").value    = profile.maxGamesPerWeek != null ? profile.maxGamesPerWeek : "";
-    document.getElementById("profileNotes").value       = profile.notes || "";
+    document.getElementById("profileMaxGames").value       = profile.maxGamesPerWeek != null ? profile.maxGamesPerWeek : "";
+    document.getElementById("profileCertifications").value = (profile.certifications || []).join(", ");
+    document.getElementById("profileNotes").value          = profile.notes || "";
     // Populate equipment checkboxes
     const owned = new Set(profile.equipment || []);
     document.querySelectorAll("#profileEquipment input[type=checkbox]").forEach(cb => {
@@ -579,6 +586,10 @@ function initAuthUI() {
       const maxVal = document.getElementById("profileMaxGames").value.trim();
       const equipment = [...document.querySelectorAll("#profileEquipment input[type=checkbox]")]
         .filter(cb => cb.checked).map(cb => cb.value);
+      const certsRaw = document.getElementById("profileCertifications").value.trim();
+      const certifications = certsRaw
+        ? certsRaw.split(",").map(s => s.trim()).filter(Boolean)
+        : [];
       const fields = {
         name:            document.getElementById("profileName").value.trim(),
         phone:           document.getElementById("profilePhone").value.trim(),
@@ -588,6 +599,7 @@ function initAuthUI() {
         zip:             document.getElementById("profileZip").value.trim(),
         maxGamesPerWeek: maxVal !== "" ? parseInt(maxVal, 10) : null,
         equipment,
+        certifications,
         notes:           document.getElementById("profileNotes").value.trim(),
       };
       await updateProfile(fields);

@@ -448,7 +448,7 @@ function renderGameRows() {
     const visible = games.filter(g => g.city === city && gameMatchesFilter(g));
 
     if (visible.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--light-text);padding:20px">No games match this filter.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--light-text);padding:20px">No games match this filter.</td></tr>`;
       return;
     }
 
@@ -479,7 +479,7 @@ function renderGameRows() {
 
 function showLoading() {
   document.querySelectorAll("[data-game-list]").forEach(tbody => {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--light-text);padding:30px">Loading schedule…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--light-text);padding:30px">Loading schedule…</td></tr>`;
   });
 }
 
@@ -518,7 +518,7 @@ async function loadGames() {
     renderGameRows();
   } catch (err) {
     document.querySelectorAll("[data-game-list]").forEach(tbody => {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#ffb4b4;padding:20px">Failed to load schedule. Please refresh the page.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#ffb4b4;padding:20px">Failed to load schedule. Please refresh the page.</td></tr>`;
     });
     console.error("loadGames:", err);
   }
