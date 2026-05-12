@@ -68,7 +68,8 @@ async function loadPayroll() {
           city:       g.city ?? "",
           division:   g.division ?? "",
           pay:        Number(slot.payRate ?? g.payRate ?? 0),
-          paid:       slot.paid === true
+          paid:       slot.paid === true,
+          noShow:     slot.noShow === true
         });
       });
     });
@@ -98,15 +99,29 @@ function renderPayrollTable() {
     return;
   }
 
-  const totalOwed    = rows.reduce((s, r) => s + r.pay, 0);
-  const totalPaid    = rows.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
+  // No-shows are excluded from financial totals
+  const billable     = rows.filter(r => !r.noShow);
+  const noShowCount  = rows.length - billable.length;
+  const totalOwed    = billable.reduce((s, r) => s + r.pay, 0);
+  const totalPaid    = billable.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
   const outstanding  = totalOwed - totalPaid;
   if (totalsEl) {
+    const noShowNote = noShowCount > 0 ? ` — ${noShowCount} no-show${noShowCount !== 1 ? "s" : ""} excluded` : "";
     totalsEl.textContent =
-      `Total: $${totalOwed.toFixed(2)} — Paid: $${totalPaid.toFixed(2)} — Outstanding: $${outstanding.toFixed(2)}`;
+      `Total: $${totalOwed.toFixed(2)} — Paid: $${totalPaid.toFixed(2)} — Outstanding: $${outstanding.toFixed(2)}${noShowNote}`;
   }
 
   tbody.innerHTML = rows.map(r => {
+    if (r.noShow) {
+      return `<tr style="opacity:0.55">
+        <td>${esc(r.umpireName)}</td>
+        <td>${esc(fmtDate(r.date))}</td>
+        <td>${esc(r.city)}<br><span style="color:var(--light-text);font-size:0.85rem">${esc(r.division)}</span></td>
+        <td><span class="badge badge-${r.slotType.toLowerCase()}">${esc(r.slotType)}</span></td>
+        <td style="color:var(--light-text)">$0.00</td>
+        <td><span class="badge" style="background:#3a1010;color:#ffb4b4">No Show</span></td>
+      </tr>`;
+    }
     const paidBadge = r.paid
       ? `<span class="badge" style="background:#17351f;color:#b8f2c4">Paid</span>`
       : `<span class="badge" style="background:#4a2c00;color:#ffcc80">Unpaid</span>`;
@@ -177,7 +192,7 @@ function exportCSV() {
     return true;
   });
 
-  const headers = ["Umpire", "Date", "City", "Division", "Slot", "Pay", "Paid"];
+  const headers = ["Umpire", "Date", "City", "Division", "Slot", "Pay", "Paid", "No Show"];
   const lines = [
     headers.join(","),
     ...rows.map(r => [
@@ -186,8 +201,9 @@ function exportCSV() {
       `"${r.city.replace(/"/g, '""')}"`,
       `"${r.division.replace(/"/g, '""')}"`,
       r.slotType,
-      r.pay.toFixed(2),
-      r.paid ? "Yes" : "No"
+      r.noShow ? "0.00" : r.pay.toFixed(2),
+      r.noShow ? "N/A" : (r.paid ? "Yes" : "No"),
+      r.noShow ? "Yes" : "No"
     ].join(","))
   ];
 

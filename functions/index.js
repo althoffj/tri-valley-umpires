@@ -1129,6 +1129,55 @@ exports.notifyOpenSlots = onCall({ cors: ["https://tri-valley-baseball-umpires.w
   return { slacked: sends.length, pushed };
 });
 
+// ── Email broadcast to all active approved umpires ───────────────────────────
+
+exports.sendBroadcastEmail = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PASS] }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db       = getFirestore();
+  const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { subject, body } = request.data || {};
+  if (!subject || !body) throw new HttpsError("invalid-argument", "subject and body are required.");
+
+  // Fetch all approved, active umpires with a valid email
+  const snap = await db.collection("umpires")
+    .where("approved", "==", true)
+    .get();
+
+  const recipients = snap.docs
+    .map(d => d.data())
+    .filter(u => u.active !== false && u.email)
+    .map(u => ({ name: u.name || "", email: u.email }));
+
+  if (recipients.length === 0) return { sent: 0, failed: 0 };
+
+  const transport = buildTransport();
+  let sent = 0, failed = 0;
+
+  await Promise.all(recipients.map(async r => {
+    try {
+      await transport.sendMail({
+        from:    `"Tri-Valley Umpires" <${GMAIL_USER.value()}>`,
+        to:      r.email,
+        subject,
+        text:    body,
+        html:    `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <p>${body.replace(/\n/g, "<br>")}</p>
+          <hr style="border:none;border-top:1px solid #333;margin:24px 0">
+          <p style="color:#888;font-size:0.85rem">Tri-Valley Baseball Umpires &mdash;
+            <a href="https://tri-valley-baseball-umpires.web.app">Portal</a></p>
+        </div>`
+      });
+      sent++;
+    } catch (_) {
+      failed++;
+    }
+  }));
+
+  return { sent, failed };
+});
+
 // ── FCM broadcast ─────────────────────────────────────────────────────────────
 
 exports.sendBroadcast = onCall({ cors: CORS }, async request => {
@@ -1137,40 +1186,52 @@ exports.sendBroadcast = onCall({ cors: CORS }, async request => {
   const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
   if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
 
-  const { title, body } = request.data || {};
+  const { title, body, slackWebhook } = request.data || {};
   if (!title || !body) throw new HttpsError("invalid-argument", "title and body are required.");
 
   const tokensSnap = await db.collection("notifications").get();
   const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
-  if (tokens.length === 0) return { sent: 0, failed: 0 };
 
-  const result = await getMessaging().sendEachForMulticast({
-    tokens,
-    notification: { title, body },
-    webpush: { fcmOptions: { link: "https://tri-valley-baseball-umpires.web.app/" } }
-  });
+  // Send push notifications (skip if no tokens, but still post to Slack)
+  let sent = 0, failed = 0;
+  if (tokens.length > 0) {
+    const result = await getMessaging().sendEachForMulticast({
+      tokens,
+      notification: { title, body },
+      webpush: { fcmOptions: { link: "https://tri-valley-baseball-umpires.web.app/" } }
+    });
+    sent   = result.successCount;
+    failed = result.failureCount;
 
-  // Remove stale tokens (unregistered or invalid)
-  const stale = result.responses
-    .map((r, i) => r.error ? tokens[i] : null)
-    .filter(Boolean);
-  if (stale.length > 0) {
-    const batch = db.batch();
-    for (const snap of tokensSnap.docs) {
-      if (stale.includes(snap.data().token)) batch.delete(snap.ref);
+    // Remove stale tokens (unregistered or invalid)
+    const stale = result.responses
+      .map((r, i) => r.error ? tokens[i] : null)
+      .filter(Boolean);
+    if (stale.length > 0) {
+      const batch = db.batch();
+      for (const snap of tokensSnap.docs) {
+        if (stale.includes(snap.data().token)) batch.delete(snap.ref);
+      }
+      await batch.commit();
     }
-    await batch.commit();
   }
 
-  return { sent: result.successCount, failed: result.failureCount };
+  // Also post to Slack if a webhook was provided
+  let slacked = false;
+  const webhook = slackWebhook || (await getSlackWebhooks(db)).broadcast || null;
+  if (webhook) {
+    await postSlack(webhook, `📣 *${title}*\n${body}`).catch(() => {});
+    slacked = true;
+  }
+
+  return { sent, failed, slacked };
 });
 
 // ── Phase 12: day-of reminders at 7 AM ───────────────────────────────────────
 
-exports.sendDayOfReminders = onSchedule("0 7 * * *", async () => {
-  const db    = getFirestore();
+async function dayOfRemindersCore(db) {
   const hooks = await getSlackWebhooks(db);
-  if (!hooks.jeff && !hooks.ch10u && !hooks.ch12u) return;
+  if (!hooks.jeff && !hooks.ch10u && !hooks.ch12u) return { sent: 0 };
 
   const today = todayISO();
   const snap  = await db.collection("games")
@@ -1178,14 +1239,13 @@ exports.sendDayOfReminders = onSchedule("0 7 * * *", async () => {
     .where("needsUmpires", "==", true)
     .get();
 
-  if (snap.empty) return;
-
+  let sent = 0;
   for (const d of snap.docs) {
     const g      = d.data();
     if (g.cancelled) continue;
-    const div    = g.division ?? "";
+    const div     = g.division ?? "";
     const channel = /10U/i.test(div) ? hooks.ch10u : /12U/i.test(div) ? hooks.ch12u : null;
-    const slots  = (g.umpireSlots ?? [])
+    const slots   = (g.umpireSlots ?? [])
       .map(s => s.assignedName ? `${s.type}: ${s.assignedName}` : `${s.type}: OPEN`)
       .join(" | ");
     const msg = `⚾ *Game today:* ${gameLabel(g)}\n${slots}`;
@@ -1194,7 +1254,113 @@ exports.sendDayOfReminders = onSchedule("0 7 * * *", async () => {
       hooks.jeff ? postSlack(hooks.jeff, msg) : null,
       channel    ? postSlack(channel,    msg) : null
     ].filter(Boolean));
+    sent++;
   }
+  return { sent };
+}
+
+exports.sendDayOfReminders = onSchedule("0 7 * * *", async () => {
+  await dayOfRemindersCore(getFirestore());
+});
+
+exports.triggerDayOfReminders = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db       = getFirestore();
+  const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+  return dayOfRemindersCore(db);
+});
+
+// ── Daily game summary at 7 AM ────────────────────────────────────────────────
+//
+// Posts a single comprehensive message to the "Daily Game Summary" Slack channel
+// listing every non-cancelled game today, the assigned umpire(s) per slot, each
+// umpire's phone number, and parent contact info when available.
+
+async function dailyGameSummaryCore(db) {
+  const hooks = await getSlackWebhooks(db);
+  if (!hooks.dailySummary) return { sent: false, reason: "No webhook configured." };
+
+  const today = todayISO();
+
+  const snap = await db.collection("games")
+    .where("date", "==", today)
+    .get();
+
+  const games = snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(g => !g.cancelled)
+    .sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""));
+
+  if (!games.length) {
+    await postSlack(hooks.dailySummary, `📋 *Daily Game Summary — ${fmtDateSlack(today)}*\n\nNo games scheduled today.`);
+    return { sent: true, games: 0 };
+  }
+
+  // Collect all unique assigned umpire UIDs across all games
+  const uidSet = new Set();
+  for (const g of games) {
+    for (const s of (g.umpireSlots ?? [])) {
+      if (s.assignedUid) uidSet.add(s.assignedUid);
+    }
+  }
+
+  // Batch-fetch umpire profiles for contact info
+  const umpireCache = {};
+  if (uidSet.size > 0) {
+    await Promise.all([...uidSet].map(async uid => {
+      try {
+        const d = await db.doc(`umpires/${uid}`).get();
+        if (d.exists) umpireCache[uid] = d.data();
+      } catch (_) {}
+    }));
+  }
+
+  function slotLine(slot) {
+    if (!slot.assignedUid) {
+      return `  • ${slot.type}: _No umpire assigned_`;
+    }
+    const u = umpireCache[slot.assignedUid];
+    const name  = slot.assignedName || (u && u.name) || slot.assignedUid;
+    const phone = u && u.phone ? ` | 📞 ${u.phone}` : "";
+    let line    = `  • ${slot.type}: *${name}*${phone}`;
+    if (u && u.parentName) {
+      const parentPhone = u.parentPhone ? ` | 📞 ${u.parentPhone}` : "";
+      line += `\n    _Parent: ${u.parentName}${parentPhone}_`;
+    }
+    return line;
+  }
+
+  const blocks = games.map(g => {
+    const slots     = g.umpireSlots ?? [];
+    const header    = `*${fmtTimeSlack(g.time)} — ${g.division ?? ""} · ${g.city ?? ""}${g.field ? " · " + g.field : ""}*`;
+    const teams     = [g.homeTeam, g.awayTeam].filter(Boolean).join(" vs ");
+    const teamsLine = teams ? `  ${teams}` : "";
+    const slotLines = slots.length
+      ? slots.map(slotLine).join("\n")
+      : "  _No umpire slots configured_";
+    return [header, teamsLine, slotLines].filter(Boolean).join("\n");
+  });
+
+  const msg = `📋 *Daily Game Summary — ${fmtDateSlack(today)}*\n`
+    + `${games.length} game${games.length !== 1 ? "s" : ""} today\n`
+    + "─".repeat(32) + "\n\n"
+    + blocks.join("\n\n");
+
+  await postSlack(hooks.dailySummary, msg);
+  return { sent: true, games: games.length };
+}
+
+exports.sendDailyGameSummary = onSchedule("0 7 * * *", async () => {
+  await dailyGameSummaryCore(getFirestore());
+});
+
+exports.triggerDailyGameSummary = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db       = getFirestore();
+  const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+  return dailyGameSummaryCore(db);
 });
 
 // ── Tournament field swap notification ───────────────────────────────────────

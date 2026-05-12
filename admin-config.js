@@ -145,9 +145,11 @@ async function loadSlackWebhooks() {
     const snap = await getDoc(doc(db, "config", "slackWebhooks"));
     if (snap.exists()) {
       const d = snap.data();
-      document.getElementById("slackJeff").value = d.jeff  || "";
-      document.getElementById("slack10u").value  = d.ch10u || "";
-      document.getElementById("slack12u").value  = d.ch12u || "";
+      document.getElementById("slackJeff").value         = d.jeff         || "";
+      document.getElementById("slack10u").value          = d.ch10u        || "";
+      document.getElementById("slack12u").value          = d.ch12u        || "";
+      document.getElementById("slackDailySummary").value = d.dailySummary || "";
+      document.getElementById("slackBroadcast").value    = d.broadcast    || "";
     }
   } catch (_) {}
 }
@@ -159,9 +161,11 @@ document.getElementById("slackWebhooksForm").addEventListener("submit", async fu
   setMsg("slackWebhooksMessage", "Saving…", "info");
   try {
     await setDoc(doc(db, "config", "slackWebhooks"), {
-      jeff:  document.getElementById("slackJeff").value.trim(),
-      ch10u: document.getElementById("slack10u").value.trim(),
-      ch12u: document.getElementById("slack12u").value.trim()
+      jeff:         document.getElementById("slackJeff").value.trim(),
+      ch10u:        document.getElementById("slack10u").value.trim(),
+      ch12u:        document.getElementById("slack12u").value.trim(),
+      dailySummary: document.getElementById("slackDailySummary").value.trim(),
+      broadcast:    document.getElementById("slackBroadcast").value.trim()
     });
     setMsg("slackWebhooksMessage", "Webhooks saved.", "success");
   } catch (err) {
@@ -170,6 +174,39 @@ document.getElementById("slackWebhooksForm").addEventListener("submit", async fu
     btn.disabled = false;
   }
 });
+
+// ── Slack Manual Triggers ─────────────────────────────────────────────────────
+
+const triggerDayOfRemindersFn  = httpsCallable(getFunctions(app), "triggerDayOfReminders");
+const triggerDailyGameSummaryFn = httpsCallable(getFunctions(app), "triggerDailyGameSummary");
+
+async function runSlackTrigger(fn, btnId, label) {
+  const btn = document.getElementById(btnId);
+  btn.disabled = true;
+  setMsg("slackTriggerMessage", `Sending ${label}…`, "info");
+  try {
+    const result = await fn();
+    const d = result.data ?? {};
+    if (d.sent === false) {
+      setMsg("slackTriggerMessage", `${label}: ${d.reason ?? "No webhook configured."}`, "error");
+    } else {
+      const detail = d.games != null ? ` (${d.games} game${d.games !== 1 ? "s" : ""})` : (d.sent != null ? ` (${d.sent} game${d.sent !== 1 ? "s" : ""})` : "");
+      setMsg("slackTriggerMessage", `✓ ${label} sent${detail}.`, "success");
+    }
+  } catch (err) {
+    setMsg("slackTriggerMessage", err.message || `Failed to send ${label}.`, "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("triggerRemindersBtn").addEventListener("click", () =>
+  runSlackTrigger(triggerDayOfRemindersFn, "triggerRemindersBtn", "Day-of Reminders")
+);
+
+document.getElementById("triggerSummaryBtn").addEventListener("click", () =>
+  runSlackTrigger(triggerDailyGameSummaryFn, "triggerSummaryBtn", "Daily Summary")
+);
 
 // ── Push Notifications ────────────────────────────────────────────────────────
 
@@ -185,15 +222,46 @@ document.getElementById("notifForm").addEventListener("submit", async function(e
   setMsg("notifMessage", "Sending…", "info");
 
   try {
-    const result = await sendBroadcastFn({ title, body });
-    const { sent = 0, failed = 0 } = result.data;
-    const msg = sent === 0
+    const slackWebhook = document.getElementById("slackBroadcast").value.trim();
+    const result = await sendBroadcastFn({ title, body, slackWebhook });
+    const { sent = 0, failed = 0, slacked = false } = result.data;
+    const pushMsg = sent === 0
       ? "No umpires have notifications enabled yet."
       : `Sent to ${sent} umpire${sent !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed)` : ""}.`;
-    setMsg("notifMessage", msg, "success");
+    const slackMsg = slacked ? " Also posted to Slack." : "";
+    setMsg("notifMessage", pushMsg + slackMsg, "success");
     this.reset();
   } catch (err) {
     setMsg("notifMessage", err.message || "Failed to send notification.", "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── Email All Umpires ─────────────────────────────────────────────────────────
+
+const sendBroadcastEmailFn = httpsCallable(getFunctions(app), "sendBroadcastEmail");
+
+document.getElementById("emailAllForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn     = document.getElementById("sendEmailAllBtn");
+  const subject = document.getElementById("emailAllSubject").value.trim();
+  const body    = document.getElementById("emailAllBody").value.trim();
+
+  if (!confirm(`Send this email to all active umpires?\n\nSubject: ${subject}`)) return;
+
+  btn.disabled = true;
+  setMsg("emailAllMessage", "Sending…", "info");
+  try {
+    const result = await sendBroadcastEmailFn({ subject, body });
+    const { sent = 0, failed = 0 } = result.data;
+    const msg = sent === 0
+      ? "No approved umpires found with email addresses."
+      : `Sent to ${sent} umpire${sent !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed)` : ""}.`;
+    setMsg("emailAllMessage", msg, "success");
+    this.reset();
+  } catch (err) {
+    setMsg("emailAllMessage", err.message || "Failed to send email.", "error");
   } finally {
     btn.disabled = false;
   }

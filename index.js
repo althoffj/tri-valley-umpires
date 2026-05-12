@@ -1,7 +1,15 @@
 // index.js — agenda panel: today's games for all; this week's assigned games for signed-in umpires
+
+// ── Season year ───────────────────────────────────────────────────────────────
+const SEASON_YEAR = new Date().getFullYear();
+document.querySelectorAll("#seasonYear, .season-year").forEach(el => {
+  el.textContent = SEASON_YEAR;
+});
+document.title = `Tri-Valley Baseball Umpires - ${SEASON_YEAR}`;
 import { db, auth } from "./firebase.js";
 import {
-  isApproved
+  isApproved,
+  isAdmin
 } from "./auth.js";
 import {
   onAuthStateChanged
@@ -24,13 +32,14 @@ async function loadAnnouncements() {
     const active = snap.docs.filter(d => d.data().active);
     if (!active.length) { banner.style.display = "none"; return; }
     banner.style.display = "";
-    banner.innerHTML = active.map(d => {
-      const a = d.data();
-      return `<div class="document-note" style="border-left-color:#7ec8f7;margin-bottom:12px">
-        <strong style="color:white;display:block;margin-bottom:4px">${a.title ?? ""}</strong>
-        <p style="margin:0;white-space:pre-wrap">${a.body ?? ""}</p>
-      </div>`;
-    }).join("");
+    banner.innerHTML = `<h2 style="margin-top:0">Messages &amp; Alerts</h2>` +
+      active.map(d => {
+        const a = d.data();
+        return `<div class="document-note" style="border-left-color:#7ec8f7;margin-bottom:12px">
+          <strong style="color:white;display:block;margin-bottom:4px">${a.title ?? ""}</strong>
+          <p style="margin:0;white-space:pre-wrap">${a.body ?? ""}</p>
+        </div>`;
+      }).join("");
   } catch (_) {
     banner.style.display = "none";
   }
@@ -62,15 +71,17 @@ function fmtDate(iso) {
 }
 
 function renderAgenda(games, uid, approved) {
-  const listEl  = document.getElementById("agendaList");
-  const titleEl = document.getElementById("agendaTitle");
+  const listEl = document.getElementById("agendaList");
   if (!listEl) return;
 
   const today = todayISO();
-  titleEl.textContent = (uid && approved) ? "Your Games This Week" : "Today's Games";
 
   if (!games.length) {
-    listEl.innerHTML = `<p style="color:var(--light-text);margin:0">${uid && approved ? "No games assigned to you this week." : "No games scheduled for today."}</p>`;
+    const admin = isAdmin();
+    const empty = admin
+      ? "No home games with open slots today."
+      : (uid && approved ? "No games assigned to you this week." : "No games scheduled for today.");
+    listEl.innerHTML = `<p style="color:var(--light-text);margin:0">${empty}</p>`;
     return;
   }
 
@@ -111,29 +122,50 @@ function renderAgenda(games, uid, approved) {
 }
 
 async function loadAgenda(user) {
-  const listEl = document.getElementById("agendaList");
+  const listEl  = document.getElementById("agendaList");
+  const titleEl = document.getElementById("agendaTitle");
   if (!listEl) return;
   listEl.textContent = "Loading…";
 
-  const today    = todayISO();
-  const weekEnd  = weekEndISO();
-  const uid      = user?.uid ?? null;
+  const today   = todayISO();
+  const weekEnd = weekEndISO();
+  const uid     = user?.uid ?? null;
+  const admin   = isAdmin();
   const approved = isApproved();
 
   try {
     let games = [];
 
-    if (uid && approved) {
-      // Show all games this week; highlight ones where user is assigned
+    if (uid && admin) {
+      // Admins: today's HOME games with at least one open slot
+      // Query all today's games (no needsUmpires filter — avoids missing fully-assigned games)
+      if (titleEl) titleEl.textContent = "Today's Home Games";
       const snap = await getDocs(
         query(collection(db, "games"),
-          where("needsUmpires", "==", true),
+          where("date", "==", today),
+          orderBy("time"))
+      );
+      snap.forEach(d => {
+        const g = { id: d.id, ...d.data() };
+        if (g.cancelled) return;
+        if (g.isAway) return;                                        // home games only
+        const slots = g.umpireSlots ?? [];
+        if (slots.length === 0) return;                              // must have slots configured
+        if (!slots.some(s => !s.assignedUid)) return;               // at least one open slot
+        games.push(g);
+      });
+    } else if (uid && approved) {
+      // Approved umpires: their assigned games this week + all of today
+      if (titleEl) titleEl.textContent = "Your Games This Week";
+      const snap = await getDocs(
+        query(collection(db, "games"),
           where("date", ">=", today),
           where("date", "<=", weekEnd),
           orderBy("date"), orderBy("time"))
       );
       snap.forEach(d => {
         const g = { id: d.id, ...d.data() };
+        if (g.cancelled) return;
         const slots = g.umpireSlots ?? [];
         if (slots.some(s => s.assignedUid === uid) || g.date === today) {
           games.push(g);
@@ -141,6 +173,7 @@ async function loadAgenda(user) {
       });
     } else {
       // Guest / pending: today's games only
+      if (titleEl) titleEl.textContent = "Today's Games";
       const snap = await getDocs(
         query(collection(db, "games"),
           where("needsUmpires", "==", true),
@@ -150,7 +183,7 @@ async function loadAgenda(user) {
       snap.forEach(d => games.push({ id: d.id, ...d.data() }));
     }
 
-    renderAgenda(games, uid, approved);
+    renderAgenda(games, uid, approved || admin);
   } catch (err) {
     console.error(err);
     if (listEl) listEl.textContent = "Unable to load games.";

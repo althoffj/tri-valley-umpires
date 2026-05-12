@@ -246,10 +246,18 @@ function matchFacility(facilities, cityName) {
   ) || null;
 }
 
-async function checkIn(gameId, slotType) {
+// targetUid: the umpire being checked in. Defaults to current user.
+// Admins can pass any umpire's uid to check in on their behalf.
+async function checkIn(gameId, slotType, targetUid) {
   const user = getCurrentUser();
   if (!user) return;
-  const btn = document.querySelector(`.check-in-btn[data-game-id="${gameId}"][data-slot-type="${slotType}"]`);
+  const uid = targetUid || user.uid;
+
+  // Find the matching button — umpire card uses .check-in-btn, admin card uses .admin-checkin-btn
+  const btn = document.querySelector(
+    `.check-in-btn[data-game-id="${gameId}"][data-slot-type="${slotType}"],` +
+    `.admin-checkin-btn[data-game-id="${gameId}"][data-slot-type="${slotType}"][data-target-uid="${uid}"]`
+  );
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   try {
     const gameRef = doc(db, "games", gameId);
@@ -258,7 +266,7 @@ async function checkIn(gameId, slotType) {
       const snap = await tx.get(gameRef);
       if (!snap.exists()) throw new Error("Game not found.");
       updatedSlots = (snap.data().umpireSlots || []).map(s =>
-        (s.type === slotType && s.assignedUid === user.uid)
+        (s.type === slotType && s.assignedUid === uid)
           ? { ...s, checkedIn: true, checkedInAt: new Date().toISOString() }
           : s
       );
@@ -273,40 +281,300 @@ async function checkIn(gameId, slotType) {
   }
 }
 
+// Admin-only: assign the current admin to an open slot on any game.
+async function adminAssignSelf(gameId, slotType) {
+  const user    = getCurrentUser();
+  const profile = getCurrentProfile();
+  if (!user || !profile || !isAdmin()) return;
+
+  const btn = document.querySelector(`.admin-assign-self-btn[data-game-id="${gameId}"][data-slot-type="${slotType}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+  try {
+    const gameRef = doc(db, "games", gameId);
+    let updatedSlots;
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(gameRef);
+      if (!snap.exists()) throw new Error("Game not found.");
+      const slots  = snap.data().umpireSlots || [];
+      const slotIdx = slots.findIndex(s => s.type === slotType && !s.assignedUid);
+      if (slotIdx === -1) throw new Error("That slot was just filled. Please refresh.");
+      updatedSlots = slots.map((s, i) =>
+        i === slotIdx ? { ...s, assignedUid: user.uid, assignedName: profile.name } : s
+      );
+      const allFilled = updatedSlots.every(s => s.assignedUid);
+      tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires: !allFilled });
+    });
+    // Update local cache if the game is in the main list
+    const g = games.find(g => g.id === gameId);
+    if (g) g.umpireSlots = updatedSlots;
+    renderGameDayBar();
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = "Assign Me"; }
+    alert(err.message);
+  }
+}
+
 async function showPartnerInfo(uid, name, anchorBtn) {
-  // Show inline below the button
+  // Toggle inline info panel below the button
   const existing = anchorBtn.parentElement.querySelector(".partner-info");
   if (existing) { existing.remove(); return; }
   try {
-    const snap = await getDoc(doc(db, "umpires", uid));
+    const snap  = await getDoc(doc(db, "umpires", uid));
     const phone = snap.exists() ? (snap.data().phone || "") : "";
     const info  = document.createElement("span");
-    info.className   = "partner-info";
-    info.style.cssText = "font-size:0.82rem;color:#ccc;padding:4px 10px;background:rgba(255,255,255,0.08);border-radius:6px;white-space:nowrap";
-    info.textContent = phone ? `${name} · ${phone}` : name || "No info";
+    info.className    = "partner-info";
+    info.style.cssText = "font-size:0.82rem;color:#ccc;padding:4px 10px;background:rgba(255,255,255,0.08);border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:8px";
+    if (phone) {
+      const rawPhone = phone.replace(/\D/g, "");
+      info.innerHTML = `${esc(name)} &middot; <a href="tel:+1${esc(rawPhone)}" style="color:#7ec8f7">📞 ${esc(phone)}</a>`;
+    } else {
+      info.textContent = name || "No info";
+    }
     anchorBtn.insertAdjacentElement("afterend", info);
   } catch {
     /* ignore */
   }
 }
 
+// Admin: remove an umpire from a slot
+async function adminUnassignSlot(gameId, slotType, targetUid) {
+  if (!isAdmin()) return;
+  if (!confirm(`Remove ${slotType} umpire from this game?`)) return;
+  const btn = document.querySelector(`.admin-unassign-btn[data-game-id="${gameId}"][data-slot-type="${slotType}"][data-target-uid="${targetUid}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "…"; }
+  try {
+    const gameRef = doc(db, "games", gameId);
+    let updatedSlots;
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(gameRef);
+      if (!snap.exists()) throw new Error("Game not found.");
+      updatedSlots = (snap.data().umpireSlots || []).map(s =>
+        (s.type === slotType && s.assignedUid === targetUid)
+          ? { type: s.type, payRate: s.payRate }   // strip assignment fields
+          : s
+      );
+      tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires: true });
+    });
+    const g = games.find(g => g.id === gameId);
+    if (g) { g.umpireSlots = updatedSlots; g.needsUmpires = true; }
+    renderGameDayBar();
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = "Unassign"; }
+    alert(err.message);
+  }
+}
+
+// Admin: mark a slot as no-show
+async function adminNoShow(gameId, slotType, targetUid) {
+  if (!isAdmin()) return;
+  const btn = document.querySelector(`.admin-noshow-btn[data-game-id="${gameId}"][data-slot-type="${slotType}"][data-target-uid="${targetUid}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "…"; }
+  try {
+    const gameRef = doc(db, "games", gameId);
+    let updatedSlots;
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(gameRef);
+      if (!snap.exists()) throw new Error("Game not found.");
+      updatedSlots = (snap.data().umpireSlots || []).map(s =>
+        (s.type === slotType && s.assignedUid === targetUid)
+          ? { ...s, noShow: true, checkedIn: false }
+          : s
+      );
+      tx.update(gameRef, { umpireSlots: updatedSlots });
+    });
+    const g = games.find(g => g.id === gameId);
+    if (g) g.umpireSlots = updatedSlots;
+    renderGameDayBar();
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = "No Show"; }
+    alert(err.message);
+  }
+}
+
+// Admin: cancel a game from the gameday bar
+async function adminCancelGame(gameId) {
+  if (!isAdmin()) return;
+  if (!confirm("Cancel this game? This cannot be undone from the game day bar.")) return;
+  const btn = document.querySelector(`.admin-cancel-game-btn[data-game-id="${gameId}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "Cancelling…"; }
+  try {
+    await updateDoc(doc(db, "games", gameId), { cancelled: true });
+    const g = games.find(g => g.id === gameId);
+    if (g) g.cancelled = true;
+    renderGameDayBar();
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = "Cancel Game"; }
+    alert(err.message);
+  }
+}
+
+function slotTypeCls(type) {
+  return type === "Plate" ? "plate" : type === "Field" ? "field" : "extra";
+}
+
+function gameDayWxHtml(wx) {
+  if (!wx) return "";
+  return `<div class="game-day-weather" title="${esc(wx.label)}">
+    ${wx.icon} ${wx.temp}°F &middot; ${esc(wx.label)} &middot; ${wx.wind} mph wind
+  </div>`;
+}
+
+function gameDayNotesHtml(game) {
+  if (!game.notes) return "";
+  return `<div style="margin:6px 0;padding:5px 10px;background:rgba(255,224,102,0.1);border-left:3px solid #ffe066;border-radius:0 4px 4px 0;font-size:0.85rem;color:#ffe066">📋 ${esc(game.notes)}</div>`;
+}
+
+function renderUmpireGameCard(game, uid, facility, shedCodes, wx) {
+  const mySlot      = getSlots(game).find(s => s.assignedUid === uid);
+  if (!mySlot) return "";
+  const partnerSlot = getSlots(game).find(s => s.assignedUid && s.assignedUid !== uid);
+  const checkedIn   = mySlot.checkedIn === true;
+  const mapsUrl     = facility?.googleMapsUrl
+    || `https://maps.google.com/?q=${encodeURIComponent(`${game.field || ""} ${game.city || ""}`)}`;
+  const shedCode    = facility ? (shedCodes[facility.id] || "") : "";
+  const shedHtml    = checkedIn && shedCode
+    ? `<div class="game-day-shed-code">🔑 Shed Code: <span>${esc(shedCode)}</span></div>`
+    : "";
+
+  return `
+  <div class="game-day-card" data-game-id="${esc(game.id)}">
+    <div class="game-day-title">Game Day</div>
+    <div class="game-day-info">
+      <strong>${esc(game.city)}</strong>
+      <span class="badge badge-${slotTypeCls(mySlot.type)}">${esc(mySlot.type)}</span>
+      &mdash; ${esc(game.field || "")} &mdash; ${esc(game.time || "TBD")}
+    </div>
+    ${gameDayWxHtml(wx)}
+    ${gameDayNotesHtml(game)}
+    ${shedHtml}
+    <div class="game-day-actions">
+      <a href="${esc(mapsUrl)}" class="btn" target="_blank" rel="noopener">Directions</a>
+      ${partnerSlot
+        ? `<button class="btn print-btn partner-btn"
+             data-uid="${esc(partnerSlot.assignedUid)}"
+             data-name="${esc(partnerSlot.assignedName || "")}">Partner: ${esc(partnerSlot.assignedName || "?")}</button>`
+        : `<button class="btn print-btn" disabled>No partner assigned</button>`
+      }
+      <a href="field-issues.html" class="btn print-btn">Report Issue</a>
+      <a href="incident.html" class="btn print-btn">Incident Report</a>
+      <button class="btn ${checkedIn ? "" : "print-btn"} check-in-btn"
+        data-game-id="${esc(game.id)}" data-slot-type="${esc(mySlot.type)}"
+        ${checkedIn ? "disabled" : ""}>
+        ${checkedIn ? "✓ Checked In" : "Check In"}
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderAdminGameCard(game, facility, shedCodes, wx) {
+  const slots    = getSlots(game);
+  const mapsUrl  = facility?.googleMapsUrl
+    || `https://maps.google.com/?q=${encodeURIComponent(`${game.field || ""} ${game.city || ""}`)}`;
+  const shedCode = facility ? (shedCodes[facility.id] || "") : "";
+  const shedHtml = shedCode
+    ? `<div class="game-day-shed-code">🔑 Shed Code: <span>${esc(shedCode)}</span></div>`
+    : "";
+
+  const slotRows = slots.length
+    ? slots.map(s => {
+        const badge = `<span class="badge badge-${slotTypeCls(s.type)}">${esc(s.type)}</span>`;
+        if (s.assignedUid) {
+          const name       = esc(s.assignedName || s.assignedUid);
+          const unassignBtn = `<button class="btn print-btn admin-unassign-btn"
+            data-game-id="${esc(game.id)}" data-slot-type="${esc(s.type)}"
+            data-target-uid="${esc(s.assignedUid)}" style="font-size:0.78rem">Unassign</button>`;
+          if (s.noShow) {
+            return `<div class="admin-gameday-slot">
+              ${badge}
+              <span class="gameday-noshow-label">⚠ No Show — ${name}</span>
+              ${unassignBtn}
+            </div>`;
+          }
+          if (s.checkedIn) {
+            return `<div class="admin-gameday-slot">
+              ${badge}
+              <span>${name}</span>
+              <span style="color:#b8f2c4;font-size:0.85rem">✓ Checked In</span>
+              ${unassignBtn}
+            </div>`;
+          }
+          return `<div class="admin-gameday-slot">
+            ${badge}
+            <span>${name}</span>
+            <button class="btn print-btn admin-checkin-btn"
+              data-game-id="${esc(game.id)}" data-slot-type="${esc(s.type)}"
+              data-target-uid="${esc(s.assignedUid)}">Check In</button>
+            <button class="btn print-btn admin-noshow-btn"
+              data-game-id="${esc(game.id)}" data-slot-type="${esc(s.type)}"
+              data-target-uid="${esc(s.assignedUid)}" style="font-size:0.78rem">No Show</button>
+            ${unassignBtn}
+          </div>`;
+        }
+        return `<div class="admin-gameday-slot">
+          ${badge}
+          <span style="color:#ffcc80">Open</span>
+          <button class="btn print-btn admin-assign-self-btn"
+            data-game-id="${esc(game.id)}"
+            data-slot-type="${esc(s.type)}">Assign Me</button>
+        </div>`;
+      }).join("")
+    : `<div style="color:var(--light-text);font-size:0.85rem">No slots configured</div>`;
+
+  return `
+  <div class="game-day-card" data-game-id="${esc(game.id)}">
+    <div class="game-day-title" style="background:rgba(60,20,80,0.7)">🎛 Admin — Game Day</div>
+    <div class="game-day-info">
+      <strong>${esc(game.city)}</strong>
+      ${game.division ? `<span class="badge" style="background:#2d1a4a;color:#c9a0ff">${esc(game.division)}</span>` : ""}
+      &mdash; ${esc(game.field || "")} &mdash; ${esc(game.time || "TBD")}
+    </div>
+    ${gameDayWxHtml(wx)}
+    ${gameDayNotesHtml(game)}
+    ${shedHtml}
+    <div style="margin:10px 0">${slotRows}</div>
+    <div class="game-day-actions">
+      <a href="${esc(mapsUrl)}" class="btn" target="_blank" rel="noopener">Directions</a>
+      <a href="field-issues.html" class="btn print-btn">Report Issue</a>
+      <a href="incident.html" class="btn print-btn">Incident Report</a>
+      <a href="admin-games.html" class="btn print-btn">Edit Game</a>
+      <button class="btn print-btn admin-cancel-game-btn"
+        data-game-id="${esc(game.id)}"
+        style="border-color:#ff6b6b;color:#ff6b6b">Cancel Game</button>
+    </div>
+  </div>`;
+}
+
 async function renderGameDayBar() {
   const bar = document.getElementById("gameDayBar");
   if (!bar) return;
 
-  const uid = getCurrentUser()?.uid;
-  if (!isLoggedIn() || !isApproved() || !uid) { bar.style.display = "none"; return; }
+  const uid   = getCurrentUser()?.uid;
+  const admin = isAdmin();
+  if (!isLoggedIn() || (!isApproved() && !admin) || !uid) { bar.style.display = "none"; return; }
 
-  const today      = todayISO();
-  const todayGames = games.filter(g =>
-    g.date === today && !g.cancelled && getSlots(g).some(s => s.assignedUid === uid)
-  );
+  const today = todayISO();
+
+  // Query all today's games regardless of needsUmpires — a fully-assigned game
+  // has needsUmpires=false and would otherwise be invisible to the umpire or admin.
+  let todayGames;
+  try {
+    const snap = await getDocs(query(
+      collection(db, "games"),
+      where("date", "==", today),
+      orderBy("time")
+    ));
+    const all = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(g => !g.cancelled);
+    // Admins see every game today; umpires see only their own games
+    todayGames = admin ? all : all.filter(g => getSlots(g).some(s => s.assignedUid === uid));
+  } catch (_) {
+    bar.style.display = "none";
+    return;
+  }
 
   if (todayGames.length === 0) { bar.style.display = "none"; return; }
 
   const [facilities, shedCodes] = await Promise.all([getFacilities(), getShedCodes()]);
 
-  // Fetch weather for all games in parallel before rendering
   const weatherMap = {};
   await Promise.all(todayGames.map(async g => {
     weatherMap[g.id] = await fetchWeather(g.city, g.date, g.time);
@@ -314,54 +582,11 @@ async function renderGameDayBar() {
 
   bar.style.display = "";
   bar.innerHTML = todayGames.map(game => {
-    const mySlot      = getSlots(game).find(s => s.assignedUid === uid);
-    const partnerSlot = getSlots(game).find(s => s.assignedUid && s.assignedUid !== uid);
-    const facility    = matchFacility(facilities, game.city);
-    const mapsUrl     = facility?.googleMapsUrl
-      || `https://maps.google.com/?q=${encodeURIComponent(`${game.field || ""} ${game.city || ""}`)}`;
-    const checkedIn   = mySlot?.checkedIn === true;
-    const typeCls     = mySlot?.type === "Plate" ? "plate" : mySlot?.type === "Field" ? "field" : "extra";
-    const wx          = weatherMap[game.id];
-    const wxHtml      = wx
-      ? `<div class="game-day-weather" title="${esc(wx.label)}">
-           ${wx.icon} ${wx.temp}°F &middot; ${esc(wx.label)} &middot; ${wx.wind} mph wind
-         </div>`
-      : "";
-    const shedCode    = facility ? (shedCodes[facility.id] || "") : "";
-    const shedHtml    = checkedIn && shedCode
-      ? `<div class="game-day-shed-code">🔑 Shed Code: <span>${esc(shedCode)}</span></div>`
-      : "";
-    const gameNotes   = game.notes
-      ? `<div style="margin:6px 0;padding:5px 10px;background:rgba(255,224,102,0.1);border-left:3px solid #ffe066;border-radius:0 4px 4px 0;font-size:0.85rem;color:#ffe066">📋 ${esc(game.notes)}</div>`
-      : "";
-
-    return `
-    <div class="game-day-card" data-game-id="${esc(game.id)}">
-      <div class="game-day-title">Game Day</div>
-      <div class="game-day-info">
-        <strong>${esc(game.city)}</strong>
-        <span class="badge badge-${typeCls}">${esc(mySlot?.type || "")}</span>
-        &mdash; ${esc(game.field || "")} &mdash; ${esc(game.time || "TBD")}
-      </div>
-      ${wxHtml}
-      ${gameNotes}
-      ${shedHtml}
-      <div class="game-day-actions">
-        <a href="${esc(mapsUrl)}" class="btn" target="_blank" rel="noopener">Directions</a>
-        ${partnerSlot
-          ? `<button class="btn print-btn partner-btn"
-               data-uid="${esc(partnerSlot.assignedUid)}"
-               data-name="${esc(partnerSlot.assignedName || "")}">Partner: ${esc(partnerSlot.assignedName || "?")}</button>`
-          : `<button class="btn print-btn" disabled>No partner assigned</button>`
-        }
-        <a href="field-issues.html" class="btn print-btn">Report Issue</a>
-        <button class="btn ${checkedIn ? "" : "print-btn"} check-in-btn"
-          data-game-id="${esc(game.id)}" data-slot-type="${esc(mySlot?.type || "")}"
-          ${checkedIn ? "disabled" : ""}>
-          ${checkedIn ? "✓ Checked In" : "Check In"}
-        </button>
-      </div>
-    </div>`;
+    const facility = matchFacility(facilities, game.city);
+    const wx       = weatherMap[game.id];
+    return admin
+      ? renderAdminGameCard(game, facility, shedCodes, wx)
+      : renderUmpireGameCard(game, uid, facility, shedCodes, wx);
   }).join("");
 }
 
@@ -810,6 +1035,36 @@ document.addEventListener("click", e => {
   const checkInBtn = e.target.closest(".check-in-btn");
   if (checkInBtn && !checkInBtn.disabled) {
     checkIn(checkInBtn.dataset.gameId, checkInBtn.dataset.slotType);
+    return;
+  }
+
+  const adminCheckInBtn = e.target.closest(".admin-checkin-btn");
+  if (adminCheckInBtn && !adminCheckInBtn.disabled) {
+    checkIn(adminCheckInBtn.dataset.gameId, adminCheckInBtn.dataset.slotType, adminCheckInBtn.dataset.targetUid);
+    return;
+  }
+
+  const adminAssignBtn = e.target.closest(".admin-assign-self-btn");
+  if (adminAssignBtn && !adminAssignBtn.disabled) {
+    adminAssignSelf(adminAssignBtn.dataset.gameId, adminAssignBtn.dataset.slotType);
+    return;
+  }
+
+  const adminUnassignBtn = e.target.closest(".admin-unassign-btn");
+  if (adminUnassignBtn && !adminUnassignBtn.disabled) {
+    adminUnassignSlot(adminUnassignBtn.dataset.gameId, adminUnassignBtn.dataset.slotType, adminUnassignBtn.dataset.targetUid);
+    return;
+  }
+
+  const adminNoShowBtn = e.target.closest(".admin-noshow-btn");
+  if (adminNoShowBtn && !adminNoShowBtn.disabled) {
+    adminNoShow(adminNoShowBtn.dataset.gameId, adminNoShowBtn.dataset.slotType, adminNoShowBtn.dataset.targetUid);
+    return;
+  }
+
+  const adminCancelBtn = e.target.closest(".admin-cancel-game-btn");
+  if (adminCancelBtn && !adminCancelBtn.disabled) {
+    adminCancelGame(adminCancelBtn.dataset.gameId);
     return;
   }
 

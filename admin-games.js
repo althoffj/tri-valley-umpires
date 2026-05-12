@@ -17,7 +17,8 @@ import {
   query,
   orderBy,
   serverTimestamp,
-  where
+  where,
+  runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 let allGames      = [];
@@ -955,16 +956,19 @@ function renderPendingCancellations() {
 async function approveCancellation(requestId, gameId, slotType, uid) {
   if (!confirm("Approve this cancellation? The umpire will be removed from the slot.")) return;
   try {
-    // Remove umpire from the game slot
+    // Use a transaction so needsUmpires is set atomically with the slot change
     const gameRef = doc(db, "games", gameId);
-    const snap    = await getDoc(gameRef);
-    if (!snap.exists()) throw new Error("Game not found.");
-    const slots = (snap.data().umpireSlots || []).map(s =>
-      s.type === slotType && s.assignedUid === uid
-        ? { ...s, assignedUid: null, assignedName: null }
-        : s
-    );
-    await updateDoc(gameRef, { umpireSlots: slots });
+    let updatedSlots;
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(gameRef);
+      if (!snap.exists()) throw new Error("Game not found.");
+      updatedSlots = (snap.data().umpireSlots || []).map(s =>
+        s.type === slotType && s.assignedUid === uid
+          ? { type: s.type, payRate: s.payRate }   // strip all assignment fields
+          : s
+      );
+      tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires: true });
+    });
 
     // Update request status
     await updateDoc(doc(db, "cancellationRequests", requestId), {
@@ -974,7 +978,7 @@ async function approveCancellation(requestId, gameId, slotType, uid) {
 
     // Update local allGames cache
     const g = allGames.find(g => g.id === gameId);
-    if (g) g.umpireSlots = slots;
+    if (g) { g.umpireSlots = updatedSlots; g.needsUmpires = true; }
 
     // Remove from local list and re-render both
     pendingCancellations = pendingCancellations.filter(r => r.id !== requestId);
