@@ -29,115 +29,6 @@ function setMsg(id, text, type = "info") {
   el.className   = `signup-message ${type}`;
 }
 
-// ── Pay Rates ─────────────────────────────────────────────────────────────────
-
-async function loadPayRates() {
-  try {
-    const snap = await getDoc(doc(db, "config", "payRates"));
-    if (snap.exists()) {
-      const r = snap.data();
-      document.getElementById("ratePlate").value = r.plate ?? "";
-      document.getElementById("rateField").value  = r.field  ?? "";
-      document.getElementById("rateExtra").value  = r.extra  ?? "";
-
-      // Load defaultSlotTypes checkboxes
-      const defaults = r.defaultSlotTypes ?? [];
-      document.getElementById("defaultSlotPlate").checked = defaults.includes("Plate");
-      document.getElementById("defaultSlotField").checked = defaults.includes("Field");
-      document.getElementById("defaultSlotExtra").checked = defaults.includes("Extra");
-    }
-  } catch (err) {
-    console.error("Failed to load pay rates:", err);
-  }
-}
-
-document.getElementById("payRatesForm").addEventListener("submit", async function(e) {
-  e.preventDefault();
-  const btn = this.querySelector("button[type='submit']");
-  btn.disabled = true;
-  setMsg("payRatesMessage", "Saving…", "info");
-  try {
-    const snap = await getDoc(doc(db, "config", "payRates"));
-    const existing = snap.exists() ? snap.data() : {};
-    await setDoc(doc(db, "config", "payRates"), {
-      ...existing,
-      plate: parseFloat(document.getElementById("ratePlate").value) || 0,
-      field: parseFloat(document.getElementById("rateField").value)  || 0,
-      extra: parseFloat(document.getElementById("rateExtra").value)  || 0
-    });
-    setMsg("payRatesMessage", "Pay rates saved.", "success");
-  } catch (err) {
-    setMsg("payRatesMessage", err.message, "error");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-// ── Default Slot Types ────────────────────────────────────────────────────────
-
-document.getElementById("defaultSlotTypesForm").addEventListener("submit", async function(e) {
-  e.preventDefault();
-  const btn = this.querySelector("button[type='submit']");
-  btn.disabled = true;
-  setMsg("defaultSlotTypesMessage", "Saving…", "info");
-  try {
-    const selected = ["Plate", "Field", "Extra"].filter(t =>
-      document.getElementById(`defaultSlot${t}`).checked
-    );
-    const snap = await getDoc(doc(db, "config", "payRates"));
-    const existing = snap.exists() ? snap.data() : {};
-    await setDoc(doc(db, "config", "payRates"), {
-      ...existing,
-      defaultSlotTypes: selected
-    });
-    setMsg("defaultSlotTypesMessage", "Default slot types saved.", "success");
-  } catch (err) {
-    setMsg("defaultSlotTypesMessage", err.message, "error");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-// ── Scheduling Rules ──────────────────────────────────────────────────────────
-
-const SCHEDULING_DEFAULTS = { "10U": 90, "12U": 90, "14U": 120, "HS JV": 120, "HS Varsity": 150, default: 90 };
-const DUR_IDS = { "10U": "dur10U", "12U": "dur12U", "14U": "dur14U", "HS JV": "durHSJV", "HS Varsity": "durHSVar", default: "durDefault" };
-
-async function loadSchedulingConfig() {
-  try {
-    const snap = await getDoc(doc(db, "config", "scheduling"));
-    const d = snap.exists() ? snap.data() : {};
-    const dur = d.gameDurationMinutes || {};
-    Object.entries(DUR_IDS).forEach(([div, elId]) => {
-      const el = document.getElementById(elId);
-      if (el) el.value = dur[div] ?? SCHEDULING_DEFAULTS[div] ?? 90;
-    });
-    const cutoffEl = document.getElementById("lateStartCutoff");
-    if (cutoffEl) cutoffEl.value = d.lateStartCutoff ?? "19:30";
-  } catch (_) {}
-}
-
-document.getElementById("schedulingConfigForm").addEventListener("submit", async function(e) {
-  e.preventDefault();
-  const btn = this.querySelector("button[type='submit']");
-  btn.disabled = true;
-  setMsg("schedulingConfigMessage", "Saving…", "info");
-  try {
-    const gameDurationMinutes = {};
-    Object.entries(DUR_IDS).forEach(([div, elId]) => {
-      const val = parseInt(document.getElementById(elId)?.value);
-      gameDurationMinutes[div] = isNaN(val) ? SCHEDULING_DEFAULTS[div] : val;
-    });
-    const lateStartCutoff = document.getElementById("lateStartCutoff").value || "19:30";
-    await setDoc(doc(db, "config", "scheduling"), { gameDurationMinutes, lateStartCutoff });
-    setMsg("schedulingConfigMessage", "Scheduling rules saved.", "success");
-  } catch (err) {
-    setMsg("schedulingConfigMessage", err.message, "error");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
 // ── Slack Webhooks ────────────────────────────────────────────────────────────
 
 async function loadSlackWebhooks() {
@@ -278,7 +169,5 @@ authReadyPromise.then(() => {
   document.getElementById("adminContent").style.display = "";
   document.getElementById("noAccess").style.display = "none";
 
-  loadPayRates();
-  loadSchedulingConfig();
   loadSlackWebhooks();
 });

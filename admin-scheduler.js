@@ -25,10 +25,32 @@ let warningItems   = [];
 let activeTab      = "ready";
 
 // Calendar state
-let calYear, calMonth;
+let calYear, calMonth, calView = "month";
 const now = new Date();
 calYear  = now.getFullYear();
 calMonth = now.getMonth(); // 0-based
+
+// Game data cache for current calendar period
+let calGamesCache = []; // [{id, ...gameData}]
+let calPracticesCache = [];
+
+// Availability & cancellation overlay data (loaded with calendar)
+let calUnavailByDate   = {}; // { "YYYY-MM-DD": count }
+let calPendingCancelIds = new Set(); // Set of gameIds with pending cancellations
+
+// ── Settings constants ────────────────────────────────────────────────────────
+const SCHED_DEFAULTS = { "10U": 90, "12U": 90, "14U": 120, "HS JV": 120, "HS Varsity": 150, default: 90 };
+const DUR_IDS = {
+  "10U": "sDur10U", "12U": "sDur12U", "14U": "sDur14U",
+  "HS JV": "sDurHSJV", "HS Varsity": "sDurHSVar", default: "sDurDefault"
+};
+
+// ── Umpire assign state ───────────────────────────────────────────────────────
+let schedApprovedUmpires   = []; // { uid, name, email }
+let schedUmpireUnavailable = {}; // { uid: Set<"YYYY-MM-DD"> }
+let schedAssignTarget      = null; // { gameId, slotType, gameDate, gameTime }
+// The game object currently open in the edit modal (refreshed after slot changes)
+let seCurrentGame          = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -106,14 +128,18 @@ function switchSection(section) {
   document.querySelectorAll(".sched-sec-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.section === section);
   });
-  ["teams","import","calendar","practices"].forEach(s => {
+  ["teams","import","calendar","practices","settings"].forEach(s => {
     const el = document.getElementById(`sec-${s}`);
     if (el) el.style.display = s === section ? "" : "none";
   });
   // Lazy load section data
-  if (section === "calendar") loadCalendar();
+  if (section === "calendar")  loadCalendar();
   if (section === "practices") loadPractices();
+  if (section === "settings")  loadSettings();
 }
+
+// Expose for inline onclick in import section note link
+window.switchSectionPublic = switchSection;
 
 document.querySelectorAll(".sched-sec-btn").forEach(btn => {
   btn.addEventListener("click", () => switchSection(btn.dataset.section));
@@ -133,6 +159,111 @@ document.querySelectorAll(".import-mode-btn").forEach(btn => {
     // Reset preview
     document.getElementById("previewSummary").style.display = "none";
   });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SETTINGS SECTION
+// ══════════════════════════════════════════════════════════════════════════════
+
+function setSettingsMsg(id, text, type = "info") {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className   = `signup-message ${type}`;
+}
+
+async function loadSettings() {
+  try {
+    const [ratesSnap, schedSnap] = await Promise.all([
+      getDoc(doc(db, "config", "payRates")),
+      getDoc(doc(db, "config", "scheduling")),
+    ]);
+    if (ratesSnap.exists()) {
+      const r = ratesSnap.data();
+      document.getElementById("sRatePlate").value = r.plate ?? "";
+      document.getElementById("sRateField").value = r.field  ?? "";
+      document.getElementById("sRateExtra").value = r.extra  ?? "";
+      const defaults = r.defaultSlotTypes ?? [];
+      document.getElementById("sSlotPlate").checked = defaults.includes("Plate");
+      document.getElementById("sSlotField").checked = defaults.includes("Field");
+      document.getElementById("sSlotExtra").checked = defaults.includes("Extra");
+    }
+    if (schedSnap.exists()) {
+      const d = schedSnap.data();
+      const dur = d.gameDurationMinutes || {};
+      Object.entries(DUR_IDS).forEach(([div, elId]) => {
+        const el = document.getElementById(elId);
+        if (el) el.value = dur[div] ?? SCHED_DEFAULTS[div] ?? 90;
+      });
+      const cutoffEl = document.getElementById("sLateStartCutoff");
+      if (cutoffEl) cutoffEl.value = d.lateStartCutoff ?? "19:30";
+    }
+  } catch (err) {
+    console.error("loadSettings:", err);
+  }
+}
+
+document.getElementById("sPayRatesForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn = this.querySelector("button[type='submit']");
+  btn.disabled = true;
+  setSettingsMsg("sPayRatesMsg", "Saving…", "info");
+  try {
+    const snap = await getDoc(doc(db, "config", "payRates"));
+    const existing = snap.exists() ? snap.data() : {};
+    await setDoc(doc(db, "config", "payRates"), {
+      ...existing,
+      plate: parseFloat(document.getElementById("sRatePlate").value) || 0,
+      field: parseFloat(document.getElementById("sRateField").value)  || 0,
+      extra: parseFloat(document.getElementById("sRateExtra").value)  || 0,
+    });
+    setSettingsMsg("sPayRatesMsg", "Pay rates saved.", "success");
+  } catch (err) {
+    setSettingsMsg("sPayRatesMsg", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("sSlotTypesForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn = this.querySelector("button[type='submit']");
+  btn.disabled = true;
+  setSettingsMsg("sSlotTypesMsg", "Saving…", "info");
+  try {
+    const selected = ["Plate", "Field", "Extra"].filter(t =>
+      document.getElementById(`sSlot${t}`).checked
+    );
+    const snap = await getDoc(doc(db, "config", "payRates"));
+    const existing = snap.exists() ? snap.data() : {};
+    await setDoc(doc(db, "config", "payRates"), { ...existing, defaultSlotTypes: selected });
+    setSettingsMsg("sSlotTypesMsg", "Default slot types saved.", "success");
+  } catch (err) {
+    setSettingsMsg("sSlotTypesMsg", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("sSchedulingForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn = this.querySelector("button[type='submit']");
+  btn.disabled = true;
+  setSettingsMsg("sSchedulingMsg", "Saving…", "info");
+  try {
+    const gameDurationMinutes = {};
+    Object.entries(DUR_IDS).forEach(([div, elId]) => {
+      const val = parseInt(document.getElementById(elId)?.value);
+      gameDurationMinutes[div] = isNaN(val) ? SCHED_DEFAULTS[div] : val;
+    });
+    const lateStartCutoff = document.getElementById("sLateStartCutoff").value || "19:30";
+    await setDoc(doc(db, "config", "scheduling"), { gameDurationMinutes, lateStartCutoff });
+    setSettingsMsg("sSchedulingMsg", "Scheduling rules saved.", "success");
+  } catch (err) {
+    setSettingsMsg("sSchedulingMsg", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -775,16 +906,24 @@ async function previewCSVGames() {
   document.getElementById("previewSummary").style.display = "none";
 
   try {
-    // Load existing games from Firestore
-    const [gamesSnap, configSnap] = await Promise.all([
+    // Load existing games, scheduling config, and facilities in parallel
+    const [gamesSnap, configSnap, facilitiesSnap] = await Promise.all([
       getDocs(collection(db, "games")),
       getDoc(doc(db, "config/scheduling")),
+      getDocs(collection(db, "facilities")),
     ]);
-    const existingGames    = gamesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const existingExtIdSet = new Set(existingGames.map(g => g.externalId).filter(Boolean));
-    const schedCfg         = configSnap.exists() ? configSnap.data() : {};
-    const durMap           = schedCfg.gameDurationMinutes || { "10U": 90, "12U": 90, "14U": 120, "HS JV": 120, "HS Varsity": 150, default: 90 };
-    const lateStartMins    = timeToMins(schedCfg.lateStartCutoff || "19:30");
+    const existingGames = gamesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const schedCfg      = configSnap.exists() ? configSnap.data() : {};
+    const durMap        = schedCfg.gameDurationMinutes || { "10U": 90, "12U": 90, "14U": 120, "HS JV": 120, "HS Varsity": 150, default: 90 };
+    const lateStartMins = timeToMins(schedCfg.lateStartCutoff || "19:30");
+
+    // Build field index: fieldName.toLowerCase() → { lights, supportedDivisions }
+    const fieldIndex = {};
+    facilitiesSnap.docs.forEach(d => {
+      (d.data().fields || []).forEach(f => {
+        if (f.name) fieldIndex[f.name.trim().toLowerCase()] = f;
+      });
+    });
 
     const today = todayISO();
     readyItems     = [];
@@ -797,8 +936,7 @@ async function previewCSVGames() {
         duplicateItems.push({ ...game, _reason: "Past date" });
         continue;
       }
-      // Build synthetic externalId from date+time+field for dedup
-      const syntheticId = `csv-${game.date}-${game.time}-${(game.field||"").replace(/\s/g,"")}-${(game.city||"").replace(/\s/g,"")}`;
+      // Dedup: same date + time + field + city
       const dupCheck = existingGames.find(g =>
         g.date === game.date && g.time === game.time &&
         (g.field||"").toLowerCase() === (game.field||"").toLowerCase() &&
@@ -809,21 +947,41 @@ async function previewCSVGames() {
         continue;
       }
 
-      const issues = [];
+      const issues   = [];
+      const fieldKey = (game.field || "").trim().toLowerCase();
+      const fieldObj = fieldIndex[fieldKey] || null;
 
-      // Field time overlap
+      // 1. Field time overlap vs existing games
       for (const ex of existingGames) {
         if (!ex.cancelled && gamesOverlapLocal(game, ex, durMap)) {
           issues.push({ type: "field_overlap", label: "Field time overlap", color: "#e53935",
             with: { id: ex.id, date: ex.date, time: ex.time, field: ex.field, division: ex.division, city: ex.city } });
         }
       }
-      // Batch overlap
+      // 2. Batch overlap vs other incoming games
       for (const other of [...readyItems.map(r => r.game), ...conflictItems.map(c => c.game)]) {
         if (other && gamesOverlapLocal(game, other, durMap)) {
           issues.push({ type: "batch_overlap", label: "Overlaps another incoming game", color: "#e53935",
             with: { date: other.date, time: other.time, field: other.field, division: other.division } });
           break;
+        }
+      }
+      // 3. No lights / late start
+      if (game.time && fieldObj !== null && !fieldObj.lights) {
+        const startMin = timeToMins(game.time);
+        if (startMin !== null && startMin > lateStartMins) {
+          issues.push({ type: "no_lights",
+            label: `Starts after ${schedCfg.lateStartCutoff || "19:30"} — field has no lights`,
+            color: "#f57c00" });
+        }
+      }
+      // 4. Division mismatch
+      if (fieldObj) {
+        const supported = fieldObj.supportedDivisions || [];
+        if (supported.length && game.division && !supported.includes(game.division)) {
+          issues.push({ type: "division_mismatch",
+            label: `${game.division} not in supported divisions for ${game.field} (${supported.join(", ")})`,
+            color: "#f9a825" });
         }
       }
 
@@ -916,6 +1074,208 @@ document.getElementById("commitBtn").addEventListener("click", async () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  UMPIRE ASSIGN FLOW (used from game edit modal)
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function loadSchedApprovedUmpires() {
+  if (schedApprovedUmpires.length) return;
+  try {
+    const snap = await getDocs(query(
+      collection(db, "umpires"),
+      where("approved", "==", true),
+      orderBy("name")
+    ));
+    schedApprovedUmpires = snap.docs.map(d => ({
+      uid:   d.id,
+      name:  d.data().name  || d.data().displayName || "",
+      email: d.data().email || "",
+    }));
+  } catch (err) {
+    console.error("loadSchedApprovedUmpires:", err);
+  }
+}
+
+async function loadSchedAllAvailability() {
+  try {
+    const snap = await getDocs(collection(db, "availability"));
+    schedUmpireUnavailable = {};
+    snap.forEach(d => {
+      schedUmpireUnavailable[d.id] = new Set(d.data().unavailableDates || []);
+    });
+  } catch (err) {
+    console.error("loadSchedAllAvailability:", err);
+    schedUmpireUnavailable = {};
+  }
+}
+
+function renderSchedAssignList(filter = "") {
+  const list      = document.getElementById("schedAssignList");
+  const lower     = filter.toLowerCase();
+  const gameDate  = schedAssignTarget?.gameDate  || "";
+  const gameTime  = schedAssignTarget?.gameTime  || "";
+  const gameId    = schedAssignTarget?.gameId    || "";
+  const shown = schedApprovedUmpires.filter(u =>
+    !filter || u.name.toLowerCase().includes(lower) || u.email.toLowerCase().includes(lower)
+  );
+
+  if (!shown.length) {
+    list.innerHTML = `<p style="padding:12px 16px;color:var(--light-text);margin:0">No matching umpires.</p>`;
+    return;
+  }
+
+  list.innerHTML = shown.map(u => {
+    const unavail  = gameDate && schedUmpireUnavailable[u.uid]?.has(gameDate);
+    const conflict = gameDate && gameTime && calGamesCache.some(g =>
+      g.id !== gameId &&
+      g.date === gameDate && g.time === gameTime &&
+      !g.cancelled &&
+      (g.umpireSlots || []).some(s => s.assignedUid === u.uid)
+    );
+    const badges = [
+      unavail  ? `<span style="font-size:0.75rem;color:#fca;background:#5a2000;border-radius:4px;padding:2px 7px">Unavailable</span>` : "",
+      conflict ? `<span style="font-size:0.75rem;color:#f88;background:#4a0000;border-radius:4px;padding:2px 7px">Conflict</span>`    : "",
+    ].filter(Boolean).join(" ");
+    return `
+    <div class="assign-umpire-row" data-uid="${esc(u.uid)}" data-name="${esc(u.name)}"
+      style="padding:10px 16px;cursor:pointer;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:bold;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${esc(u.name)}${badges ? ` ${badges}` : ""}</div>
+        ${u.email ? `<div style="font-size:0.8rem;color:var(--light-text)">${esc(u.email)}</div>` : ""}
+      </div>
+      <button class="btn print-btn" style="font-size:0.8rem;padding:4px 12px;flex-shrink:0">Assign</button>
+    </div>`;
+  }).join("");
+}
+
+async function openSchedAssignModal(gameId, slotType) {
+  schedAssignTarget = {
+    gameId,
+    slotType,
+    gameDate: seCurrentGame?.date || "",
+    gameTime: seCurrentGame?.time || "",
+  };
+  document.getElementById("schedAssignLabel").textContent =
+    `${slotType} slot — ${seCurrentGame?.city || ""} ${fmtDate(seCurrentGame?.date)} ${fmt12(seCurrentGame?.time)}`;
+  document.getElementById("schedAssignSearch").value = "";
+  document.getElementById("schedAssignMsg").textContent = "";
+
+  await Promise.all([loadSchedApprovedUmpires(), loadSchedAllAvailability()]);
+  renderSchedAssignList();
+  document.getElementById("schedAssignModal").style.display = "flex";
+  document.getElementById("schedAssignSearch").focus();
+}
+
+async function doSchedAssign(uid, name) {
+  if (!schedAssignTarget) return;
+  const { gameId, slotType } = schedAssignTarget;
+  const msgEl = document.getElementById("schedAssignMsg");
+  msgEl.textContent = "Saving…";
+  msgEl.className   = "signup-message info";
+  try {
+    const gameRef = doc(db, "games", gameId);
+    const snap    = await getDoc(gameRef);
+    if (!snap.exists()) throw new Error("Game not found.");
+    const slots = (snap.data().umpireSlots || []).map(s =>
+      s.type === slotType ? { ...s, assignedUid: uid, assignedName: name } : s
+    );
+    await updateDoc(gameRef, { umpireSlots: slots });
+    // Update local cache and reopen edit modal with refreshed data
+    if (seCurrentGame) seCurrentGame.umpireSlots = slots;
+    const idx = calGamesCache.findIndex(g => g.id === gameId);
+    if (idx >= 0) calGamesCache[idx].umpireSlots = slots;
+    document.getElementById("schedAssignModal").style.display = "none";
+    renderSeSlots();
+  } catch (err) {
+    msgEl.textContent = err.message;
+    msgEl.className   = "signup-message error";
+  }
+}
+
+async function unassignSchedSlot(gameId, slotType) {
+  if (!confirm(`Remove the umpire from the ${slotType} slot?`)) return;
+  try {
+    const gameRef = doc(db, "games", gameId);
+    const snap    = await getDoc(gameRef);
+    if (!snap.exists()) return;
+    const slots = (snap.data().umpireSlots || []).map(s =>
+      s.type === slotType ? { ...s, assignedUid: null, assignedName: null } : s
+    );
+    await updateDoc(gameRef, { umpireSlots: slots });
+    if (seCurrentGame) seCurrentGame.umpireSlots = slots;
+    const idx = calGamesCache.findIndex(g => g.id === gameId);
+    if (idx >= 0) calGamesCache[idx].umpireSlots = slots;
+    renderSeSlots();
+  } catch (err) {
+    alert("Error: " + err.message);
+  }
+}
+
+/** Render the current umpire slots inside the game edit modal */
+function renderSeSlots() {
+  const el = document.getElementById("seSlotList");
+  if (!el || !seCurrentGame) return;
+  const slots    = seCurrentGame.umpireSlots || [];
+  const gameId   = seCurrentGame.id;
+  const canEdit  = !seCurrentGame.cancelled;
+
+  if (!slots.length) {
+    el.innerHTML = `<p style="padding:10px 14px;color:var(--light-text);margin:0;font-size:0.88rem">No umpire slots — toggle "Needs umpire assignment" and save first.</p>`;
+    return;
+  }
+
+  el.innerHTML = slots.map(s => {
+    const cls       = s.type === "Plate" ? "plate" : s.type === "Field" ? "field" : "extra";
+    const assigned  = s.assignedName || "";
+    const checkIn   = s.checkedIn
+      ? `<span style="font-size:0.72rem;background:#17351f;color:#b8f2c4;border-radius:4px;padding:1px 6px">✓ In</span>`
+      : (s.assignedUid ? `<span style="font-size:0.72rem;background:#3a2800;color:#ffcc80;border-radius:4px;padding:1px 6px">Not in</span>` : "");
+    return `
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #333;flex-wrap:wrap">
+      <span class="badge badge-${cls}">${esc(s.type)}</span>
+      ${s.payRate != null ? `<span style="color:var(--light-text);font-size:0.82rem">$${Number(s.payRate).toFixed(0)}</span>` : ""}
+      ${assigned
+        ? `<span style="font-size:0.85rem">→ <strong>${esc(assigned)}</strong></span>${checkIn}`
+        : `<span style="color:var(--light-text);font-size:0.82rem">Unassigned</span>`}
+      <div style="margin-left:auto;display:flex;gap:6px">
+        ${assigned && canEdit
+          ? `<button type="button" class="btn print-btn se-unassign-btn" data-game-id="${esc(gameId)}" data-slot-type="${esc(s.type)}"
+               style="font-size:0.78rem;padding:3px 8px">Unassign</button>`
+          : ""}
+        ${canEdit
+          ? `<button type="button" class="btn print-btn se-assign-btn" data-game-id="${esc(gameId)}" data-slot-type="${esc(s.type)}"
+               style="font-size:0.78rem;padding:3px 8px">Assign</button>`
+          : ""}
+      </div>
+    </div>`;
+  }).join("");
+
+  // Wire slot buttons
+  el.querySelectorAll(".se-assign-btn").forEach(btn => {
+    btn.addEventListener("click", () => openSchedAssignModal(btn.dataset.gameId, btn.dataset.slotType));
+  });
+  el.querySelectorAll(".se-unassign-btn").forEach(btn => {
+    btn.addEventListener("click", () => unassignSchedSlot(btn.dataset.gameId, btn.dataset.slotType));
+  });
+}
+
+// Wire assign modal search + list + cancel
+document.getElementById("schedAssignSearch").addEventListener("input", function() {
+  renderSchedAssignList(this.value);
+});
+document.getElementById("schedAssignList").addEventListener("click", e => {
+  const row = e.target.closest(".assign-umpire-row");
+  if (!row) return;
+  doSchedAssign(row.dataset.uid, row.dataset.name);
+});
+document.getElementById("schedAssignCancelBtn").addEventListener("click", () => {
+  document.getElementById("schedAssignModal").style.display = "none";
+});
+document.getElementById("schedAssignModal").addEventListener("click", e => {
+  if (e.target === document.getElementById("schedAssignModal"))
+    document.getElementById("schedAssignModal").style.display = "none";
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  CALENDAR SECTION
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -927,7 +1287,45 @@ async function loadCalendar() {
   const label = document.getElementById("calMonthLabel");
   if (label) label.textContent = `${MONTH_NAMES[calMonth]} ${calYear}`;
   renderCalendarLegend();
-  await renderCalendarGrid();
+  await fetchCalendarData();
+  if (calView === "month") renderMonthView();
+  else                     renderListView();
+}
+
+async function fetchCalendarData() {
+  const firstOfMonth = new Date(calYear, calMonth, 1);
+  const gridStart    = new Date(firstOfMonth);
+  gridStart.setDate(1 - firstOfMonth.getDay());
+  const lastOfMonth  = new Date(calYear, calMonth + 1, 0);
+  const gridEnd      = new Date(lastOfMonth);
+  gridEnd.setDate(lastOfMonth.getDate() + (6 - lastOfMonth.getDay()));
+  const startISO = isoFromDate(gridStart);
+  const endISO   = isoFromDate(gridEnd);
+
+  const [gamesSnap, practicesSnap, availSnap, cancelSnap] = await Promise.all([
+    getDocs(query(collection(db, "games"),
+      where("date", ">=", startISO), where("date", "<=", endISO),
+      orderBy("date"), orderBy("time"))),
+    getDocs(query(collection(db, "practices"),
+      where("date", ">=", startISO), where("date", "<=", endISO))),
+    getDocs(collection(db, "availability")),
+    getDocs(query(collection(db, "cancellationRequests"), where("status", "==", "pending"))),
+  ]);
+  calGamesCache     = gamesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  calPracticesCache = practicesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  // Build availability overlay: date → count of umpires marked unavailable
+  calUnavailByDate = {};
+  availSnap.forEach(d => {
+    (d.data().unavailableDates || []).forEach(dateStr => {
+      if (dateStr >= startISO && dateStr <= endISO) {
+        calUnavailByDate[dateStr] = (calUnavailByDate[dateStr] || 0) + 1;
+      }
+    });
+  });
+
+  // Build pending-cancellation set: gameIds that have pending cancellation requests
+  calPendingCancelIds = new Set(cancelSnap.docs.map(d => d.data().gameId).filter(Boolean));
 }
 
 function renderCalendarLegend() {
@@ -945,109 +1343,200 @@ function renderCalendarLegend() {
   </span>`;
 }
 
-async function renderCalendarGrid() {
-  const grid = document.getElementById("calGrid");
+function renderMonthView() {
+  const grid = document.getElementById("calMonthView");
   if (!grid) return;
-  grid.innerHTML = `<p style="color:var(--light-text)">Loading…</p>`;
 
   const showGames     = document.getElementById("calShowGames")?.checked ?? true;
   const showPractices = document.getElementById("calShowPractices")?.checked ?? true;
 
-  // Date range for the full grid (6 weeks)
   const firstOfMonth = new Date(calYear, calMonth, 1);
   const gridStart    = new Date(firstOfMonth);
-  gridStart.setDate(1 - firstOfMonth.getDay()); // back to Sunday
-
+  gridStart.setDate(1 - firstOfMonth.getDay());
   const lastOfMonth  = new Date(calYear, calMonth + 1, 0);
   const gridEnd      = new Date(lastOfMonth);
-  gridEnd.setDate(lastOfMonth.getDate() + (6 - lastOfMonth.getDay())); // forward to Saturday
+  gridEnd.setDate(lastOfMonth.getDate() + (6 - lastOfMonth.getDay()));
 
-  const startISO = isoFromDate(gridStart);
-  const endISO   = isoFromDate(gridEnd);
+  // Build day → items map from cache
+  const dayMap = {};
+  if (showGames) {
+    calGamesCache.forEach(g => {
+      if (g.cancelled) return;
+      if (!dayMap[g.date]) dayMap[g.date] = { games: [], practices: [] };
+      dayMap[g.date].games.push(g);
+    });
+  }
+  if (showPractices) {
+    calPracticesCache.forEach(p => {
+      if (!dayMap[p.date]) dayMap[p.date] = { games: [], practices: [] };
+      dayMap[p.date].practices.push(p);
+    });
+  }
 
-  try {
-    const [gamesSnap, practicesSnap] = await Promise.all([
-      getDocs(query(collection(db, "games"),
-        where("date", ">=", startISO),
-        where("date", "<=", endISO),
-        orderBy("date"), orderBy("time"))),
-      getDocs(query(collection(db, "practices"),
-        where("date", ">=", startISO),
-        where("date", "<=", endISO))),
-    ]);
+  const todayISO_ = todayISO();
+  // Collect game data keyed by a card ID so we can open edit modal on click
+  const gameById = {};
+  calGamesCache.forEach(g => { gameById[g.id] = g; });
 
-    // Build day → items map
-    const dayMap = {}; // "YYYY-MM-DD" → { games: [], practices: [] }
-    if (showGames) {
-      gamesSnap.docs.forEach(d => {
-        const g = { id: d.id, ...d.data() };
-        if (g.cancelled) return;
-        if (!dayMap[g.date]) dayMap[g.date] = { games: [], practices: [] };
-        dayMap[g.date].games.push(g);
-      });
-    }
-    if (showPractices) {
-      practicesSnap.docs.forEach(d => {
-        const p = { id: d.id, ...d.data() };
-        if (!dayMap[p.date]) dayMap[p.date] = { games: [], practices: [] };
-        dayMap[p.date].practices.push(p);
-      });
-    }
+  let html = `<div class="cal-month-grid">`;
+  html += DOW_LABELS.map(d => `<div class="cal-dow-header">${d}</div>`).join("");
 
-    const todayISO_ = todayISO();
-    let html = `<div class="cal-month-grid">`;
-    // Header row
-    html += DOW_LABELS.map(d => `<div class="cal-dow-header">${d}</div>`).join("");
+  const cur = new Date(gridStart);
+  while (cur <= gridEnd) {
+    const iso = isoFromDate(cur);
+    const isThisMonth = cur.getMonth() === calMonth;
+    const isToday     = iso === todayISO_;
+    const items       = dayMap[iso] || { games: [], practices: [] };
 
-    // Day cells
-    const cur = new Date(gridStart);
-    while (cur <= gridEnd) {
-      const iso = isoFromDate(cur);
-      const isThisMonth = cur.getMonth() === calMonth;
-      const isToday     = iso === todayISO_;
-      const items       = dayMap[iso] || { games: [], practices: [] };
+    html += `<div class="cal-month-cell ${!isThisMonth ? "cal-other-month" : ""} ${isToday ? "cal-today" : ""}">`;
+    const unavailCount = calUnavailByDate[iso] || 0;
+    html += `<div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="${isToday ? "cal-today-num" : "cal-day-num"}">${cur.getDate()}</div>
+      ${unavailCount ? `<div title="${unavailCount} umpire${unavailCount !== 1 ? "s" : ""} unavailable" style="font-size:0.62rem;color:#fca;padding:1px 4px;background:#5a200033;border-radius:3px">${unavailCount} out</div>` : ""}
+    </div>`;
 
-      html += `<div class="cal-month-cell ${!isThisMonth ? "cal-other-month" : ""} ${isToday ? "cal-today" : ""}">`;
-      html += `<div class="${isToday ? "cal-today-num" : "cal-day-num"}">${cur.getDate()}</div>`;
-
-      // Game cards
-      items.games.slice(0, 3).forEach(g => {
-        const color = teamColor(g);
-        const slots = g.umpireSlots || [];
-        const assigned = slots.filter(s => s.assignedUid).length;
-        const total    = slots.length;
-        const label    = g.homeTeam && g.awayTeam
-          ? `${g.awayTeam.split(" ").pop()} @ ${g.homeTeam.split(" ").pop()}`
-          : (g.homeTeam || g.division || "Game");
-        html += `<div class="cal-card" style="border-left-color:${color}" title="${esc(g.homeTeam||"")} vs ${esc(g.awayTeam||"")} · ${g.city||""} · ${g.field||""}">
-          <div style="font-size:0.7rem;color:var(--light-text)">${g.time ? fmt12(g.time).replace(":00","") : ""} ${esc(g.division || "")}</div>
+    // Game cards (clickable → edit)
+    items.games.slice(0, 3).forEach(g => {
+      const color    = teamColor(g);
+      const slots    = g.umpireSlots || [];
+      const assigned = slots.filter(s => s.assignedUid).length;
+      const total    = slots.length;
+      const label    = g.homeTeam && g.awayTeam
+        ? `${g.awayTeam.split(" ").pop()} @ ${g.homeTeam.split(" ").pop()}`
+        : (g.homeTeam || g.division || "Game");
+      const hasPendingCancel = calPendingCancelIds.has(g.id);
+      html += `<div class="cal-card cal-card-clickable" data-game-id="${esc(g.id)}"
+          style="border-left-color:${color};cursor:pointer${hasPendingCancel ? ";outline:1px solid #f57c00" : ""}"
+          title="Click to edit · ${esc(g.homeTeam||"")} vs ${esc(g.awayTeam||"")} · ${g.city||""} · ${g.field||""}">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:0.7rem;color:var(--light-text)">${g.time ? fmt12(g.time).replace(":00","") : ""} ${esc(g.division || "")}</div>
+            ${hasPendingCancel ? `<span title="Pending cancellation request" style="font-size:0.65rem;color:#f57c00">⚠</span>` : ""}
+          </div>
           <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(label)}</div>
           ${total ? `<div style="font-size:0.68rem;color:${assigned===total?"#6fcf97":"#ffcc80"}">${assigned}/${total} ump</div>` : ""}
         </div>`;
-      });
-      if (items.games.length > 3) {
-        html += `<div style="font-size:0.7rem;color:var(--light-text);padding:1px 4px">+${items.games.length - 3} more</div>`;
-      }
+    });
+    if (items.games.length > 3) {
+      html += `<div style="font-size:0.7rem;color:var(--light-text);padding:1px 4px">+${items.games.length - 3} more</div>`;
+    }
 
-      // Practice cards
-      items.practices.slice(0, 2).forEach(p => {
-        html += `<div class="cal-card" style="border-left-color:#5b8dd9" title="Practice: ${esc(p.teamName||"")} · ${p.field||""}">
+    // Practice cards
+    items.practices.slice(0, 2).forEach(p => {
+      html += `<div class="cal-card" style="border-left-color:#5b8dd9"
+          title="Practice: ${esc(p.teamName||"")} · ${p.field||""}">
           <div style="font-size:0.7rem;color:#8ab4f8">${p.startTime ? fmt12(p.startTime).replace(":00","") : "Practice"}</div>
           <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:0.78rem">${esc(p.teamName||"Practice")}</div>
         </div>`;
-      });
-      if (items.practices.length > 2) {
-        html += `<div style="font-size:0.7rem;color:#8ab4f8;padding:1px 4px">+${items.practices.length - 2} more</div>`;
-      }
-
-      html += `</div>`;
-      cur.setDate(cur.getDate() + 1);
+    });
+    if (items.practices.length > 2) {
+      html += `<div style="font-size:0.7rem;color:#8ab4f8;padding:1px 4px">+${items.practices.length - 2} more</div>`;
     }
+
     html += `</div>`;
-    grid.innerHTML = html;
-  } catch (err) {
-    grid.innerHTML = `<p style="color:#ff8a8a">Error loading calendar: ${esc(err.message)}</p>`;
+    cur.setDate(cur.getDate() + 1);
   }
+  html += `</div>`;
+  grid.innerHTML = html;
+
+  // Wire click handlers on game cards
+  grid.querySelectorAll(".cal-card-clickable").forEach(card => {
+    card.addEventListener("click", () => {
+      const g = gameById[card.dataset.gameId];
+      if (g) openGameEditModal(g);
+    });
+  });
+}
+
+function renderListView() {
+  const el = document.getElementById("calListContent");
+  if (!el) return;
+
+  const showGames     = document.getElementById("calShowGames")?.checked ?? true;
+  const showPractices = document.getElementById("calShowPractices")?.checked ?? true;
+
+  const firstOfMonth = isoFromDate(new Date(calYear, calMonth, 1));
+  const lastOfMonth  = isoFromDate(new Date(calYear, calMonth + 1, 0));
+
+  const games = showGames
+    ? calGamesCache.filter(g => !g.cancelled && g.date >= firstOfMonth && g.date <= lastOfMonth)
+    : [];
+  const practices = showPractices
+    ? calPracticesCache.filter(p => p.date >= firstOfMonth && p.date <= lastOfMonth)
+    : [];
+
+  if (!games.length && !practices.length) {
+    el.innerHTML = `<p style="color:var(--light-text)">No games or practices for ${MONTH_NAMES[calMonth]} ${calYear}.</p>`;
+    return;
+  }
+
+  // Combine and sort by date + time
+  const all = [
+    ...games.map(g => ({ ...g, _type: "game" })),
+    ...practices.map(p => ({ ...p, _type: "practice", time: p.startTime })),
+  ].sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    return (a.time || "") < (b.time || "") ? -1 : 1;
+  });
+
+  el.innerHTML = `
+    <div class="schedule-section" style="margin-top:0">
+      <table>
+        <thead><tr>
+          <th>Date</th><th>Time</th><th>Type</th><th>Division</th>
+          <th>Teams / Team</th><th>City</th><th>Field</th><th>Umpires</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          ${all.map(item => {
+            if (item._type === "game") {
+              const color    = teamColor(item);
+              const slots    = item.umpireSlots || [];
+              const assigned = slots.filter(s => s.assignedUid).length;
+              const total    = slots.length;
+              const teams_   = item.homeTeam && item.awayTeam
+                ? `${item.awayTeam} @ ${item.homeTeam}`
+                : (item.homeTeam || item.awayTeam || "—");
+              const pendingCancelRow = calPendingCancelIds.has(item.id);
+              return `<tr${pendingCancelRow ? ' style="background:rgba(245,124,0,0.06)"' : ""}>
+                <td>${esc(fmtDate(item.date))}</td>
+                <td>${esc(fmt12(item.time))}</td>
+                <td><span style="width:10px;height:10px;background:${color};border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle"></span>${esc(item.gameType || "Regular")}</td>
+                <td>${esc(item.division || "—")}</td>
+                <td>${esc(teams_)}</td>
+                <td>${esc(item.city || "—")}</td>
+                <td>${esc(item.field || "—")}</td>
+                <td style="color:${assigned===total&&total?"#6fcf97":"#ffcc80"}">${total ? `${assigned}/${total}` : "—"}${pendingCancelRow ? ` <span title="Pending cancellation" style="color:#f57c00;font-size:0.8rem">⚠</span>` : ""}</td>
+                <td>
+                  <button type="button" class="btn print-btn list-edit-btn" data-game-id="${esc(item.id)}"
+                    style="padding:3px 8px;font-size:0.8rem">Edit</button>
+                </td>
+              </tr>`;
+            } else {
+              return `<tr style="opacity:0.8">
+                <td>${esc(fmtDate(item.date))}</td>
+                <td>${esc(item.startTime ? fmt12(item.startTime) : "—")} – ${esc(item.endTime ? fmt12(item.endTime) : "—")}</td>
+                <td><span style="font-size:0.75rem;background:#1a2a4a;color:#8ab4f8;border:1px solid #2a4a8a;border-radius:3px;padding:1px 5px">Practice</span></td>
+                <td>—</td>
+                <td>${esc(item.teamName || "—")}</td>
+                <td>—</td>
+                <td>${esc(item.field || "—")}</td>
+                <td>—</td>
+                <td>—</td>
+              </tr>`;
+            }
+          }).join("")}
+        </tbody>
+      </table>
+    </div>`;
+
+  // Wire edit buttons
+  const gameById = {};
+  calGamesCache.forEach(g => { gameById[g.id] = g; });
+  el.querySelectorAll(".list-edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const g = gameById[btn.dataset.gameId];
+      if (g) openGameEditModal(g);
+    });
+  });
 }
 
 function isoFromDate(d) {
@@ -1070,8 +1559,129 @@ document.getElementById("calTodayBtn").addEventListener("click", () => {
   calYear = n.getFullYear(); calMonth = n.getMonth();
   loadCalendar();
 });
-document.getElementById("calShowGames").addEventListener("change", () => renderCalendarGrid());
-document.getElementById("calShowPractices").addEventListener("change", () => renderCalendarGrid());
+document.getElementById("calShowGames").addEventListener("change", () =>
+  calView === "month" ? renderMonthView() : renderListView());
+document.getElementById("calShowPractices").addEventListener("change", () =>
+  calView === "month" ? renderMonthView() : renderListView());
+
+// View toggle (month / list)
+document.querySelectorAll(".cal-view-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    calView = btn.dataset.view;
+    document.querySelectorAll(".cal-view-btn").forEach(b => {
+      const isActive = b.dataset.view === calView;
+      b.style.background   = isActive ? "var(--accent)" : "transparent";
+      b.style.color        = isActive ? "white" : "var(--light-text)";
+    });
+    document.getElementById("calMonthView").style.display = calView === "month" ? "" : "none";
+    document.getElementById("calListView").style.display  = calView === "list"  ? "" : "none";
+    if (calView === "month") renderMonthView();
+    else                     renderListView();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  GAME EDIT MODAL (calendar / list view)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function openGameEditModal(game) {
+  const modal = document.getElementById("schedGameEditModal");
+  if (!modal) return;
+
+  seCurrentGame = game; // keep reference for slot management
+
+  document.getElementById("seGameId").value         = game.id;
+  document.getElementById("seDate").value           = game.date        || "";
+  document.getElementById("seTime").value           = game.time        || "";
+  document.getElementById("seDivision").value       = game.division    || "10U";
+  document.getElementById("seCity").value           = game.city        || "City of Crooks";
+  document.getElementById("seField").value          = game.field       || "";
+  document.getElementById("seGameType").value       = game.gameType    || "Regular";
+  document.getElementById("seHomeTeam").value       = game.homeTeam    || "";
+  document.getElementById("seAwayTeam").value       = game.awayTeam    || "";
+  document.getElementById("seIsAway").checked       = !!game.isAway;
+  document.getElementById("seNeedsUmpires").checked = !!game.needsUmpires;
+  document.getElementById("seNotes").value          = game.notes       || "";
+  document.getElementById("seGameMsg").textContent  = "";
+  document.getElementById("seGameMsg").className    = "signup-message";
+
+  renderSeSlots();
+  modal.style.display = "flex";
+}
+
+function closeGameEditModal() {
+  const modal = document.getElementById("schedGameEditModal");
+  if (modal) modal.style.display = "none";
+}
+
+document.getElementById("seGameCancelBtn").addEventListener("click", closeGameEditModal);
+document.getElementById("schedGameEditModal").addEventListener("click", e => {
+  if (e.target === document.getElementById("schedGameEditModal")) closeGameEditModal();
+});
+
+document.getElementById("seGameSaveBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("seGameSaveBtn");
+  const msg = document.getElementById("seGameMsg");
+  const id  = document.getElementById("seGameId").value;
+  if (!id) return;
+
+  btn.disabled    = true;
+  msg.textContent = "Saving…";
+  msg.className   = "signup-message info";
+
+  try {
+    const updates = {
+      date:         document.getElementById("seDate").value,
+      time:         document.getElementById("seTime").value,
+      division:     document.getElementById("seDivision").value,
+      city:         document.getElementById("seCity").value,
+      field:        document.getElementById("seField").value.trim(),
+      gameType:     document.getElementById("seGameType").value,
+      homeTeam:     document.getElementById("seHomeTeam").value.trim(),
+      awayTeam:     document.getElementById("seAwayTeam").value.trim(),
+      isAway:       document.getElementById("seIsAway").checked,
+      needsUmpires: document.getElementById("seNeedsUmpires").checked,
+      notes:        document.getElementById("seNotes").value.trim(),
+    };
+    await updateDoc(doc(db, "games", id), updates);
+    // Keep seCurrentGame in sync so slot list reflects latest field values
+    if (seCurrentGame) Object.assign(seCurrentGame, updates);
+    msg.textContent = "✓ Saved.";
+    msg.className   = "signup-message success";
+    // Refresh calendar in background then close
+    setTimeout(async () => {
+      closeGameEditModal();
+      await fetchCalendarData();
+      if (calView === "month") renderMonthView();
+      else                     renderListView();
+    }, 600);
+  } catch (err) {
+    msg.textContent = "Error: " + err.message;
+    msg.className   = "signup-message error";
+    btn.disabled    = false;
+  }
+});
+
+document.getElementById("seGameDeleteBtn").addEventListener("click", async () => {
+  const id = document.getElementById("seGameId").value;
+  if (!id) return;
+  if (!confirm("Delete this game? This cannot be undone.")) return;
+
+  const msg = document.getElementById("seGameMsg");
+  msg.textContent = "Deleting…";
+  msg.className   = "signup-message info";
+
+  try {
+    await deleteDoc(doc(db, "games", id));
+    closeGameEditModal();
+    await fetchCalendarData();
+    if (calView === "month") renderMonthView();
+    else                     renderListView();
+  } catch (err) {
+    msg.textContent = "Error: " + err.message;
+    msg.className   = "signup-message error";
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  PRACTICES SECTION

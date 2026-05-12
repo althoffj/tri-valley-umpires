@@ -39,6 +39,7 @@
       <button class="sched-sec-btn" data-section="import">Import</button>
       <button class="sched-sec-btn" data-section="calendar">Calendar</button>
       <button class="sched-sec-btn" data-section="practices">Practices</button>
+      <button class="sched-sec-btn" data-section="settings">Settings</button>
     </div>
 
     <!-- ════════════════════════════════════════════════════════════════════════
@@ -114,7 +115,7 @@
     <div id="sec-import" style="display:none">
       <div class="document-note" style="margin-bottom:16px">
         <p>Import games from team iCal calendar feeds or from a CSV spreadsheet. Games are checked for field-time conflicts, lighting restrictions, and division mismatches before being added to the schedule.</p>
-        <p style="margin-bottom:0">Configure calendar sources on the <a href="admin-games.html">Games</a> page. Configure game durations and the late-start cutoff on the <a href="admin-config.html">Config</a> page.</p>
+        <p style="margin-bottom:0">Configure calendar sources on the <a href="admin-games.html">Games</a> page. Game durations and the late-start cutoff are configured on the <a href="#" onclick="switchSectionPublic('settings');return false">Settings</a> tab.</p>
       </div>
 
       <!-- Import mode toggle -->
@@ -187,7 +188,7 @@
          CALENDAR SECTION
          ════════════════════════════════════════════════════════════════════════ -->
     <div id="sec-calendar" style="display:none">
-      <!-- Month nav -->
+      <!-- Month nav + view toggle -->
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
         <div style="display:flex;align-items:center;gap:12px">
           <button type="button" class="btn print-btn" id="calPrevBtn" style="padding:6px 12px">◀</button>
@@ -195,9 +196,13 @@
           <button type="button" class="btn print-btn" id="calNextBtn" style="padding:6px 12px">▶</button>
           <button type="button" class="btn print-btn" id="calTodayBtn" style="padding:6px 10px;font-size:0.85rem">Today</button>
         </div>
-        <!-- Team filter -->
-        <div id="calTeamFilter" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-          <span style="color:var(--light-text);font-size:0.85rem">Show:</span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <!-- View toggle -->
+          <div style="display:flex;border:1px solid #444;border-radius:6px;overflow:hidden">
+            <button type="button" class="cal-view-btn active" data-view="month" style="padding:5px 12px;font-size:0.85rem;background:var(--accent);color:white;border:none;cursor:pointer">📅 Month</button>
+            <button type="button" class="cal-view-btn" data-view="list" style="padding:5px 12px;font-size:0.85rem;background:transparent;color:var(--light-text);border:none;cursor:pointer">☰ List</button>
+          </div>
+          <!-- Filters -->
           <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer;font-weight:normal">
             <input type="checkbox" id="calShowGames" checked /> Games
           </label>
@@ -210,9 +215,14 @@
       <!-- Team color legend -->
       <div id="calLegend" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;font-size:0.82rem"></div>
 
-      <!-- Calendar grid -->
-      <div id="calGrid" style="overflow-x:auto">
+      <!-- Month view -->
+      <div id="calMonthView" style="overflow-x:auto">
         <p style="color:var(--light-text)">Loading calendar…</p>
+      </div>
+
+      <!-- List view (all games for the month in table form) -->
+      <div id="calListView" style="display:none">
+        <div id="calListContent"></div>
       </div>
     </div>
 
@@ -243,12 +253,216 @@
       </div>
     </div>
 
+    <!-- ════════════════════════════════════════════════════════════════════════
+         SETTINGS SECTION
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="sec-settings" style="display:none">
+      <div class="document-note" style="margin-bottom:20px">
+        <p style="margin:0">These settings control pay rates, umpire slot defaults, and how game durations are used for conflict detection during import.</p>
+      </div>
+
+      <!-- Pay Rates -->
+      <h3 style="margin-bottom:12px">Default Pay Rates</h3>
+      <form id="sPayRatesForm" class="signup-form" style="margin-bottom:24px">
+        <div class="form-row">
+          <div class="form-group form-group--sm">
+            <label for="sRatePlate">Plate ($)</label>
+            <input type="number" id="sRatePlate" min="0" step="0.01" placeholder="40" />
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="sRateField">Field ($)</label>
+            <input type="number" id="sRateField" min="0" step="0.01" placeholder="30" />
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="sRateExtra">Extra ($)</label>
+            <input type="number" id="sRateExtra" min="0" step="0.01" placeholder="25" />
+          </div>
+        </div>
+        <div class="page-actions" style="margin-top:12px">
+          <button type="submit" class="btn">Save Pay Rates</button>
+        </div>
+        <p id="sPayRatesMsg" class="signup-message" aria-live="polite"></p>
+      </form>
+
+      <!-- Default Slot Types -->
+      <h3 style="margin-bottom:12px">Default Umpire Slot Types</h3>
+      <form id="sSlotTypesForm" class="signup-form" style="margin-bottom:24px">
+        <div class="document-note" style="margin:0 0 12px">
+          <p style="margin:0">Slot types automatically assigned to imported games.</p>
+        </div>
+        <div class="check-list">
+          <label><input type="checkbox" id="sSlotPlate" value="Plate" /> Plate</label>
+          <label><input type="checkbox" id="sSlotField" value="Field" /> Field</label>
+          <label><input type="checkbox" id="sSlotExtra" value="Extra" /> Extra</label>
+        </div>
+        <div class="page-actions" style="margin-top:12px">
+          <button type="submit" class="btn">Save Default Slot Types</button>
+        </div>
+        <p id="sSlotTypesMsg" class="signup-message" aria-live="polite"></p>
+      </form>
+
+      <!-- Scheduling Rules -->
+      <h3 style="margin-bottom:8px">Scheduling Rules</h3>
+      <div class="document-note" style="margin-bottom:12px">
+        <p style="margin:0">Game durations are used to detect field-time conflicts during import. The late-start cutoff applies to fields without lights.</p>
+      </div>
+      <form id="sSchedulingForm" class="signup-form">
+        <label style="margin-bottom:6px">Game Duration (minutes) by Division</label>
+        <div class="form-row" style="flex-wrap:wrap;gap:8px">
+          <div class="form-group form-group--sm">
+            <label for="sDur10U" style="font-weight:normal">10U</label>
+            <input type="number" id="sDur10U" min="30" max="300" step="5" placeholder="90" />
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="sDur12U" style="font-weight:normal">12U</label>
+            <input type="number" id="sDur12U" min="30" max="300" step="5" placeholder="90" />
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="sDur14U" style="font-weight:normal">14U</label>
+            <input type="number" id="sDur14U" min="30" max="300" step="5" placeholder="120" />
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="sDurHSJV" style="font-weight:normal">HS JV</label>
+            <input type="number" id="sDurHSJV" min="30" max="300" step="5" placeholder="120" />
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="sDurHSVar" style="font-weight:normal">HS Varsity</label>
+            <input type="number" id="sDurHSVar" min="30" max="300" step="5" placeholder="150" />
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="sDurDefault" style="font-weight:normal">Default</label>
+            <input type="number" id="sDurDefault" min="30" max="300" step="5" placeholder="90" />
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:12px">
+          <div class="form-group form-group--sm">
+            <label for="sLateStartCutoff">Latest start — no lights (HH:MM, 24h)</label>
+            <input type="time" id="sLateStartCutoff" value="19:30" />
+          </div>
+        </div>
+        <div class="page-actions" style="margin-top:12px">
+          <button type="submit" class="btn">Save Scheduling Rules</button>
+        </div>
+        <p id="sSchedulingMsg" class="signup-message" aria-live="polite"></p>
+      </form>
+    </div>
+
   </div>
 
   <!-- Not-admin fallback -->
   <div class="container" id="noAccess" style="display:none">
     <div class="document-note">
       <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <!-- ── Inline game edit modal ──────────────────────────────────────────────── -->
+  <div id="schedGameEditModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto">
+      <h2 style="margin-top:0">Edit Game</h2>
+      <input type="hidden" id="seGameId" />
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="seDate">Date</label>
+          <input type="date" id="seDate" />
+        </div>
+        <div class="form-group">
+          <label for="seTime">Time</label>
+          <input type="time" id="seTime" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="seDivision">Division</label>
+          <select id="seDivision">
+            <option value="10U">10U</option>
+            <option value="12U">12U</option>
+            <option value="14U">14U</option>
+            <option value="HS JV">HS JV</option>
+            <option value="HS Varsity">HS Varsity</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="seCity">City / League</label>
+          <select id="seCity">
+            <option value="City of Crooks">City of Crooks</option>
+            <option value="City of Colton">City of Colton</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="seField">Field / Location</label>
+          <input type="text" id="seField" placeholder="e.g. NH-North" />
+        </div>
+        <div class="form-group">
+          <label for="seGameType">Game Type</label>
+          <select id="seGameType">
+            <option value="Regular">Regular</option>
+            <option value="Playoff">Playoff</option>
+            <option value="Tournament">Tournament</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="seHomeTeam">Home Team</label>
+          <input type="text" id="seHomeTeam" placeholder="e.g. Crooks 12U Red" />
+        </div>
+        <div class="form-group">
+          <label for="seAwayTeam">Away Team</label>
+          <input type="text" id="seAwayTeam" placeholder="e.g. Mitchell 12U" />
+        </div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
+          <input type="checkbox" id="seIsAway" />
+          Away game <span style="color:var(--light-text);font-size:0.85rem">(our team is the visitor)</span>
+        </label>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
+          <input type="checkbox" id="seNeedsUmpires" />
+          Needs umpire assignment
+        </label>
+      </div>
+
+      <!-- Umpire slots -->
+      <div id="seSlotSection" style="margin-bottom:16px">
+        <label style="display:block;margin-bottom:6px">Umpire Slots</label>
+        <div id="seSlotList" style="border:1px solid #444;border-radius:6px;overflow:hidden"></div>
+      </div>
+
+      <div class="form-group">
+        <label for="seNotes">Notes for umpires <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+        <textarea id="seNotes" rows="2" placeholder="e.g. Park on north side."
+          style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
+      </div>
+      <div class="page-actions">
+        <button type="button" class="btn" id="seGameSaveBtn">Save Changes</button>
+        <button type="button" class="btn print-btn" id="seGameDeleteBtn" style="color:#ff8a8a;border-color:#ff8a8a">Delete Game</button>
+        <button type="button" class="btn print-btn" id="seGameCancelBtn">Cancel</button>
+      </div>
+      <p id="seGameMsg" class="signup-message" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <!-- ── Scheduler Assign Umpire Modal ──────────────────────────────────────── -->
+  <div id="schedAssignModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1200;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">
+      <h2 style="margin-top:0">Assign Umpire</h2>
+      <p id="schedAssignLabel" style="color:var(--light-text);margin-bottom:16px;font-size:0.9rem"></p>
+
+      <input type="text" id="schedAssignSearch" placeholder="Search by name or email…"
+        style="width:100%;padding:10px 12px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.95rem;box-sizing:border-box;margin-bottom:12px" />
+
+      <div id="schedAssignList" style="max-height:300px;overflow-y:auto;border:1px solid #444;border-radius:6px"></div>
+
+      <div class="page-actions" style="margin-top:16px">
+        <button type="button" class="btn print-btn" id="schedAssignCancelBtn">Cancel</button>
+      </div>
+      <p id="schedAssignMsg" class="signup-message" aria-live="polite"></p>
     </div>
   </div>
 
@@ -261,7 +475,7 @@
   </div>
 
   <script type="module" src="auth.js?v=16"></script>
-  <script type="module" src="admin-scheduler.js?v=2"></script>
+  <script type="module" src="admin-scheduler.js?v=3"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=2"></script>
   <script type="module" src="nav.js?v=1"></script>

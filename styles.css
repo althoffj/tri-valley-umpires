@@ -1755,3 +1755,9 @@ nav > a.active {
 }
 .practice-req-card.pending  { border-left-color: #f57c00; }
 .practice-req-card.approved { border-left-color: #4caf50; }
+
+/* Clickable calendar cards */
+.cal-card-clickable:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.15);
+}

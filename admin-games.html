@@ -175,28 +175,10 @@
     <!-- ── Team Calendars ────────────────────────────────────────────────── -->
     <h2>Team Calendars</h2>
     <div class="document-note">
-      <p>Add each Tri-Valley team with its GameChanger iCal URL. Umpires who play for a team will see a conflict warning when signing up for a game on the same date as their team's game.</p>
-      <p style="margin-bottom:0">Find the iCal URL in GameChanger: <strong>Team → Schedule → Subscribe to Calendar → Copy Link</strong>.</p>
+      <p>Team calendars are managed in the <a href="admin-scheduler.html"><strong>Scheduler → Teams</strong></a> tab, where you can add teams with division, color, iCal URL, and umpire needs. Use the Sync buttons below to pull the latest games from each team's calendar.</p>
     </div>
 
-    <div id="teamCalendarList" style="margin-bottom:16px"></div>
-
-    <form id="addTeamForm" class="signup-form" style="margin-bottom:0">
-      <div class="form-row">
-        <div class="form-group">
-          <label for="teamName">Team Name</label>
-          <input type="text" id="teamName" placeholder="e.g. Crooks 12U Blue" required />
-        </div>
-        <div class="form-group">
-          <label for="teamIcsUrl">GameChanger iCal URL</label>
-          <input type="url" id="teamIcsUrl" placeholder="https://gc.com/..." required />
-        </div>
-      </div>
-      <div class="page-actions" style="margin-top:12px">
-        <button type="submit" class="btn" id="addTeamBtn">Add Team</button>
-      </div>
-      <p id="addTeamMessage" class="signup-message" aria-live="polite"></p>
-    </form>
+    <div id="teamCalendarList" style="margin-bottom:4px"></div>
 
   </div>
 
@@ -315,6 +297,46 @@
     </div>
   </div>
 
+  <!-- ── Cancel / Rainout / Reschedule Modal ───────────────────────────────── -->
+  <div id="cancelGameModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1050;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto">
+      <h2 style="margin-top:0">Cancel Game</h2>
+      <p id="cancelGameInfo" style="color:var(--light-text);margin-bottom:16px;font-size:0.9rem"></p>
+      <input type="hidden" id="cancelGameId" />
+
+      <label style="display:block;margin-bottom:8px">Reason</label>
+      <div class="check-list" style="margin-bottom:16px">
+        <label style="font-weight:normal;cursor:pointer">
+          <input type="radio" name="cancelType" value="cancelled" checked />
+          ⛔ Cancelled
+        </label>
+        <label style="font-weight:normal;cursor:pointer">
+          <input type="radio" name="cancelType" value="rainout" />
+          🌧 Rain Out
+        </label>
+        <label style="font-weight:normal;cursor:pointer">
+          <input type="radio" name="cancelType" value="rescheduled" />
+          🔄 Rescheduled (makeup game TBD)
+        </label>
+      </div>
+
+      <div id="rescheduleNote" class="document-note" style="display:none;margin-bottom:16px;border-left-color:#ffcc80">
+        <p style="margin:0;font-size:0.88rem">The original game will be marked as rescheduled. Any assigned umpires <strong>will not be paid</strong> for this game. Add the makeup game separately via Add Game or Import — it will start with empty slots, open for anyone to sign up.</p>
+      </div>
+
+      <label for="cancelNotes">Notes <span style="color:var(--light-text);font-weight:normal">(optional — visible to you only)</span></label>
+      <textarea id="cancelNotes" rows="2"
+        placeholder="e.g. Field flooded. Makeup TBD."
+        style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical;margin-bottom:16px"></textarea>
+
+      <div class="page-actions">
+        <button type="button" class="btn" id="confirmCancelBtn" style="background:#5a1a1a">Confirm</button>
+        <button type="button" class="btn print-btn" id="closeCancelModalBtn">Keep Game</button>
+      </div>
+      <p id="cancelGameMsg" class="signup-message" aria-live="polite"></p>
+    </div>
+  </div>
+
   <!-- ── Assign Umpire Modal ─────────────────────────────────────────────── -->
   <div id="assignModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
     <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">
@@ -334,7 +356,7 @@
   </div>
 
   <script type="module" src="auth.js?v=14"></script>
-  <script type="module" src="admin-games.js?v=15"></script>
+  <script type="module" src="admin-games.js?v=16"></script>
   <script type="module" src="/pwa.js?v=2"></script>
   <script type="module" src="/tabs.js?v=3"></script>
   <script type="module" src="nav.js?v=2"></script>

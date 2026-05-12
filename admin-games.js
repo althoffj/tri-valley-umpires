@@ -13,7 +13,6 @@ import {
   updateDoc,
   addDoc,
   deleteDoc,
-  setDoc,
   query,
   orderBy,
   serverTimestamp,
@@ -61,6 +60,14 @@ function setMsg(id, text, type = "info") {
   if (!el) return;
   el.textContent = text;
   el.className   = `signup-message ${type}`;
+}
+
+function cancelledLabel(g) {
+  const type  = g.cancellationType || "cancelled";
+  const notes = g.cancelNotes ? `<div style="color:var(--light-text);font-size:0.78rem;margin-top:3px;font-style:italic">${esc(g.cancelNotes)}</div>` : "";
+  if (type === "rainout")     return `<span style="color:#8ab4f8">🌧 Rain Out</span>${notes}`;
+  if (type === "rescheduled") return `<span style="color:#ffcc80">🔄 Rescheduled</span>${notes}`;
+  return `<span style="color:#ffb4b4">⛔ Cancelled</span>${notes}`;
 }
 
 function slotBadge(slot) {
@@ -145,7 +152,7 @@ function getFieldValue(fieldSelId, fieldInputId) {
 async function loadGames() {
   const tbody = document.getElementById("adminGameBody");
   try {
-    const q = query(collection(db, "games"), where("needsUmpires", "==", true), orderBy("date"), orderBy("time"));
+    const q = query(collection(db, "games"), orderBy("date"), orderBy("time"));
     const snap = await getDocs(q);
     allGames = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderAdminGames();
@@ -203,15 +210,20 @@ function renderAdminGames() {
            data-game-id="${esc(g.id)}">Notify (${openSlotCount} open)</button>`
       : "";
 
+    const cancelTint = g.cancelled
+      ? (g.cancellationType === "rainout"     ? ";background:rgba(100,150,255,0.05)"
+       : g.cancellationType === "rescheduled" ? ";background:rgba(255,204,0,0.04)"
+       : "")
+      : "";
     return `
-    <tr style="${g.cancelled ? "opacity:0.55" : ""}${g.possibleChange ? ";background:rgba(255,204,0,0.06)" : ""}">
+    <tr style="${g.cancelled ? "opacity:0.6" : ""}${g.possibleChange ? ";background:rgba(255,204,0,0.06)" : ""}${cancelTint}">
       <td>${esc(fmtDate(g.date))}</td>
       <td>${esc(fmtTime(g.time))}</td>
       <td>${esc(g.city || "—")}${teams}</td>
       <td>${esc(g.division || "—")}</td>
       <td>${esc(g.type || "—")}</td>
       <td>${esc(g.field || "—")}${linkedBadge}</td>
-      <td>${g.cancelled ? '<span style="color:#ffb4b4">Cancelled</span>' : slotHtml}${changeWarning}${notesHtml}</td>
+      <td>${g.cancelled ? cancelledLabel(g) : slotHtml}${changeWarning}${notesHtml}</td>
       <td style="white-space:nowrap;vertical-align:top">
         ${g.cancelled ? "" : `
           <button class="btn print-btn edit-game-btn" style="margin-bottom:4px;display:block;width:100%"
@@ -226,19 +238,66 @@ function renderAdminGames() {
   }).join("");
 }
 
-async function cancelGame(gameId) {
+// ── Cancel / Rainout / Reschedule modal ──────────────────────────────────────
+
+function openCancelModal(gameId) {
   const game = allGames.find(g => g.id === gameId);
   if (!game) return;
-  if (!confirm(`Cancel the game on ${fmtDate(game.date)} at ${game.city}?`)) return;
+  document.getElementById("cancelGameId").value    = gameId;
+  document.getElementById("cancelGameInfo").textContent =
+    `${fmtDate(game.date)} at ${fmtTime(game.time)} — ${game.city || ""}${game.division ? " · " + game.division : ""}`;
+  document.getElementById("cancelNotes").value     = "";
+  document.getElementById("cancelGameMsg").textContent = "";
+  document.getElementById("cancelGameMsg").className   = "signup-message";
+  // Reset radio to first option
+  document.querySelector('input[name="cancelType"][value="cancelled"]').checked = true;
+  document.getElementById("rescheduleNote").style.display = "none";
+  document.getElementById("cancelGameModal").style.display = "flex";
+}
+
+// Show/hide the reschedule note when radio changes
+document.querySelectorAll('input[name="cancelType"]').forEach(radio => {
+  radio.addEventListener("change", () => {
+    document.getElementById("rescheduleNote").style.display =
+      document.querySelector('input[name="cancelType"]:checked')?.value === "rescheduled" ? "" : "none";
+  });
+});
+
+document.getElementById("confirmCancelBtn").addEventListener("click", async () => {
+  const gameId = document.getElementById("cancelGameId").value;
+  const type   = document.querySelector('input[name="cancelType"]:checked')?.value || "cancelled";
+  const notes  = document.getElementById("cancelNotes").value.trim();
+  const btn    = document.getElementById("confirmCancelBtn");
+  const msgEl  = document.getElementById("cancelGameMsg");
+  btn.disabled    = true;
+  msgEl.textContent = "Cancelling…";
+  msgEl.className   = "signup-message info";
   try {
-    await updateDoc(doc(db, "games", gameId), { cancelled: true, cancelledAt: serverTimestamp() });
+    await updateDoc(doc(db, "games", gameId), {
+      cancelled:        true,
+      cancelledAt:      serverTimestamp(),
+      cancellationType: type,
+      ...(notes ? { cancelNotes: notes } : {}),
+    });
     const g = allGames.find(g => g.id === gameId);
-    if (g) g.cancelled = true;
+    if (g) { g.cancelled = true; g.cancellationType = type; if (notes) g.cancelNotes = notes; }
+    document.getElementById("cancelGameModal").style.display = "none";
     renderAdminGames();
   } catch (err) {
-    alert(err.message);
+    msgEl.textContent = err.message;
+    msgEl.className   = "signup-message error";
+  } finally {
+    btn.disabled = false;
   }
-}
+});
+
+document.getElementById("closeCancelModalBtn").addEventListener("click", () => {
+  document.getElementById("cancelGameModal").style.display = "none";
+});
+document.getElementById("cancelGameModal").addEventListener("click", e => {
+  if (e.target === document.getElementById("cancelGameModal"))
+    document.getElementById("cancelGameModal").style.display = "none";
+});
 
 async function unassignSlot(gameId, slotType) {
   if (!confirm(`Remove the umpire from the ${slotType} slot?`)) return;
@@ -654,7 +713,7 @@ document.getElementById("gameUmpireTypes").addEventListener("change", e => {
   payInput.disabled = !e.target.checked;
 });
 
-// ── Team Calendars ────────────────────────────────────────────────────────────
+// ── Team Calendars (read-only — managed in Scheduler → Teams) ─────────────────
 
 async function loadTeamCalendars() {
   const listEl = document.getElementById("teamCalendarList");
@@ -663,80 +722,24 @@ async function loadTeamCalendars() {
     const teams = snap.exists() ? (snap.data().teams || []) : [];
 
     if (teams.length === 0) {
-      listEl.innerHTML = `<p class="schedule-source">No teams added yet.</p>`;
+      listEl.innerHTML = `<p class="schedule-source">No teams configured. <a href="admin-scheduler.html">Add teams in the Scheduler.</a></p>`;
       return;
     }
 
     listEl.innerHTML = teams.map((t, i) => `
       <div data-team-row="${i}" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #444">
-        <span style="flex:1"><strong>${esc(t.name)}</strong><br>
-          <span style="color:var(--light-text);font-size:0.82rem;word-break:break-all">${esc(t.icsUrl)}</span>
+        ${t.color ? `<span style="width:12px;height:12px;border-radius:2px;background:${esc(t.color)};flex-shrink:0"></span>` : ""}
+        <span style="flex:1">
+          <strong>${esc(t.name)}</strong>
+          ${t.division ? `<span style="color:var(--light-text);font-size:0.82rem;margin-left:8px">${esc(t.division)}</span>` : ""}
+          ${t.icsUrl ? `<br><span style="color:var(--light-text);font-size:0.78rem;word-break:break-all">📅 ${esc(t.icsUrl)}</span>` : ""}
         </span>
-        <button class="btn print-btn sync-team-btn" data-index="${i}" style="flex-shrink:0">Sync</button>
-        <button class="btn print-btn edit-team-btn" data-index="${i}" style="flex-shrink:0">Edit</button>
-        <button class="btn print-btn remove-team-btn" data-index="${i}" style="flex-shrink:0">Remove</button>
+        ${t.icsUrl ? `<button class="btn print-btn sync-team-btn" data-index="${i}" style="flex-shrink:0">Sync</button>` : ""}
       </div>`).join("");
   } catch (err) {
     listEl.innerHTML = `<p style="color:#ffb4b4">Failed to load teams.</p>`;
   }
 }
-
-async function addTeam(name, icsUrl) {
-  const snap = await getDoc(doc(db, "config", "teamCalendars"));
-  const teams = snap.exists() ? (snap.data().teams || []) : [];
-  const normalizedUrl = icsUrl.replace(/^webcal:\/\//i, "https://");
-  teams.push({ name, icsUrl: normalizedUrl });
-  await setDoc(doc(db, "config", "teamCalendars"), { teams });
-}
-
-async function removeTeam(index) {
-  const snap = await getDoc(doc(db, "config", "teamCalendars"));
-  const teams = snap.exists() ? (snap.data().teams || []) : [];
-  teams.splice(index, 1);
-  await setDoc(doc(db, "config", "teamCalendars"), { teams });
-}
-
-async function saveTeam(index, name, icsUrl) {
-  const snap = await getDoc(doc(db, "config", "teamCalendars"));
-  const teams = snap.exists() ? (snap.data().teams || []) : [];
-  teams[index] = { name, icsUrl: icsUrl.replace(/^webcal:\/\//i, "https://") };
-  await setDoc(doc(db, "config", "teamCalendars"), { teams });
-}
-
-function showTeamEditRow(index, currentName, currentUrl) {
-  const row = document.querySelector(`[data-team-row="${index}"]`);
-  if (!row) return;
-  row.innerHTML = `
-    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-      <input type="text" class="team-edit-name" value="${esc(currentName)}"
-        style="width:100%;padding:6px 8px;background:var(--card-bg,#2b2b2b);color:var(--text);border:1px solid #555;border-radius:4px" />
-      <input type="url" class="team-edit-url" value="${esc(currentUrl)}"
-        style="width:100%;padding:6px 8px;background:var(--card-bg,#2b2b2b);color:var(--text);border:1px solid #555;border-radius:4px;font-size:0.82rem" />
-    </div>
-    <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-      <button class="btn save-team-btn" data-index="${index}">Save</button>
-      <button class="btn print-btn cancel-edit-team-btn" data-index="${index}">Cancel</button>
-    </div>`;
-}
-
-document.getElementById("addTeamForm").addEventListener("submit", async function(e) {
-  e.preventDefault();
-  const btn  = document.getElementById("addTeamBtn");
-  const name = document.getElementById("teamName").value.trim();
-  const url  = document.getElementById("teamIcsUrl").value.trim();
-  btn.disabled = true;
-  setMsg("addTeamMessage", "Saving…", "info");
-  try {
-    await addTeam(name, url);
-    setMsg("addTeamMessage", "Team added!", "success");
-    this.reset();
-    await loadTeamCalendars();
-  } catch (err) {
-    setMsg("addTeamMessage", err.message, "error");
-  } finally {
-    btn.disabled = false;
-  }
-});
 
 // ── Calendar Sync ─────────────────────────────────────────────────────────────
 
@@ -808,7 +811,7 @@ document.addEventListener("click", e => {
   if (editGameBtn) { openEditModal(editGameBtn.dataset.gameId); return; }
 
   const cancelGameBtn = e.target.closest(".cancel-game-btn");
-  if (cancelGameBtn) { cancelGame(cancelGameBtn.dataset.gameId); return; }
+  if (cancelGameBtn) { openCancelModal(cancelGameBtn.dataset.gameId); return; }
 
   const deleteGameBtn = e.target.closest(".delete-game-btn");
   if (deleteGameBtn) { deleteGame(deleteGameBtn.dataset.gameId); return; }
@@ -837,38 +840,6 @@ document.addEventListener("click", e => {
         if (msgEl) { msgEl.textContent = `Error: ${err.message}`; msgEl.className = "signup-message error"; }
       })
       .finally(() => { syncTeamBtn.disabled = false; syncTeamBtn.textContent = "Sync"; });
-    return;
-  }
-
-  const editTeamBtn = e.target.closest(".edit-team-btn");
-  if (editTeamBtn) {
-    const i   = Number(editTeamBtn.dataset.index);
-    const row = document.querySelector(`[data-team-row="${i}"]`);
-    const name = row.querySelector("strong")?.textContent || "";
-    const url  = row.querySelector("span > span")?.textContent || "";
-    showTeamEditRow(i, name, url);
-    return;
-  }
-
-  const saveTeamBtn = e.target.closest(".save-team-btn");
-  if (saveTeamBtn) {
-    const i    = Number(saveTeamBtn.dataset.index);
-    const row  = document.querySelector(`[data-team-row="${i}"]`);
-    const name = row.querySelector(".team-edit-name").value.trim();
-    const url  = row.querySelector(".team-edit-url").value.trim();
-    if (!name || !url) { alert("Name and URL are required."); return; }
-    saveTeamBtn.disabled = true;
-    saveTeam(i, name, url).then(loadTeamCalendars).catch(err => { alert(err.message); saveTeamBtn.disabled = false; });
-    return;
-  }
-
-  const cancelEditTeamBtn = e.target.closest(".cancel-edit-team-btn");
-  if (cancelEditTeamBtn) { loadTeamCalendars(); return; }
-
-  const removeTeamBtn = e.target.closest(".remove-team-btn");
-  if (removeTeamBtn) {
-    if (!confirm("Remove this team?")) return;
-    removeTeam(Number(removeTeamBtn.dataset.index)).then(loadTeamCalendars).catch(err => alert(err.message));
     return;
   }
 

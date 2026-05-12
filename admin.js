@@ -902,6 +902,69 @@ async function saveAccountEdits() {
   }
 }
 
+// ── Umpire Roster Export ──────────────────────────────────────────────────────
+
+function csvCell(v) {
+  return `"${String(v ?? "").replace(/"/g, '""')}"`;
+}
+
+async function exportRosterCSV() {
+  const btn = document.getElementById("exportRosterBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Exporting…"; }
+  try {
+    const snap = await getDocs(query(collection(db, "umpires"), orderBy("lastName")));
+    const headers = [
+      "UID", "Last Name", "First Name", "Full Name", "Email", "Phone",
+      "Street", "City", "State", "ZIP",
+      "Approved", "Active", "Certifications", "Equipment", "Max Games/Week",
+      "Notes", "Parent Name", "Parent Email", "Parent Phone"
+    ];
+    const rows = [headers.map(csvCell).join(",")];
+    snap.docs.forEach(d => {
+      const p = d.data();
+      rows.push([
+        d.id,
+        p.lastName  || "",
+        p.firstName || "",
+        p.name      || "",
+        p.email     || "",
+        p.phone     || "",
+        p.street    || "",
+        p.city      || "",
+        p.state     || "",
+        p.zip       || "",
+        p.approved        ? "Yes" : "No",
+        p.active === false ? "No"  : "Yes",
+        (p.certifications || []).join("; "),
+        (p.equipment      || []).join("; "),
+        p.maxGamesPerWeek != null ? p.maxGamesPerWeek : "",
+        p.notes       || "",
+        p.parentName  || "",
+        p.parentEmail || "",
+        p.parentPhone || "",
+      ].map(csvCell).join(","));
+    });
+
+    const csv  = rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement("a"), {
+      href: url,
+      download: `umpire-roster-${new Date().toISOString().slice(0, 10)}.csv`,
+    });
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert("Export failed: " + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "⬇ Export CSV"; }
+  }
+}
+
+document.getElementById("exportRosterBtn")?.addEventListener("click", exportRosterCSV);
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 authReadyPromise.then(async () => {
