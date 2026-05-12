@@ -31,36 +31,216 @@
       <a href="admin-analytics.html">Analytics</a>
     </nav>
 
-    <h2>Scheduling Assistant</h2>
-    <div class="document-note">
-      <p>Fetches upcoming games from all configured calendar sources (GameChanger and Google Calendar iCal feeds), checks for field conflicts, lighting restrictions, and division mismatches, then lets you review and approve each game before it is added to the schedule.</p>
-      <p style="margin-bottom:0">Configure calendar sources on the <a href="admin-games.html">Games</a> page. Configure game durations and the late-start cutoff on the <a href="admin-config.html">Config</a> page.</p>
+    <h2 style="margin-bottom:4px">Scheduling Assistant</h2>
+
+    <!-- ── Section nav ───────────────────────────────────────────────────────── -->
+    <div class="sched-section-nav" id="schedSecNav">
+      <button class="sched-sec-btn active" data-section="teams">Teams</button>
+      <button class="sched-sec-btn" data-section="import">Import</button>
+      <button class="sched-sec-btn" data-section="calendar">Calendar</button>
+      <button class="sched-sec-btn" data-section="practices">Practices</button>
     </div>
 
-    <div class="page-actions">
-      <button type="button" class="btn" id="fetchBtn">Fetch &amp; Preview</button>
-    </div>
-    <p id="fetchMessage" class="signup-message" aria-live="polite"></p>
-
-    <!-- ── Summary bar ─────────────────────────────────────────────────────── -->
-    <div id="previewSummary" style="display:none;margin:16px 0 0">
-      <div id="summaryBar" class="scheduler-summary-bar"></div>
-
-      <!-- ── Tab buttons ────────────────────────────────────────────────────── -->
-      <div class="scheduler-tabs" id="schedulerTabs" style="margin-top:16px"></div>
-
-      <!-- ── Tab panels ─────────────────────────────────────────────────────── -->
-      <div id="tabReady" class="scheduler-tab-panel"></div>
-      <div id="tabConflicts" class="scheduler-tab-panel" style="display:none"></div>
-      <div id="tabDuplicates" class="scheduler-tab-panel" style="display:none"></div>
-      <div id="tabWarnings" class="scheduler-tab-panel" style="display:none"></div>
-
-      <!-- ── Commit button ──────────────────────────────────────────────────── -->
-      <div class="page-actions" id="commitActions" style="display:none;margin-top:16px">
-        <button type="button" class="btn" id="commitBtn">Import Approved Games</button>
-        <span id="approvedCount" style="color:var(--light-text);font-size:0.9rem;align-self:center"></span>
+    <!-- ════════════════════════════════════════════════════════════════════════
+         TEAMS SECTION
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="sec-teams">
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0">Manage teams, their iCal feeds, display colors, and whether home games automatically need umpires. These settings drive conflict detection, calendar color-coding, and import defaults.</p>
       </div>
-      <p id="commitMessage" class="signup-message" aria-live="polite"></p>
+
+      <!-- Team list -->
+      <div id="teamList" style="margin-bottom:16px"></div>
+
+      <!-- Add / Edit team form -->
+      <div id="teamFormWrap">
+        <h3 id="teamFormTitle" style="margin-bottom:12px">Add Team</h3>
+        <form id="teamForm" class="signup-form">
+          <input type="hidden" id="teamEditIndex" value="" />
+          <div class="form-row">
+            <div class="form-group">
+              <label for="tName">Team Name</label>
+              <input type="text" id="tName" placeholder="e.g. Crooks 12U Red" required />
+            </div>
+            <div class="form-group form-group--sm">
+              <label for="tDivision">Division</label>
+              <select id="tDivision" required>
+                <option value="">-- Select --</option>
+                <option value="10U">10U</option>
+                <option value="12U">12U</option>
+                <option value="14U">14U</option>
+                <option value="HS JV">HS JV</option>
+                <option value="HS Varsity">HS Varsity</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="tCity">Home City / League</label>
+              <select id="tCity">
+                <option value="">-- None --</option>
+                <option value="City of Crooks">City of Crooks</option>
+                <option value="City of Colton">City of Colton</option>
+              </select>
+            </div>
+            <div class="form-group form-group--sm">
+              <label for="tColor">Color</label>
+              <input type="color" id="tColor" value="#601929" style="height:38px;padding:2px 4px;border-radius:6px;border:1px solid #555;background:var(--field);cursor:pointer" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="tIcsUrl">GameChanger iCal URL <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+            <input type="url" id="tIcsUrl" placeholder="https://gc.com/..." />
+          </div>
+          <div style="margin-bottom:16px">
+            <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
+              <input type="checkbox" id="tNeedsUmpire" />
+              Home games for this team need an umpire
+              <span style="color:var(--light-text);font-size:0.85rem">(auto-applied on import)</span>
+            </label>
+          </div>
+          <div class="page-actions" style="margin-top:0">
+            <button type="submit" class="btn" id="teamFormSubmitBtn">Add Team</button>
+            <button type="button" class="btn print-btn" id="teamFormCancelBtn" style="display:none">Cancel</button>
+          </div>
+          <p id="teamFormMsg" class="signup-message" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════════
+         IMPORT SECTION
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="sec-import" style="display:none">
+      <div class="document-note" style="margin-bottom:16px">
+        <p>Import games from team iCal calendar feeds or from a CSV spreadsheet. Games are checked for field-time conflicts, lighting restrictions, and division mismatches before being added to the schedule.</p>
+        <p style="margin-bottom:0">Configure calendar sources on the <a href="admin-games.html">Games</a> page. Configure game durations and the late-start cutoff on the <a href="admin-config.html">Config</a> page.</p>
+      </div>
+
+      <!-- Import mode toggle -->
+      <div class="page-actions" style="margin-bottom:16px">
+        <button type="button" class="btn import-mode-btn active" data-mode="calendar">📅 Fetch from Calendars</button>
+        <button type="button" class="btn print-btn import-mode-btn" data-mode="csv">📄 Upload CSV</button>
+      </div>
+
+      <!-- Calendar mode -->
+      <div id="importModeCalendar">
+        <div class="page-actions">
+          <button type="button" class="btn" id="fetchBtn">Fetch &amp; Preview</button>
+        </div>
+        <p id="fetchMessage" class="signup-message" aria-live="polite"></p>
+      </div>
+
+      <!-- CSV mode -->
+      <div id="importModeCsv" style="display:none">
+        <div class="document-note" style="margin-bottom:16px">
+          <p style="margin-bottom:8px"><strong>Expected columns</strong> (header row required, order flexible):</p>
+          <code style="font-size:0.82rem;color:#aaa">Date, Time, Division, City, Field, Home Team, Away Team, Game Type</code>
+          <p style="margin-top:8px;margin-bottom:0;color:var(--light-text);font-size:0.85rem">Date format: YYYY-MM-DD or M/D/YYYY · Time: HH:MM (24h) or H:MM AM/PM · Game Type: Regular / Playoff / Tournament</p>
+        </div>
+        <div class="csv-dropzone" id="csvDropzone">
+          <input type="file" id="csvFileInput" accept=".csv,text/csv" />
+          <div id="csvDropLabel">
+            <div style="font-size:2rem;margin-bottom:8px">📄</div>
+            <div style="font-weight:600;margin-bottom:4px">Drop CSV here or click to browse</div>
+            <div style="font-size:0.85rem;color:#888">Accepts .csv files</div>
+          </div>
+          <div id="csvFileSelected" style="display:none">
+            <div style="font-size:1.5rem;margin-bottom:6px">✅</div>
+            <div id="csvFileName" style="font-weight:600;margin-bottom:8px"></div>
+            <button type="button" class="btn" id="csvPreviewBtn">Preview &amp; Check Conflicts</button>
+          </div>
+        </div>
+        <p id="csvMessage" class="signup-message" aria-live="polite"></p>
+      </div>
+
+      <!-- ── Preview panel (shared between calendar + CSV modes) ────────────── -->
+      <div id="previewSummary" style="display:none;margin:16px 0 0">
+        <div id="summaryBar" class="scheduler-summary-bar"></div>
+
+        <!-- Umpire prompt banner (shown after preview if any home games match teams with needsUmpireForHome) -->
+        <div id="umpirePromptBanner" style="display:none;margin-top:12px;padding:14px 18px;background:#1a2a1a;border:1px solid #4caf5044;border-radius:8px">
+          <strong style="color:#6fcf97">⚾ Umpire Assignment</strong>
+          <p style="margin:6px 0 0;font-size:0.9rem;color:var(--light-text)" id="umpirePromptText"></p>
+          <p style="margin:8px 0 0;font-size:0.85rem;color:#aaa">Home games for these teams will be imported with umpire slots. Edit individual games after import if needed.</p>
+        </div>
+
+        <!-- Tab buttons -->
+        <div class="scheduler-tabs" id="schedulerTabs" style="margin-top:16px"></div>
+
+        <!-- Tab panels -->
+        <div id="tabReady" class="scheduler-tab-panel"></div>
+        <div id="tabConflicts" class="scheduler-tab-panel" style="display:none"></div>
+        <div id="tabDuplicates" class="scheduler-tab-panel" style="display:none"></div>
+        <div id="tabWarnings" class="scheduler-tab-panel" style="display:none"></div>
+
+        <!-- Commit button -->
+        <div class="page-actions" id="commitActions" style="display:none;margin-top:16px">
+          <button type="button" class="btn" id="commitBtn">Import Approved Games</button>
+          <span id="approvedCount" style="color:var(--light-text);font-size:0.9rem;align-self:center"></span>
+        </div>
+        <p id="commitMessage" class="signup-message" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════════
+         CALENDAR SECTION
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="sec-calendar" style="display:none">
+      <!-- Month nav -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <button type="button" class="btn print-btn" id="calPrevBtn" style="padding:6px 12px">◀</button>
+          <h3 id="calMonthLabel" style="margin:0;font-size:1.1rem"></h3>
+          <button type="button" class="btn print-btn" id="calNextBtn" style="padding:6px 12px">▶</button>
+          <button type="button" class="btn print-btn" id="calTodayBtn" style="padding:6px 10px;font-size:0.85rem">Today</button>
+        </div>
+        <!-- Team filter -->
+        <div id="calTeamFilter" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <span style="color:var(--light-text);font-size:0.85rem">Show:</span>
+          <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer;font-weight:normal">
+            <input type="checkbox" id="calShowGames" checked /> Games
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer;font-weight:normal">
+            <input type="checkbox" id="calShowPractices" checked /> Practices
+          </label>
+        </div>
+      </div>
+
+      <!-- Team color legend -->
+      <div id="calLegend" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;font-size:0.82rem"></div>
+
+      <!-- Calendar grid -->
+      <div id="calGrid" style="overflow-x:auto">
+        <p style="color:var(--light-text)">Loading calendar…</p>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════════
+         PRACTICES SECTION
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="sec-practices" style="display:none">
+      <div class="document-note" style="margin-bottom:16px">
+        <p>Coaches submit practice requests via the <a href="practice-request.html" target="_blank">Practice Request Form</a>. Review, approve, or deny requests here. Approved practices appear on the scheduler calendar.</p>
+        <p style="margin-bottom:0">Before approving, field availability and conflicts with existing games are checked automatically.</p>
+      </div>
+
+      <div class="page-actions" style="margin-bottom:16px">
+        <a href="practice-request.html" target="_blank" class="btn print-btn">Open Coach Request Form ↗</a>
+        <button type="button" class="btn print-btn" id="refreshPracticesBtn">Refresh</button>
+      </div>
+
+      <!-- Pending requests -->
+      <div id="pendingPracticesSection">
+        <h3 style="color:#ffcc80;margin-bottom:8px">⏳ Pending Requests</h3>
+        <div id="pendingPracticesList"><p style="color:var(--light-text)">Loading…</p></div>
+      </div>
+
+      <!-- Upcoming approved practices -->
+      <div id="approvedPracticesSection" style="margin-top:24px">
+        <h3 style="margin-bottom:8px">✅ Upcoming Approved Practices</h3>
+        <div id="approvedPracticesList"><p style="color:var(--light-text)">Loading…</p></div>
+      </div>
     </div>
 
   </div>
@@ -81,7 +261,7 @@
   </div>
 
   <script type="module" src="auth.js?v=16"></script>
-  <script type="module" src="admin-scheduler.js?v=1"></script>
+  <script type="module" src="admin-scheduler.js?v=2"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=2"></script>
   <script type="module" src="nav.js?v=1"></script>

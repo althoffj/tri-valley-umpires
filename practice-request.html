@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Request Practice Field Time - Tri-Valley Baseball</title>
+  <link rel="stylesheet" href="styles.css?v=12" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Request Practice Field Time</h1>
+  </div>
+
+  <div class="container" style="max-width:680px">
+    <div class="document-note" style="margin-bottom:20px">
+      <p>Use this form to request a practice time slot at one of our facilities. Requests are reviewed by the scheduling administrator and you will receive a confirmation once approved.</p>
+      <p style="margin-bottom:0">For questions, contact <a href="mailto:althoff.jeff@gmail.com">althoff.jeff@gmail.com</a> or call <strong>605-380-0229</strong>.</p>
+    </div>
+
+    <div id="successMsg" style="display:none;background:#1a2a1a;border:1px solid #4caf50;border-radius:8px;padding:20px 24px;text-align:center">
+      <div style="font-size:2rem;margin-bottom:8px">✅</div>
+      <h2 style="color:#6fcf97;margin:0 0 8px">Request Submitted!</h2>
+      <p style="color:var(--light-text);margin:0">Your practice request has been submitted and is pending review. You'll hear back within 1–2 days.</p>
+      <div class="page-actions" style="justify-content:center;margin-top:16px">
+        <button type="button" class="btn print-btn" id="submitAnotherBtn">Submit Another Request</button>
+      </div>
+    </div>
+
+    <form id="practiceReqForm" class="signup-form">
+
+      <!-- ── Contact info ──────────────────────────────────────────────────── -->
+      <h3 style="margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px">Coach Information</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="coachName">Your Name <span style="color:#e53935">*</span></label>
+          <input type="text" id="coachName" placeholder="First and last name" required />
+        </div>
+        <div class="form-group">
+          <label for="teamName">Team Name <span style="color:#e53935">*</span></label>
+          <input type="text" id="teamName" placeholder="e.g. Crooks 10U Red" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="coachEmail">Email <span style="color:#e53935">*</span></label>
+          <input type="email" id="coachEmail" placeholder="coach@example.com" required />
+        </div>
+        <div class="form-group">
+          <label for="coachPhone">Phone <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+          <input type="tel" id="coachPhone" placeholder="605-555-1234" />
+        </div>
+      </div>
+
+      <!-- ── Field selection ────────────────────────────────────────────────── -->
+      <h3 style="margin:20px 0 12px;border-bottom:1px solid #333;padding-bottom:8px">Field &amp; Time</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="field">Field <span style="color:#e53935">*</span></label>
+          <select id="field" required>
+            <option value="">-- Select a field --</option>
+            <option value="NH-North">NH-North (Crooks)</option>
+            <option value="NH-South">NH-South (Crooks)</option>
+            <option value="East">East (Colton)</option>
+            <option value="West">West (Colton)</option>
+            <option value="Other">Other (describe in notes)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="startTime">Start Time <span style="color:#e53935">*</span></label>
+          <input type="time" id="startTime" required />
+        </div>
+        <div class="form-group">
+          <label for="endTime">End Time <span style="color:#e53935">*</span></label>
+          <input type="time" id="endTime" required />
+        </div>
+      </div>
+
+      <!-- ── Recurrence ────────────────────────────────────────────────────── -->
+      <h3 style="margin:20px 0 12px;border-bottom:1px solid #333;padding-bottom:8px">Schedule</h3>
+      <div class="form-group">
+        <label>Recurrence <span style="color:#e53935">*</span></label>
+        <div style="display:flex;gap:16px;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal">
+            <input type="radio" name="recurrence" value="once" checked /> One-time
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal">
+            <input type="radio" name="recurrence" value="weekly" /> Weekly (recurring)
+          </label>
+        </div>
+      </div>
+
+      <!-- One-time date -->
+      <div id="onceDateSection">
+        <div class="form-group">
+          <label for="onceDate">Date <span style="color:#e53935">*</span></label>
+          <input type="date" id="onceDate" />
+        </div>
+      </div>
+
+      <!-- Weekly recurring -->
+      <div id="recurringSection" style="display:none">
+        <div class="form-group">
+          <label>Days of Week <span style="color:#e53935">*</span></label>
+          <div class="check-list" style="flex-direction:row;flex-wrap:wrap;gap:8px 16px;margin-top:6px">
+            <label style="font-weight:normal;cursor:pointer"><input type="checkbox" name="dow" value="0" /> Sun</label>
+            <label style="font-weight:normal;cursor:pointer"><input type="checkbox" name="dow" value="1" /> Mon</label>
+            <label style="font-weight:normal;cursor:pointer"><input type="checkbox" name="dow" value="2" /> Tue</label>
+            <label style="font-weight:normal;cursor:pointer"><input type="checkbox" name="dow" value="3" /> Wed</label>
+            <label style="font-weight:normal;cursor:pointer"><input type="checkbox" name="dow" value="4" /> Thu</label>
+            <label style="font-weight:normal;cursor:pointer"><input type="checkbox" name="dow" value="5" /> Fri</label>
+            <label style="font-weight:normal;cursor:pointer"><input type="checkbox" name="dow" value="6" /> Sat</label>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="recurStart">Start Date <span style="color:#e53935">*</span></label>
+            <input type="date" id="recurStart" />
+          </div>
+          <div class="form-group">
+            <label for="recurEnd">End Date <span style="color:#e53935">*</span></label>
+            <input type="date" id="recurEnd" />
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Notes ─────────────────────────────────────────────────────────── -->
+      <div class="form-group" style="margin-top:8px">
+        <label for="reqNotes">Additional Notes <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+        <textarea id="reqNotes" rows="3" placeholder="Any special requests, setup needs, or context for the scheduler…"
+          style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
+      </div>
+
+      <div class="page-actions" style="margin-top:16px">
+        <button type="submit" class="btn" id="submitBtn">Submit Request</button>
+      </div>
+      <p id="submitMsg" class="signup-message" aria-live="polite"></p>
+    </form>
+  </div>
+
+  <div class="footer">
+    <p>
+      <a href="https://www.trivalleyball.com" target="_blank">Tri-Valley Baseball Association</a>
+      | <a href="index.html">Umpire Portal</a>
+    </p>
+  </div>
+
+  <script type="module" src="practice-request.js?v=1"></script>
+</body>
+</html>

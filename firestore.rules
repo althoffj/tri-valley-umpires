@@ -125,5 +125,17 @@ service cloud.firestore {
          request.resource.data.status == "withdrawn");
       allow delete: if isAdmin();
     }
+
+    // Practice requests: anyone can submit (coaches, no account required); admins can read/update/delete
+    match /practiceRequests/{requestId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Approved practices: public read; admins can write
+    match /practices/{practiceId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
   }
 }
