@@ -249,7 +249,7 @@ function renderAdminGames() {
     if (hasTeams) {
       if (g.isAway === true) {
         locationBadge = `<span style="font-size:0.7rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px">AWAY</span>`;
-      } else if (g.isAway === false || g.needsUmpires === true) {
+      } else if (g.isAway === false) {
         locationBadge = `<span style="font-size:0.7rem;background:rgba(22,101,52,0.4);color:#86efac;border:1px solid #166534;border-radius:4px;padding:1px 5px;margin-right:4px">HOME</span>`;
       }
     }
