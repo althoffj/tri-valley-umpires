@@ -314,16 +314,23 @@ let teamCoaches = []; // approved coaches for team-form dropdown
 
 async function loadTeams() {
   try {
-    const [teamsSnap, leaguesSnap, coachesSnap] = await Promise.all([
+    const [teamsSnap, leaguesSnap] = await Promise.all([
       getDoc(doc(db, "config/teamCalendars")),
       getDocs(query(collection(db, "leagues"), orderBy("name"))),
-      getDocs(query(collection(db, "coaches"), where("approved", "==", true), orderBy("name"))),
     ]);
-    teams        = teamsSnap.exists() ? (teamsSnap.data().teams || []) : [];
-    leagues      = leaguesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    teamCoaches  = coachesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    teams   = teamsSnap.exists() ? (teamsSnap.data().teams || []) : [];
+    leagues = leaguesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch {
     teams = [];
+  }
+  // Load coaches separately — a missing composite index should not break the team list
+  try {
+    const coachesSnap = await getDocs(query(collection(db, "coaches"), where("approved", "==", true)));
+    teamCoaches = coachesSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  } catch {
+    teamCoaches = [];
   }
   renderTeamList();
   populateLeagueSelector();
