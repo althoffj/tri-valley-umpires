@@ -1008,6 +1008,48 @@ async function getSlackWebhooks(db) {
   return snap.exists ? snap.data() : {};
 }
 
+async function loadWebhookConfig(db) {
+  const snap = await db.doc("config/slackWebhooks").get();
+  return snap.exists ? snap.data() : {};
+}
+
+function getTargetWebhooks(config, eventType, division = null) {
+  // New format: webhooks array
+  if (Array.isArray(config.webhooks)) {
+    return config.webhooks
+      .filter(w => w.active !== false && w.url)
+      .filter(w => (w.events || []).includes(eventType))
+      .filter(w => {
+        if (!division || !w.divisions || !w.divisions.length) return true;
+        return w.divisions.some(d => new RegExp(d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(division));
+      })
+      .map(w => w.url);
+  }
+
+  // Legacy fallback: flat keys (jeff, ch10u, ch12u, dailySummary)
+  const urls = new Set();
+  const div = division || "";
+  const addJeff    = () => { if (config.jeff)  urls.add(config.jeff); };
+  const addChannel = () => {
+    if (/10U/i.test(div) && config.ch10u) urls.add(config.ch10u);
+    if (/12U/i.test(div) && config.ch12u) urls.add(config.ch12u);
+  };
+  switch (eventType) {
+    case "gameChanges":
+    case "openSlots":
+    case "dayOfReminders":
+      addJeff(); addChannel(); break;
+    case "slotChanges":
+    case "cancellationRequests":
+    case "incidentReports":
+    case "tournamentSwaps":
+      addJeff(); break;
+    case "dailySummary":
+      if (config.dailySummary) urls.add(config.dailySummary); break;
+  }
+  return [...urls];
+}
+
 function fmtDateSlack(iso) {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
@@ -1034,14 +1076,11 @@ exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
   // Only fire for needsUmpires games
   if (!after?.needsUmpires && !before?.needsUmpires) return;
 
-  const db      = getFirestore();
-  const hooks   = await getSlackWebhooks(db);
-  if (!hooks.jeff && !hooks.ch10u && !hooks.ch12u) return;
+  const db     = getFirestore();
+  const div    = after?.division ?? before?.division ?? "";
+  const config = await loadWebhookConfig(db);
 
-  const div     = after?.division ?? before?.division ?? "";
-  const channel = /10U/i.test(div) ? hooks.ch10u : /12U/i.test(div) ? hooks.ch12u : null;
-
-  // ── 1. Structural game changes → jeff + channel ──────────────────────────────
+  // ── 1. Structural game changes → gameChanges webhooks ───────────────────────
   let broadcastMsg = null;
 
   if (!before && after) {
@@ -1059,7 +1098,7 @@ exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
     }
   }
 
-  // ── 2. Slot assignment changes → jeff only ───────────────────────────────────
+  // ── 2. Slot assignment changes → slotChanges webhooks ───────────────────────
   let jeffMsg = null;
 
   if (before && after && !after.cancelled) {
@@ -1088,11 +1127,14 @@ exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
   // ── Send notifications ───────────────────────────────────────────────────────
   const sends = [];
   if (broadcastMsg) {
-    if (hooks.jeff)  sends.push(postSlack(hooks.jeff,  broadcastMsg));
-    if (channel)     sends.push(postSlack(channel,     broadcastMsg));
+    getTargetWebhooks(config, "gameChanges", div).forEach(url =>
+      sends.push(postSlack(url, broadcastMsg))
+    );
   }
-  if (jeffMsg && hooks.jeff) {
-    sends.push(postSlack(hooks.jeff, jeffMsg));
+  if (jeffMsg) {
+    getTargetWebhooks(config, "slotChanges", div).forEach(url =>
+      sends.push(postSlack(url, jeffMsg))
+    );
   }
 
   if (sends.length) await Promise.allSettled(sends);
@@ -1108,8 +1150,9 @@ exports.onCancellationRequest = onDocumentWritten("cancellationRequests/{request
   if (!after || after.status !== "pending" || before?.status === "pending") return;
 
   const db    = getFirestore();
-  const hooks = await getSlackWebhooks(db);
-  if (!hooks.jeff) return;
+  const config = await loadWebhookConfig(db);
+  const targets = getTargetWebhooks(config, "cancellationRequests");
+  if (!targets.length) return;
 
   const name  = after.name     || after.uid || "Unknown";
   const slot  = after.slotType || "?";
@@ -1118,7 +1161,7 @@ exports.onCancellationRequest = onDocumentWritten("cancellationRequests/{request
   const where = [after.gameCity, after.gameDivision, after.gameField].filter(Boolean).join(" · ");
   const msg   = `⚠️ Cancellation request — ${name} wants to cancel ${slot} slot · ${date}${time ? " at " + time : ""}${where ? " · " + where : ""}\nReview: https://tri-valley-baseball-umpires.web.app/admin-games.html`;
 
-  await postSlack(hooks.jeff, msg).catch(() => {});
+  await Promise.allSettled(targets.map(url => postSlack(url, msg)));
 });
 
 // ── Incident report notifications ────────────────────────────────────────────
@@ -1129,8 +1172,9 @@ exports.onIncidentReport = onDocumentWritten("incidentReports/{reportId}", async
 
   const r   = event.data.after.data();
   const db  = getFirestore();
-  const hooks = await getSlackWebhooks(db);
-  if (!hooks.jeff) return;
+  const config = await loadWebhookConfig(db);
+  const targets = getTargetWebhooks(config, "incidentReports");
+  if (!targets.length) return;
 
   const gameLabel = [
     r.gameDate ? fmtDateSlack(r.gameDate) : "",
@@ -1155,7 +1199,7 @@ exports.onIncidentReport = onDocumentWritten("incidentReports/{reportId}", async
   }
 
   const msg = `🚨 Incident Report — *${r.incidentType || "Incident"}* · ${r.reporterName || r.reportedBy}${gameLabel ? " · " + gameLabel : ""}${details}`;
-  await postSlack(hooks.jeff, msg).catch(() => {});
+  await Promise.allSettled(targets.map(url => postSlack(url, msg)));
 });
 
 // ── Notify umpires about open slots ──────────────────────────────────────────
@@ -1181,13 +1225,10 @@ exports.notifyOpenSlots = onCall({ cors: ["https://tri-valley-baseball-umpires.w
   const label     = gameLabel(game);
   const msg       = `⚾ Umpires needed — ${slotTypes} slot${open.length !== 1 ? "s" : ""} open · ${label}\n${game.notes ? "📋 " + game.notes + "\n" : ""}Sign up: https://tri-valley-baseball-umpires.web.app/schedule.html`;
 
-  const hooks = await getSlackWebhooks(db);
-  const div   = game.division ?? "";
-  const channel = /10U/i.test(div) ? hooks.ch10u : /12U/i.test(div) ? hooks.ch12u : null;
-
-  const sends = [];
-  if (hooks.jeff)  sends.push(postSlack(hooks.jeff,  msg));
-  if (channel)     sends.push(postSlack(channel,     msg));
+  const config  = await loadWebhookConfig(db);
+  const div     = game.division ?? "";
+  const targets = getTargetWebhooks(config, "openSlots", div);
+  const sends = targets.map(url => postSlack(url, msg));
   if (sends.length) await Promise.allSettled(sends);
 
   // Push notification to all registered tokens
@@ -1340,14 +1381,11 @@ exports.notifyGameCancellation = onCall({ cors: CORS }, async request => {
     }
   }
 
-  // Slack — Jeff + division channel
-  const hooks   = await getSlackWebhooks(db);
-  const div     = game.division ?? "";
-  const channel = /10U/i.test(div) ? hooks.ch10u : /12U/i.test(div) ? hooks.ch12u : null;
-  const sends   = [];
-  if (hooks.jeff) sends.push(postSlack(hooks.jeff, slackMsg));
-  if (channel)    sends.push(postSlack(channel,    slackMsg));
-  if (sends.length) await Promise.allSettled(sends);
+  // Slack — gameChanges webhooks
+  const config2  = await loadWebhookConfig(db);
+  const div2     = game.division ?? "";
+  const slackSends = getTargetWebhooks(config2, "gameChanges", div2).map(url => postSlack(url, slackMsg));
+  if (slackSends.length) await Promise.allSettled(slackSends);
 
   return { notified: pushed, slacked: sends.length };
 });
@@ -1453,8 +1491,12 @@ exports.sendBroadcast = onCall({ cors: CORS }, async request => {
 // ── Phase 12: day-of reminders at 7 AM ───────────────────────────────────────
 
 async function dayOfRemindersCore(db) {
-  const hooks = await getSlackWebhooks(db);
-  if (!hooks.jeff && !hooks.ch10u && !hooks.ch12u) return { sent: 0 };
+  const config = await loadWebhookConfig(db);
+  // early-exit guard: check if any webhook handles dayOfReminders
+  const anyDayOf = Array.isArray(config.webhooks)
+    ? config.webhooks.some(w => w.active !== false && w.url && (w.events||[]).includes("dayOfReminders"))
+    : !!(config.jeff || config.ch10u || config.ch12u);
+  if (!anyDayOf) return { sent: 0 };
 
   const today = todayISO();
   const snap  = await db.collection("games")
@@ -1466,22 +1508,21 @@ async function dayOfRemindersCore(db) {
   for (const d of snap.docs) {
     const g      = d.data();
     if (g.cancelled) continue;
-    const div     = g.division ?? "";
-    const channel = /10U/i.test(div) ? hooks.ch10u : /12U/i.test(div) ? hooks.ch12u : null;
     const slots   = (g.umpireSlots ?? [])
       .map(s => s.assignedName ? `${s.type}: ${s.assignedName}` : `${s.type}: OPEN`)
       .join(" | ");
     const msg = `⚾ *Game today:* ${gameLabel(g)}\n${slots}`;
 
-    await Promise.allSettled([
-      hooks.jeff ? postSlack(hooks.jeff, msg) : null,
-      channel    ? postSlack(channel,    msg) : null
-    ].filter(Boolean));
+    const targets = getTargetWebhooks(config, "dayOfReminders", g.division ?? "");
+    await Promise.allSettled(targets.map(url => postSlack(url, msg)));
     sent++;
   }
 
-  if (sent === 0 && hooks.jeff) {
-    await postSlack(hooks.jeff, `📋 *${fmtDateSlack(today)}* — No games scheduled today.`);
+  if (sent === 0) {
+    const targets = getTargetWebhooks(config, "dayOfReminders");
+    await Promise.allSettled(targets.map(url =>
+      postSlack(url, `📋 *${fmtDateSlack(today)}* — No games scheduled today.`)
+    ));
   }
 
   return { sent };
@@ -1506,8 +1547,9 @@ exports.triggerDayOfReminders = onCall({ cors: CORS }, async request => {
 // umpire's phone number, and parent contact info when available.
 
 async function dailyGameSummaryCore(db) {
-  const hooks = await getSlackWebhooks(db);
-  if (!hooks.dailySummary) return { sent: false, reason: "No webhook configured." };
+  const config  = await loadWebhookConfig(db);
+  const targets = getTargetWebhooks(config, "dailySummary");
+  if (!targets.length) return { sent: false, reason: "No webhook configured." };
 
   const today = todayISO();
 
@@ -1521,7 +1563,7 @@ async function dailyGameSummaryCore(db) {
     .sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""));
 
   if (!games.length) {
-    await postSlack(hooks.dailySummary, `📋 *Daily Game Summary — ${fmtDateSlack(today)}*\n\nNo games scheduled today.`);
+    await Promise.allSettled(targets.map(url => postSlack(url, `📋 *Daily Game Summary — ${fmtDateSlack(today)}*\n\nNo games scheduled today.`)));
     return { sent: true, games: 0 };
   }
 
@@ -1575,7 +1617,7 @@ async function dailyGameSummaryCore(db) {
     + "─".repeat(32) + "\n\n"
     + blocks.join("\n\n");
 
-  await postSlack(hooks.dailySummary, msg);
+  await Promise.allSettled(targets.map(url => postSlack(url, msg)));
   return { sent: true, games: games.length };
 }
 
@@ -1608,14 +1650,15 @@ exports.notifyTournamentSwap = onCall({ cors: CORS }, async request => {
   ].filter(Boolean);
 
   // Send Slack notification
-  const hooks = await getSlackWebhooks(db);
-  if (hooks.jeff) {
+  const config  = await loadWebhookConfig(db);
+  const swapTargets = getTargetWebhooks(config, "tournamentSwaps");
+  if (swapTargets.length) {
     const names1 = umpires1.map(u => u.name).join(", ") || "none";
     const names2 = umpires2.map(u => u.name).join(", ") || "none";
     const msg = `🔄 *Field Swap — ${tournamentName}*\n`
       + `• ${game1.time} ${game1.field ? "(" + game1.field + ")" : ""} ↔ ${game2.time} ${game2.field ? "(" + game2.field + ")" : ""}\n`
       + `• ${names1} ⇄ ${names2}`;
-    await postSlack(hooks.jeff, msg).catch(() => {});
+    await Promise.allSettled(swapTargets.map(url => postSlack(url, msg)));
   }
 
   // Send FCM push to affected umpires

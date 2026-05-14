@@ -8,6 +8,17 @@
   <title>Admin: Config - Tri-Valley Baseball Umpires</title>
   <link rel="stylesheet" href="styles.css?v=16" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+  <style>
+    .webhook-check-label { display:flex;align-items:center;gap:6px;font-size:0.88rem;cursor:pointer;user-select:none }
+    .webhook-card { background:var(--field);border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px }
+    .webhook-card-info { flex:1;min-width:0 }
+    .webhook-card-label { font-weight:600;margin-bottom:3px }
+    .webhook-card-url { font-size:0.78rem;color:var(--light-text);word-break:break-all }
+    .webhook-card-tags { display:flex;flex-wrap:wrap;gap:4px;margin-top:6px }
+    .webhook-tag { font-size:0.72rem;padding:2px 7px;border-radius:4px;background:#1e2a3a;color:#8ab4f8 }
+    .webhook-tag.div-tag { background:#1a2e1a;color:#86efac }
+    .webhook-tag.inactive { background:#3a1a1a;color:#ffb4b4 }
+  </style>
 </head>
 <body>
   <div class="header">
@@ -41,35 +52,73 @@
     <!-- ── Slack Webhooks ────────────────────────────────────────────────── -->
     <h2>Slack Webhooks</h2>
     <div class="document-note">
-      <p>Paste incoming webhook URLs to receive Slack notifications when games are added, updated, or cancelled, and day-of reminders at 7&nbsp;AM. The Daily Game Summary channel receives a single comprehensive post at 7&nbsp;AM listing all of today's games with assigned umpires and contact numbers. Leave blank to disable a channel.</p>
-      <p style="margin-bottom:0">Create webhooks in Slack: <strong>Apps → Incoming Webhooks → Add New Webhook to Workspace</strong>.</p>
+      <p>Configure Slack channels to receive notifications. Each webhook can subscribe to specific event types and optionally filter by division. Create webhooks in Slack: <strong>Apps → Incoming Webhooks → Add New Webhook to Workspace</strong>.</p>
     </div>
-    <form id="slackWebhooksForm" class="signup-form">
-      <label for="slackJeff">Jeff (direct DM webhook)</label>
-      <input type="url" id="slackJeff" placeholder="https://hooks.slack.com/services/…" />
 
-      <label for="slack10u">10U Channel webhook</label>
-      <input type="url" id="slack10u" placeholder="https://hooks.slack.com/services/…" />
+    <div id="slackWebhookList" style="margin-bottom:16px">
+      <p style="color:var(--light-text)">Loading…</p>
+    </div>
+    <div class="page-actions" style="margin-bottom:24px">
+      <button type="button" class="btn" id="addWebhookBtn">+ Add Webhook</button>
+    </div>
 
-      <label for="slack12u">12U Channel webhook</label>
-      <input type="url" id="slack12u" placeholder="https://hooks.slack.com/services/…" />
+    <!-- Inline add/edit form (hidden until needed) -->
+    <div id="webhookEditPanel" style="display:none;background:var(--field);border-radius:10px;padding:20px;margin-bottom:24px">
+      <h3 id="webhookEditTitle" style="margin-top:0">Add Webhook</h3>
+      <input type="hidden" id="webhookEditId" />
 
-      <label for="slackDailySummary">Daily Game Summary Channel webhook</label>
-      <input type="url" id="slackDailySummary" placeholder="https://hooks.slack.com/services/…" />
-
-      <div class="page-actions" style="margin-top:16px">
-        <button type="submit" class="btn">Save Webhooks</button>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="webhookLabel">Label</label>
+          <input type="text" id="webhookLabel" placeholder="e.g. Jeff (Admin)" maxlength="60" />
+        </div>
       </div>
-      <p id="slackWebhooksMessage" class="signup-message" aria-live="polite"></p>
+      <div class="form-group">
+        <label for="webhookUrl">Webhook URL</label>
+        <input type="url" id="webhookUrl" placeholder="https://hooks.slack.com/services/…" />
+      </div>
 
-      <h3 style="margin:24px 0 8px">Manual Triggers</h3>
-      <p style="color:var(--light-text);font-size:0.9rem;margin:0 0 12px">Send today's Slack messages immediately — useful for testing or recovering from a missed scheduled run.</p>
+      <label style="display:block;margin-bottom:8px;font-weight:600">Receive notifications for:</label>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;margin-bottom:16px" id="webhookEventsGrid">
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="gameChanges" /> Game changes (new, updated, cancelled)</label>
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="slotChanges" /> Slot signups &amp; cancellations</label>
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="dayOfReminders" /> Day-of reminders (7 AM)</label>
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="dailySummary" /> Daily game summary (7 AM)</label>
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="openSlots" /> Open slot alerts</label>
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="cancellationRequests" /> Cancellation requests</label>
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="incidentReports" /> Incident reports</label>
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="tournamentSwaps" /> Tournament field swaps</label>
+      </div>
+
+      <label style="display:block;margin-bottom:8px;font-weight:600">Division filter <span style="font-weight:normal;color:var(--light-text)">(leave all unchecked for all divisions)</span></label>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px" id="webhookDivisionsGrid">
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="10U" /> 10U</label>
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="12U" /> 12U</label>
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="14U" /> 14U</label>
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="HS JV" /> HS JV</label>
+        <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="HS Varsity" /> HS Varsity</label>
+      </div>
+
+      <label class="webhook-check-label" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="webhookActive" checked /> Active
+      </label>
+
       <div class="page-actions">
-        <button type="button" class="btn print-btn" id="triggerRemindersBtn">Send Day-of Reminders Now</button>
-        <button type="button" class="btn print-btn" id="triggerSummaryBtn">Send Daily Summary Now</button>
+        <button type="button" class="btn" id="webhookSaveBtn">Save Webhook</button>
+        <button type="button" class="btn print-btn" id="webhookCancelBtn">Cancel</button>
+        <button type="button" class="btn" id="webhookDeleteBtn" style="display:none;background:#7a1c1c;margin-left:auto">Delete Webhook</button>
       </div>
-      <p id="slackTriggerMessage" class="signup-message" aria-live="polite"></p>
-    </form>
+      <p id="webhookEditMessage" class="signup-message" aria-live="polite"></p>
+    </div>
+
+    <!-- Manual triggers -->
+    <h3 style="margin:0 0 8px">Manual Triggers</h3>
+    <p style="color:var(--light-text);font-size:0.9rem;margin:0 0 12px">Send today's Slack messages immediately — useful for testing.</p>
+    <div class="page-actions">
+      <button type="button" class="btn print-btn" id="triggerRemindersBtn">Send Day-of Reminders Now</button>
+      <button type="button" class="btn print-btn" id="triggerSummaryBtn">Send Daily Summary Now</button>
+    </div>
+    <p id="slackTriggerMessage" class="signup-message" aria-live="polite"></p>
 
     <!-- ── Push Notifications ────────────────────────────────────────────── -->
     <h2>Send Notification</h2>
@@ -128,7 +177,7 @@
   </div>
 
   <script type="module" src="auth.js?v=17"></script>
-  <script type="module" src="admin-config.js?v=14"></script>
+  <script type="module" src="admin-config.js?v=15"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=3"></script>
   <script type="module" src="nav.js?v=2"></script>
