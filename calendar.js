@@ -147,14 +147,17 @@ function renderMonth() {
       const isMuted = g.cancelled && (g.cancellationType === "rainout" || g.cancellationType === "rescheduled");
       const isCancel = g.cancelled && !isMuted;
       const mutedIcon = g.cancellationType === "rainout" ? "🌧" : "🔄";
-      const color = mine ? "#b8f2c4" : "var(--accent)";
+      const isAway    = g.isAway === true;
+      const isRef     = g.source === "calendar" && !g.needsUmpires;
+      const color = mine ? "#b8f2c4" : isAway ? "#f59e42" : isRef ? "#8888aa" : "var(--accent)";
       if (isCancel) return; // outright cancelled — skip from month
-      html += `<div class="cal-card${mine ? " cal-card-mine" : ""}"
-        style="border-left-color:${color}${isMuted ? ";opacity:0.5;border-style:dashed" : ""}"
-        title="${isMuted ? (g.cancellationType === "rainout" ? "Rain Out" : "Rescheduled") + " · " : ""}${esc(g.city||"")} ${esc(g.division||"")} · ${g.field||""}">
+      const awayLabel = isAway ? `<div style="font-size:0.62rem;color:#f59e42">↗ Away</div>` : "";
+      html += `<div class="cal-card${mine ? " cal-card-mine" : ""}${isRef ? " cal-card-ref" : ""}"
+        style="border-left-color:${color}${isMuted ? ";opacity:0.5;border-style:dashed" : ""}${isRef ? ";opacity:0.7" : ""}"
+        title="${isMuted ? (g.cancellationType === "rainout" ? "Rain Out" : "Rescheduled") + " · " : ""}${isAway ? "Away · " : ""}${esc(g.city||"")} ${esc(g.division||"")} · ${g.field||""}">
         <div style="font-size:0.7rem;color:var(--light-text)">${isMuted ? mutedIcon+" " : ""}${g.time ? fmtTime(g.time).replace(":00","") : ""} ${esc(g.division||"")}</div>
         <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(g.city||"Game")}</div>
-        ${mine ? `<div style="font-size:0.65rem;color:#b8f2c4">★ Yours</div>` : ""}
+        ${awayLabel}${mine ? `<div style="font-size:0.65rem;color:#b8f2c4">★ Yours</div>` : ""}
       </div>`;
     });
 
@@ -228,14 +231,17 @@ function renderList() {
       const isCancel = g.cancelled && !isMuted;
       const mutedIcon = g.cancellationType === "rainout" ? "🌧 " : g.cancellationType === "rescheduled" ? "🔄 " : "";
       const cancelIcon = isCancel ? "⛔ " : "";
-      const badge = isCancel ? "cancelled" : "game";
+      const isAway = g.isAway === true;
+      const isRef  = g.source === "calendar" && !g.needsUmpires;
+      const badge  = isCancel ? "cancelled" : isAway ? "away" : isRef ? "ref" : "game";
+      const badgeLabel = isCancel ? "Cancelled" : isAway ? "↗ Away" : isRef ? "Ref" : "Game";
       const teams = [g.homeTeam, g.awayTeam].filter(Boolean).join(" vs ");
 
-      html += `<div class="cal-list-item${isMuted ? " cal-cancelled-muted" : ""}${isCancel ? " cal-cancelled-muted" : ""}">
+      html += `<div class="cal-list-item${isMuted ? " cal-cancelled-muted" : ""}${isCancel ? " cal-cancelled-muted" : ""}${isRef ? " cal-ref-item" : ""}">
         <div class="cal-list-time">${g.time ? fmtTime(g.time) : "—"}</div>
         <div class="cal-list-body">
           <div class="cal-list-primary">
-            <span class="cal-list-badge ${badge}">${cancelIcon}${mutedIcon}${isCancel ? "Cancelled" : "Game"}</span>
+            <span class="cal-list-badge ${badge}">${cancelIcon}${mutedIcon}${badgeLabel}</span>
             ${mine ? `<span style="font-size:0.75rem;color:#b8f2c4">★ Your game</span>` : ""}
           </div>
           <div style="font-weight:600">${esc(g.city||"")} <span style="color:var(--light-text);font-weight:normal">${esc(g.division||"")}</span></div>

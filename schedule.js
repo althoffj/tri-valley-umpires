@@ -25,6 +25,8 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+document.getElementById("scheduleYear").textContent = new Date().getFullYear();
+
 let games = [];
 let activeFilter    = "all";
 let pendingGameId   = null;
@@ -899,6 +901,30 @@ async function openModal(gameId, slotType) {
     if (conflicts.length > 0) {
       msgEl.textContent = `⚠️ Possible conflict — ${conflicts.join(", ")} may have a game on this date. Verify your availability before confirming.`;
       msgEl.className   = "signup-message warning";
+    }
+
+    // 3. Weekly game limit — blocks if umpire has hit their self-set cap
+    const profile = getCurrentProfile();
+    if (uid && profile?.maxGamesPerWeek != null) {
+      const [gy, gm, gd] = game.date.split("-").map(Number);
+      const pivot  = new Date(gy, gm - 1, gd);
+      const dow    = pivot.getDay(); // 0 = Sunday
+      const wStart = new Date(pivot); wStart.setDate(pivot.getDate() - dow);
+      const wEnd   = new Date(pivot); wEnd.setDate(pivot.getDate() + (6 - dow));
+      const iso    = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;
+      const ws = iso(wStart), we = iso(wEnd);
+      const weekCount = games.filter(g =>
+        g.id !== gameId &&
+        !g.cancelled &&
+        g.date >= ws && g.date <= we &&
+        (g.umpireSlots || []).some(s => s.assignedUid === uid)
+      ).length;
+      if (weekCount >= profile.maxGamesPerWeek) {
+        const prev = msgEl.textContent ? msgEl.textContent + " · " : "";
+        msgEl.textContent = `${prev}⚠️ You've set a max of ${profile.maxGamesPerWeek} game${profile.maxGamesPerWeek !== 1 ? "s" : ""}/week — you already have ${weekCount} this week.`;
+        msgEl.className   = "signup-message warning";
+        document.getElementById("confirmSignupBtn").disabled = true;
+      }
     }
   }
 }

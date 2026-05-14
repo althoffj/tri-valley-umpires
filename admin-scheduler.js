@@ -2406,6 +2406,55 @@ function expandRecurrence(req) {
 
 document.getElementById("refreshPracticesBtn").addEventListener("click", loadPractices);
 
+// ── Add Practice Directly ────────────────────────────────────────────────────
+document.getElementById("addPracticeForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const msgEl = document.getElementById("addPracticeMsg");
+  const btn   = e.target.querySelector("button[type=submit]");
+  const teamName  = document.getElementById("apTeamName").value.trim();
+  const date      = document.getElementById("apDate").value;
+  const startTime = document.getElementById("apStartTime").value;
+  const endTime   = document.getElementById("apEndTime").value;
+  const field     = document.getElementById("apField").value.trim();
+  const notes     = document.getElementById("apNotes").value.trim();
+
+  if (!teamName || !date) {
+    msgEl.textContent = "Team name and date are required.";
+    msgEl.className   = "signup-message error";
+    return;
+  }
+
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+  msgEl.textContent = "";
+  msgEl.className   = "signup-message";
+
+  try {
+    await addDoc(collection(db, "practices"), {
+      teamName,
+      date,
+      startTime: startTime || "",
+      endTime:   endTime   || "",
+      field:     field     || "",
+      notes:     notes     || "",
+      source:    "admin",
+      createdAt: serverTimestamp(),
+    });
+    msgEl.textContent = `✓ Practice added for ${teamName} on ${date}.`;
+    msgEl.className   = "signup-message success";
+    e.target.reset();
+    // Reload the approved list so new entry appears immediately
+    await loadPractices();
+  } catch (err) {
+    msgEl.textContent = `Error: ${err.message}`;
+    msgEl.className   = "signup-message error";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════════════════════════════════

@@ -133,7 +133,8 @@ async function denyUmpire(uid, name) {
 
 // ── Roster ────────────────────────────────────────────────────────────────────
 
-let allUmpires = [];
+let allUmpires   = [];
+let authStatusMap = {}; // uid → { lastSignInTime, emailVerified, hasPassword, noAuthAccount }
 
 async function loadRoster() {
   const tbody = document.getElementById("rosterBody");
@@ -142,9 +143,20 @@ async function loadRoster() {
     allUmpires = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     rosterLoaded = true;
     renderRoster();
+    // Load auth status in background — re-renders when done
+    loadAuthStatus();
   } catch (err) {
     if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="color:#ffb4b4">Failed to load roster: ${esc(err.message)}</td></tr>`;
   }
+}
+
+async function loadAuthStatus() {
+  try {
+    const fns    = getFunctions(app, "us-central1");
+    const result = await httpsCallable(fns, "getUmpireAuthStatus")({});
+    authStatusMap = result.data || {};
+    renderRoster();
+  } catch (_) { /* non-fatal */ }
 }
 
 function renderRoster() {
@@ -205,6 +217,23 @@ function renderRoster() {
       statusBadge = '<span class="badge badge-today">Pending</span>';
     }
 
+    // Auth status indicator (from Firebase Auth metadata)
+    const auth = authStatusMap[p.id];
+    let authBadge = "";
+    if (auth) {
+      if (auth.noAuthAccount) {
+        authBadge = `<div style="font-size:0.72rem;color:#ff8a8a;margin-top:4px">⚠ No auth account</div>`;
+      } else if (!auth.lastSignInTime) {
+        const pwNote = auth.hasPassword ? "" : " · no password set";
+        authBadge = `<div style="font-size:0.72rem;color:#ffb347;margin-top:4px">⚠ Never signed in${pwNote}</div>`;
+      } else {
+        const dt   = new Date(auth.lastSignInTime);
+        const days = Math.floor((Date.now() - dt.getTime()) / 86400000);
+        const lbl  = days === 0 ? "today" : days === 1 ? "yesterday" : `${days}d ago`;
+        authBadge  = `<div style="font-size:0.72rem;color:var(--light-text);margin-top:4px">Last login: ${lbl}</div>`;
+      }
+    }
+
     // Action buttons
     let actionBtns = "";
     if (isInactive) {
@@ -250,7 +279,7 @@ function renderRoster() {
       <td><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></td>
       <td>${esc(p.phone || "—")}</td>
       <td style="font-size:0.85rem">${[p.street, p.city, p.state, p.zip].filter(Boolean).join(", ") || "—"}</td>
-      <td>${statusBadge}</td>
+      <td>${statusBadge}${authBadge}</td>
       <td style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">${actionBtns}</td>
     </tr>`;
   }).join("");

@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Admin: Scheduler - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=13" />
+  <link rel="stylesheet" href="styles.css?v=14" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
 </head>
 <body>
@@ -361,6 +361,44 @@
         <h3 style="margin-bottom:8px">✅ Upcoming Approved Practices</h3>
         <div id="approvedPracticesList"><p style="color:var(--light-text)">Loading…</p></div>
       </div>
+
+      <!-- Add Practice Directly -->
+      <div style="margin-top:32px;border-top:1px solid #333;padding-top:24px">
+        <h3 style="margin-bottom:4px">➕ Add Practice Directly</h3>
+        <p style="color:var(--light-text);font-size:0.85rem;margin:0 0 16px">
+          Create a practice without requiring a coach request. Appears immediately on the calendar.
+        </p>
+        <form id="addPracticeForm" class="signup-form" style="max-width:560px">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="apTeamName">Team Name</label>
+              <input type="text" id="apTeamName" placeholder="e.g. Tri-Valley 12U" required />
+            </div>
+            <div class="form-group" style="flex:0 0 140px">
+              <label for="apDate">Date</label>
+              <input type="date" id="apDate" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="apStartTime">Start Time</label>
+              <input type="time" id="apStartTime" />
+            </div>
+            <div class="form-group">
+              <label for="apEndTime">End Time</label>
+              <input type="time" id="apEndTime" />
+            </div>
+          </div>
+          <label for="apField">Field / Location</label>
+          <input type="text" id="apField" placeholder="e.g. Field 1 — Tri-Valley Complex" />
+          <label for="apNotes">Notes (optional)</label>
+          <textarea id="apNotes" rows="2" style="resize:vertical" placeholder="Any additional info…"></textarea>
+          <div class="page-actions" style="margin-top:16px">
+            <button type="submit" class="btn">Add Practice</button>
+          </div>
+          <p id="addPracticeMsg" class="signup-message" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
 
     <!-- ════════════════════════════════════════════════════════════════════════
@@ -636,8 +674,8 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=16"></script>
-  <script type="module" src="admin-scheduler.js?v=9"></script>
+  <script type="module" src="auth.js?v=17"></script>
+  <script type="module" src="admin-scheduler.js?v=10"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=2"></script>
   <script type="module" src="nav.js?v=2"></script>

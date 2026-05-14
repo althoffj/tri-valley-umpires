@@ -6,6 +6,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   GoogleAuthProvider,
   signInWithPopup
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -291,6 +292,9 @@ function updateDropdownState() {
     // Show Calendar link for approved umpires and admins
     const calLink = document.getElementById("hmCalendarLink");
     if (calLink) calLink.style.display = (isApproved() || isAdmin()) ? "" : "none";
+    // Prompt unverified users to verify their email
+    const verifyBtn = document.getElementById("hmVerifyEmailBtn");
+    if (verifyBtn) verifyBtn.style.display = (currentUser && !currentUser.emailVerified) ? "" : "none";
   } else {
     showView("authLoginView");
     const adminLink = document.getElementById("hmAdminLink");
@@ -391,6 +395,7 @@ function initAuthUI() {
             Tap <strong>Share</strong> (&#8679;) then <strong>"Add to Home Screen"</strong> to install.
           </div>
           <button type="button" class="btn print-btn" id="hmNotifBtn" style="width:100%;display:none">Enable Notifications</button>
+          <button type="button" class="btn print-btn" id="hmVerifyEmailBtn" style="width:100%;display:none;border-color:#ffe066;color:#ffe066">Verify Email Address</button>
           <button type="button" class="btn print-btn" id="hmEditProfileBtn" style="width:100%">Edit Profile</button>
           <button type="button" class="btn print-btn" id="hmLogoutBtn" style="width:100%">Sign Out</button>
         </div>
@@ -565,6 +570,24 @@ function initAuthUI() {
     } else {
       btn.textContent = "Enable Notifications";
       btn.disabled    = false;
+    }
+  });
+
+  // Verify email button
+  document.getElementById("hmVerifyEmailBtn")?.addEventListener("click", async () => {
+    const btn = document.getElementById("hmVerifyEmailBtn");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Sending…";
+    try {
+      await sendEmailVerification(currentUser);
+      btn.textContent = "Verification email sent ✓";
+    } catch (err) {
+      btn.textContent = err.code === "auth/too-many-requests"
+        ? "Too many requests — try again later"
+        : "Failed to send — try again";
+      btn.disabled = false;
+      setTimeout(() => { btn.textContent = orig; }, 4000);
     }
   });
 

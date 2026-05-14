@@ -798,15 +798,18 @@ th {
   font-size: 0.72rem; padding: 2px 6px; border-radius: 3px;
   white-space: nowrap; flex-shrink: 0;
 }
-.cal-list-badge.game      { background: rgba(96,25,41,0.4);   color: #ffb0b0; border: 1px solid #601929; }
-.cal-list-badge.practice  { background: rgba(91,141,217,0.2); color: #8ab4f8; border: 1px solid #3b6ea8; }
-.cal-list-badge.cancelled { background: rgba(80,80,80,0.2);   color: #888;    border: 1px solid #555; }
-.cal-list-body            { flex: 1; min-width: 0; }
-.cal-list-primary         { font-weight: 600; }
-.cal-list-meta            { color: var(--light-text); font-size: 0.8rem; margin-top: 1px; }
-.cal-list-empty           { color: var(--light-text); padding: 24px 0; text-align: center; }
-.cal-cancelled-muted      { opacity: 0.55; }
-.cal-list-badge.rainout   { background: rgba(100,150,255,0.15); color: #8ab4f8; border: 1px solid #3b6ea8; }
+.cal-list-badge.game       { background: rgba(96,25,41,0.4);    color: #ffb0b0; border: 1px solid #601929; }
+.cal-list-badge.away       { background: rgba(245,158,66,0.2);  color: #f59e42; border: 1px solid #b87420; }
+.cal-list-badge.ref        { background: rgba(100,100,140,0.2); color: #aaa8cc; border: 1px solid #555577; }
+.cal-list-badge.practice   { background: rgba(91,141,217,0.2);  color: #8ab4f8; border: 1px solid #3b6ea8; }
+.cal-list-badge.cancelled  { background: rgba(80,80,80,0.2);    color: #888;    border: 1px solid #555; }
+.cal-list-body             { flex: 1; min-width: 0; }
+.cal-list-primary          { font-weight: 600; }
+.cal-list-meta             { color: var(--light-text); font-size: 0.8rem; margin-top: 1px; }
+.cal-list-empty            { color: var(--light-text); padding: 24px 0; text-align: center; }
+.cal-cancelled-muted       { opacity: 0.55; }
+.cal-ref-item              { opacity: 0.75; }
+.cal-list-badge.rainout    { background: rgba(100,150,255,0.15); color: #8ab4f8; border: 1px solid #3b6ea8; }
 .cal-list-badge.rescheduled { background: rgba(255,204,0,0.12); color: #ffcc80; border: 1px solid #cc8800; }
 
 /* ── View toggle (shared nav control) ──────────────────────────────────────── */

@@ -375,6 +375,17 @@ async function runSync() {
 
       // ── Route practice events to `practices` collection ─────────────────────
       if (isPracticeEvent(ev.summary)) {
+        // Clean up any stale reference game that was mistakenly created for this externalId
+        if (existingExtIds.has(ev.uid)) {
+          const staleDoc = gamesSnap.docs.find(d =>
+            d.data().externalId === ev.uid && d.data().needsUmpires === false
+          );
+          if (staleDoc) {
+            await staleDoc.ref.delete();
+            existingExtIds.delete(ev.uid);
+            console.log(`Deleted stale game entry for practice externalId: ${ev.uid}`);
+          }
+        }
         if (!existingPracticeExtIds.has(ev.uid)) {
           await db.collection("practices").add({
             teamName:   team.name,
@@ -817,7 +828,9 @@ async function runSyncForTeam(team, teamIndex) {
   const db = getFirestore();
 
   const gamesSnap      = await db.collection("games").get();
+  const practicesSnap  = await db.collection("practices").get();
   const existingExtIds = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
+  const existingPracticeExtIds = new Set(practicesSnap.docs.map(d => d.data().externalId).filter(Boolean));
   const linkedUids     = new Set();
   const cityGames      = [];
   for (const d of gamesSnap.docs) {
@@ -845,6 +858,37 @@ async function runSyncForTeam(team, teamIndex) {
 
   for (const ev of events) {
     if (!ev.uid) continue;
+
+    // ── Route practice events to `practices` collection ─────────────────────
+    if (isPracticeEvent(ev.summary)) {
+      // Clean up any stale reference game that was mistakenly created for this externalId
+      if (existingExtIds.has(ev.uid)) {
+        const staleDoc = gamesSnap.docs.find(d =>
+          d.data().externalId === ev.uid && d.data().needsUmpires === false
+        );
+        if (staleDoc) {
+          await staleDoc.ref.delete();
+          existingExtIds.delete(ev.uid);
+          console.log(`Deleted stale game entry for practice externalId: ${ev.uid}`);
+        }
+      }
+      if (!existingPracticeExtIds.has(ev.uid)) {
+        await db.collection("practices").add({
+          teamName:   team.name,
+          date:       ev.date,
+          startTime:  ev.time || "",
+          endTime:    "",
+          field:      (ev.location || "").split(",")[0].trim(),
+          source:     "calendar",
+          externalId: ev.uid,
+          createdAt:  FieldValue.serverTimestamp(),
+        });
+        existingPracticeExtIds.add(ev.uid);
+        added++;
+      }
+      continue; // never add to games
+    }
+
     const key = `${division}|${ev.date}`;
     if (!eventsByDivDate[key]) eventsByDivDate[key] = [];
     if (!eventsByDivDate[key].some(e => e.uid === ev.uid))
@@ -1787,6 +1831,154 @@ exports.deleteUmpireAccount = onCall({ cors: CORS }, async request => {
   }
 
   return { success: true };
+});
+
+// ── onUmpireApproved — welcome email + password-setup link when approved ─────
+exports.onUmpireApproved = onDocumentWritten(
+  { document: "umpires/{uid}", secrets: [GMAIL_USER, GMAIL_PASS] },
+  async event => {
+    // Only fire when approved flips to true (not on create, not on delete)
+    const before = event.data.before?.data() ?? null;
+    const after  = event.data.after?.data()  ?? null;
+    if (!before || !after) return; // create or delete — handled by onUmpireRegistered
+    if (before.approved === true) return;  // already was approved
+    if (after.approved  !== true) return;  // not newly approved
+    if (after.denied === true)    return;  // safety guard
+
+    const uid   = event.params.uid;
+    const email = after.email;
+    const name  = after.name || `${after.firstName || ""} ${after.lastName || ""}`.trim() || email;
+
+    if (!email) { console.log(`onUmpireApproved: no email for uid ${uid}`); return; }
+
+    const APP_URL = "https://tri-valley-baseball-umpires.web.app";
+    const adminAuth = getAuth();
+
+    // Generate a password-setup link (acts as first-time password set)
+    let resetLink = null;
+    try {
+      resetLink = await adminAuth.generatePasswordResetLink(
+        email, { url: `${APP_URL}/schedule.html` }
+      );
+    } catch (err) {
+      console.error("onUmpireApproved: generatePasswordResetLink failed:", err.message);
+    }
+
+    const signinHtml = resetLink
+      ? `<p style="margin:0 0 8px">Use the button below to set your password — <strong>this link expires after one use.</strong></p>
+         <p style="margin:0 0 12px">
+           <a href="${resetLink}" style="display:inline-block;background:#601929;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1rem">Set Your Password →</a>
+         </p>
+         <p style="margin:0 0 6px;font-size:0.85em;color:#aaa">Or copy this link into your browser:</p>
+         <p style="margin:0;font-size:0.75em;color:#888;word-break:break-all;font-family:monospace">${resetLink}</p>
+         <p style="margin:10px 0 0;font-size:0.85em;color:#aaa">If the link has expired, visit <a href="${APP_URL}" style="color:#7ec8f7">${APP_URL}</a> and click <strong>"Forgot Password"</strong>.</p>`
+      : `<p style="margin:0 0 8px">To sign in for the first time:</p>
+         <ol style="margin:0;padding-left:20px;color:#ccc">
+           <li>Go to <a href="${APP_URL}" style="color:#7ec8f7">${APP_URL}</a></li>
+           <li>Click <strong>Sign In</strong> → <strong>Forgot Password</strong></li>
+           <li>Enter <strong>${email}</strong> and check your inbox</li>
+         </ol>`;
+
+    const signinText = resetLink
+      ? `Set your password here (expires after one use):\n${resetLink}\n\nIf expired, go to ${APP_URL} and click "Forgot Password".`
+      : `To sign in: go to ${APP_URL}, click "Sign In" → "Forgot Password", and enter ${email}.`;
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#0d0d1a;font-family:Arial,sans-serif;color:#e0e0e0">
+  <table style="max-width:600px;margin:32px auto;border-radius:10px;overflow:hidden;border:1px solid #2a2a4a">
+    <tr><td style="background:#601929;padding:24px 28px">
+      <h1 style="margin:0;color:#fff;font-size:1.4rem">⚾ Tri-Valley Baseball Umpires</h1>
+      <p style="margin:6px 0 0;color:#b8f0b8;font-size:0.9rem">Your account is approved!</p>
+    </td></tr>
+    <tr><td style="background:#1a1a2e;padding:24px 28px">
+      <p style="margin:0 0 12px">Hi ${name},</p>
+      <p style="margin:0">Your umpire account has been <strong>approved</strong>. You can now sign in and claim open game slots on the schedule.</p>
+    </td></tr>
+    <tr><td style="background:#12122a;padding:20px 28px;border-top:1px solid #2a2a4a">
+      <h2 style="margin:0 0 12px;font-size:1rem;color:#7ec8f7;text-transform:uppercase;letter-spacing:0.05em">Set Up Your Password</h2>
+      ${signinHtml}
+    </td></tr>
+    <tr><td style="background:#1a1a2e;padding:20px 28px;border-top:1px solid #2a2a4a">
+      <h2 style="margin:0 0 10px;font-size:1rem;color:#7ec8f7;text-transform:uppercase;letter-spacing:0.05em">Game Schedule</h2>
+      <p style="margin:0 0 12px">Once signed in, visit the schedule to see open games and sign up for slots:</p>
+      <a href="${APP_URL}/schedule.html" style="display:inline-block;background:#1e3a5f;color:#7ec8f7;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">${APP_URL}/schedule.html</a>
+    </td></tr>
+    <tr><td style="background:#0d0d1a;padding:16px 28px;border-top:1px solid #2a2a4a;font-size:0.82rem;color:#666">
+      <p style="margin:0">Questions? Contact Jeff Althoff: <a href="tel:6053800229" style="color:#7ec8f7">605-380-0229</a> (urgent only)</p>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    const text = [
+      `Hi ${name},`,
+      ``,
+      `Your umpire account has been approved! You can now sign in and claim open game slots.`,
+      ``,
+      signinText,
+      ``,
+      `Game schedule: ${APP_URL}/schedule.html`,
+      ``,
+      `Questions? Contact Jeff Althoff: 605-380-0229 (urgent only).`,
+    ].join("\n");
+
+    let transport;
+    try { transport = buildTransport(); }
+    catch (err) { console.error("onUmpireApproved: failed to build transport:", err.message); return; }
+
+    try {
+      await transport.sendMail({
+        from:    `"Tri-Valley Baseball Umpires" <${GMAIL_USER.value()}>`,
+        to:      email,
+        subject: "You're approved — Tri-Valley Baseball Umpires",
+        html,
+        text,
+      });
+      console.log(`onUmpireApproved: welcome email sent to ${email}`);
+    } catch (err) {
+      console.error("onUmpireApproved: failed to send email:", err.message);
+    }
+  }
+);
+
+// ── getUmpireAuthStatus — Firebase Auth metadata for every umpire (admin) ─────
+exports.getUmpireAuthStatus = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db       = getFirestore();
+  const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const umpSnap = await db.collection("umpires").get();
+  const uids    = umpSnap.docs.map(d => d.id);
+  if (uids.length === 0) return {};
+
+  const adminAuth = getAuth();
+  const result    = {};
+  const CHUNK     = 100;
+
+  for (let i = 0; i < uids.length; i += CHUNK) {
+    const chunk = uids.slice(i, i + CHUNK);
+    const { users, notFound } = await adminAuth.getUsers(
+      chunk.map(uid => ({ uid }))
+    );
+    for (const u of users) {
+      result[u.uid] = {
+        lastSignInTime: u.metadata.lastSignInTime || null,
+        emailVerified:  u.emailVerified,
+        hasPassword:    !!u.passwordHash,
+        disabled:       u.disabled,
+      };
+    }
+    for (const id of (notFound || [])) {
+      const uid = typeof id === "string" ? id : id.uid;
+      result[uid] = { lastSignInTime: null, emailVerified: false, hasPassword: false, disabled: false, noAuthAccount: true };
+    }
+  }
+
+  return result;
 });
 
 // ── onUmpireRegistered — notify admins (and parent if minor) when a new
