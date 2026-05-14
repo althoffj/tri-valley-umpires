@@ -194,7 +194,11 @@ function applyGameFilters() {
     // Field
     if (gfField && (g.field || "") !== gfField) return false;
     // Umpire need
-    if (gfUmpire === "needs" && !(g.needsUmpires && !g.cancelled)) return false;
+    if (gfUmpire === "needs") {
+      if (!g.needsUmpires || g.cancelled) return false;
+      const hasOpenSlot = (g.umpireSlots ?? []).some(s => !s.assignedUid);
+      if (!hasOpenSlot) return false;
+    }
     if (gfUmpire === "ref"   && g.needsUmpires !== false)           return false;
     return true;
   });
