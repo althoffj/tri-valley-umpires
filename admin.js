@@ -15,7 +15,8 @@ import {
   deleteDoc,
   query,
   orderBy,
-  where
+  where,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -663,6 +664,55 @@ document.getElementById("addAdminForm")?.addEventListener("submit", async functi
   }
 });
 
+// ── Pending Coach Approvals ───────────────────────────────────────────────────
+
+async function loadCoachPending() {
+  const listEl = document.getElementById("coachPendingList");
+  const noteEl = document.getElementById("coachPendingNote");
+  if (!listEl) return;
+  try {
+    const snap = await getDocs(
+      query(collection(db, "coaches"), where("approved", "==", false), orderBy("registeredAt", "asc"))
+    );
+    if (snap.empty) {
+      noteEl.textContent = "No pending coach applications.";
+      listEl.innerHTML = "";
+      return;
+    }
+    noteEl.textContent = `${snap.size} pending`;
+    listEl.innerHTML = snap.docs.map(d => {
+      const c = d.data();
+      return `<div class="document-note" style="margin-bottom:10px">
+        <strong>${esc(c.name ?? "")}</strong> — ${esc(c.teamName ?? "")} ${esc(c.division ?? "")} · ${esc(c.city ?? "")}
+        <br><span style="color:var(--light-text);font-size:0.85rem">${esc(c.email ?? "")} · ${esc(c.phone ?? "")}</span>
+        <div class="page-actions" style="margin-top:8px">
+          <button class="btn approve-coach-btn" data-uid="${esc(d.id)}" data-name="${esc(c.name ?? "")}">Approve</button>
+          <button class="btn print-btn deny-coach-btn" data-uid="${esc(d.id)}" data-name="${esc(c.name ?? "")}">Deny</button>
+        </div>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    noteEl.textContent = "Error loading pending coaches.";
+    console.error(err);
+  }
+}
+
+async function approveCoach(uid, name) {
+  if (!confirm(`Approve coach ${name}?`)) return;
+  try {
+    await updateDoc(doc(db, "coaches", uid), { approved: true, approvedAt: serverTimestamp() });
+    await loadCoachPending();
+  } catch (err) { alert(err.message); }
+}
+
+async function denyCoach(uid, name) {
+  if (!confirm(`Deny and delete coach application for ${name}? This cannot be undone.`)) return;
+  try {
+    await deleteDoc(doc(db, "coaches", uid));
+    await loadCoachPending();
+  } catch (err) { alert(err.message); }
+}
+
 // ── Event delegation ──────────────────────────────────────────────────────────
 
 document.addEventListener("click", e => {
@@ -671,6 +721,12 @@ document.addEventListener("click", e => {
 
   const denyBtn = e.target.closest(".deny-btn");
   if (denyBtn) { denyUmpire(denyBtn.dataset.uid, denyBtn.dataset.name); return; }
+
+  const approveCoachBtn = e.target.closest(".approve-coach-btn");
+  if (approveCoachBtn) { approveCoach(approveCoachBtn.dataset.uid, approveCoachBtn.dataset.name); return; }
+
+  const denyCoachBtn = e.target.closest(".deny-coach-btn");
+  if (denyCoachBtn) { denyCoach(denyCoachBtn.dataset.uid, denyCoachBtn.dataset.name); return; }
 
   const revokeBtn = e.target.closest(".revoke-btn");
   if (revokeBtn) { revokeUmpire(revokeBtn.dataset.uid, revokeBtn.dataset.name); return; }
@@ -1008,6 +1064,7 @@ authReadyPromise.then(async () => {
 
   loadAdminQuickStats();
   loadPending();
+  loadCoachPending();
   loadRoster();
 
   if (isSuperAdmin()) {

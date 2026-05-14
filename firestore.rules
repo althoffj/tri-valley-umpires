@@ -71,9 +71,9 @@ service cloud.firestore {
       allow read:        if isAdmin();
     }
 
-    // Incident reports: approved umpires or admins can create; only admins can read
+    // Incident reports: approved umpires, admins, or any signed-in user (coaches) can create; only admins can read
     match /incidentReports/{reportId} {
-      allow create: if isApproved() || isAdmin();
+      allow create: if isApproved() || isAdmin() || isSignedIn();
       allow read, update, delete: if isAdmin();
     }
 
@@ -81,6 +81,17 @@ service cloud.firestore {
     match /umpireRequests/{requestId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
+    }
+
+    // Coaches: own profile read/create; admin can read/update/delete all
+    match /coaches/{uid} {
+      allow read:   if request.auth.uid == uid || isAdmin();
+      allow create: if request.auth.uid == uid;
+      allow update: if isAdmin()
+                 || (isSignedIn() && request.auth.uid == uid
+                     && request.resource.data.approved  == resource.data.approved
+                     && request.resource.data.get('active', true) == resource.data.get('active', true));
+      allow delete: if isAdmin();
     }
 
     // Tournaments: public read; admins can write

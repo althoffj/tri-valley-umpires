@@ -1,5 +1,5 @@
 // nav.js — Dynamic top navigation, auth-aware, single source of truth
-import { authReadyPromise, isApproved, isAdmin } from "./auth.js";
+import { authReadyPromise, isApproved, isAdmin, isCoach } from "./auth.js";
 
 // ── Current page & section detection ─────────────────────────────────────
 
@@ -83,6 +83,16 @@ function adminNav() {
   return umpireNav();
 }
 
+function coachNav() {
+  return `<div class="nav-links">
+    ${navLink("index.html",        "Home")}
+    ${navLink("coach-portal.html", "Coach Portal")}
+    ${navLink("schedule.html",     "Schedule")}
+    ${navLink("incident.html",     "Incident Report")}
+    ${navLink("field-issues.html", "Field Issues")}
+  </div>`;
+}
+
 // ── Build & inject ────────────────────────────────────────────────────────
 
 function buildNav() {
@@ -91,9 +101,11 @@ function buildNav() {
 
   nav.innerHTML = isAdmin()
     ? adminNav()
-    : isApproved()
-      ? umpireNav()
-      : guestNav();
+    : isCoach()
+      ? coachNav()
+      : isApproved()
+        ? umpireNav()
+        : guestNav();
 
   setupDropdowns(nav);
 }

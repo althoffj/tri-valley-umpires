@@ -5,6 +5,7 @@ import {
   isLoggedIn,
   isApproved,
   isAdmin,
+  isCoach,
   getCurrentUser,
   getCurrentProfile
 } from "./auth.js";
@@ -604,7 +605,7 @@ function buildStatusCell(game) {
   if (game.cancelled) return '<span style="color:#ffb4b4">Cancelled</span>';
   const slots = getSlots(game);
   if (!slots.length) return "—";
-  const canSeeDetails = isApproved() || isAdmin();
+  const canSeeDetails = isApproved() || isAdmin() || isCoach();
   return slots.map(s => {
     const cls = s.type === "Plate" ? "plate" : s.type === "Field" ? "field" : "extra";
     const badge = `<span class="badge badge-${cls}">${esc(s.type)}</span>`;

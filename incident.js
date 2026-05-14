@@ -4,6 +4,7 @@ import {
   authReadyPromise,
   isApproved,
   isAdmin,
+  isCoach,
   getCurrentUser,
   getCurrentProfile
 } from "./auth.js";
@@ -118,11 +119,23 @@ async function loadMyGames() {
     );
 
     const myGames = [];
+    const today = new Date();
+    const cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() - 90);
+    const cutoffISO = cutoff.toISOString().slice(0, 10);
+
     snap.forEach(d => {
       const g = { id: d.id, ...d.data() };
-      // Admins can file reports for any game; umpires only see their own assigned games
-      if (isAdmin() || (g.umpireSlots ?? []).some(s => s.assignedUid === user.uid)) {
+      if (isAdmin()) {
         myGames.push(g);
+      } else if (isCoach()) {
+        // Coaches can report on any game in the last 90 days
+        if (g.date >= cutoffISO) myGames.push(g);
+      } else {
+        // Umpires only see their own assigned games
+        if ((g.umpireSlots ?? []).some(s => s.assignedUid === user.uid)) {
+          myGames.push(g);
+        }
       }
     });
 
@@ -269,7 +282,11 @@ async function handleSubmit(e) {
 
 async function init() {
   await authReadyPromise;
-  if (!isApproved()) return;
+  if (!isApproved() && !isAdmin() && !isCoach()) {
+    document.getElementById("incidentFormContainer").style.display = "none";
+    return;
+  }
+  document.getElementById("incidentFormContainer").style.display = "";
 
   // Show contextual back link
   if (isAdmin()) {

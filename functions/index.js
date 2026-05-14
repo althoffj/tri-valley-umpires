@@ -2142,3 +2142,37 @@ exports.onUmpireRegistered = onDocumentWritten(
     }
   }
 );
+
+
+// Notify admin when a coach submits an umpire request
+exports.onUmpireRequest = onDocumentWritten("umpireRequests/{requestId}", async (event) => {
+  if (!event.data.after.exists) return; // deletion
+  const isCreate = !event.data.before.exists;
+  if (!isCreate) return; // only notify on creation
+  const db = getFirestore();
+  const r = event.data.after.data();
+  const config = await loadWebhookConfig(db);
+  const urls = getTargetWebhooks(config, "cancellationRequests"); // reuse that event bucket
+  const msg = `🗓️ *Umpire Request* from ${r.contactName ?? "a coach"}\n` +
+    `Team: ${r.teamName ?? "—"} · Division: ${r.division ?? "—"}\n` +
+    `Date: ${r.date ?? "—"} at ${r.time ?? "—"} · Location: ${r.location ?? "—"}\n` +
+    `Umpires needed: ${r.umpiresNeeded ?? "—"} · Phone: ${r.contactPhone ?? "—"}` +
+    (r.notes ? `\nNotes: ${r.notes}` : "");
+  await Promise.allSettled(urls.map(url => postSlack(url, msg)));
+});
+
+// Notify admin when a coach submits a practice request
+exports.onPracticeRequest = onDocumentWritten("practiceRequests/{requestId}", async (event) => {
+  if (!event.data.after.exists) return;
+  const isCreate = !event.data.before.exists;
+  if (!isCreate) return;
+  const db = getFirestore();
+  const r = event.data.after.data();
+  const config = await loadWebhookConfig(db);
+  const urls = getTargetWebhooks(config, "cancellationRequests");
+  const msg = `🏟️ *Practice Request* from ${r.contactName ?? "a coach"}\n` +
+    `Team: ${r.teamName ?? "—"} · Division: ${r.division ?? "—"}\n` +
+    `Date: ${r.date ?? "—"} · ${r.startTime ?? ""}–${r.endTime ?? ""} · Location: ${r.location ?? "—"}` +
+    (r.notes ? `\nNotes: ${r.notes}` : "");
+  await Promise.allSettled(urls.map(url => postSlack(url, msg)));
+});

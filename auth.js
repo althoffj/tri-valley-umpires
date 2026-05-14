@@ -26,6 +26,7 @@ let currentUser    = null;
 let currentProfile = null; // umpires/{uid} document data
 let currentIsAdmin = false;
 let currentAdminDoc = null; // admins/{uid} document data
+let currentCoachDoc = null; // coaches/{uid} document data
 
 // Resolves once the initial auth state check completes
 let authReadyResolve;
@@ -35,22 +36,26 @@ onAuthStateChanged(auth, async (user) => {
   if (user) {
     currentUser = user;
     try {
-      const [umpireSnap, adminSnap] = await Promise.all([
+      const [umpireSnap, adminSnap, coachSnap] = await Promise.all([
         getDoc(doc(db, "umpires", user.uid)),
-        getDoc(doc(db, "admins", user.uid))
+        getDoc(doc(db, "admins", user.uid)),
+        getDoc(doc(db, "coaches", user.uid))
       ]);
       currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
       currentIsAdmin  = adminSnap.exists();
       currentAdminDoc = adminSnap.exists() ? adminSnap.data() : null;
+      currentCoachDoc = coachSnap.exists() ? coachSnap.data() : null;
     } catch {
-      currentProfile = null;
-      currentIsAdmin = false;
+      currentProfile  = null;
+      currentIsAdmin  = false;
+      currentCoachDoc = null;
     }
   } else {
     currentUser     = null;
     currentProfile  = null;
     currentIsAdmin  = false;
     currentAdminDoc = null;
+    currentCoachDoc = null;
   }
   authReadyResolve();
   applyAuthGate();
@@ -68,8 +73,14 @@ export function isSuperAdmin() {
   // superAdmin field absent → legacy account; empty roles = super admin
   return (currentAdminDoc?.roles || []).length === 0;
 }
+export function isCoach() {
+  // A coach is NOT also an umpire or admin — coach is a distinct role
+  if (currentIsAdmin || currentProfile?.approved === true) return false;
+  return currentCoachDoc?.approved === true && currentCoachDoc?.active !== false;
+}
 export function getCurrentUser()    { return currentUser; }
 export function getCurrentProfile() { return currentProfile; }
+export function getCurrentCoachProfile() { return currentCoachDoc; }
 
 export function getLoggedInName() {
   return currentProfile?.name || currentUser?.displayName || currentUser?.email || null;
@@ -77,9 +88,10 @@ export function getLoggedInName() {
 
 export async function login(email, password) {
   const credential = await signInWithEmailAndPassword(auth, email, password);
-  const [umpireSnap, adminSnap] = await Promise.all([
+  const [umpireSnap, adminSnap, coachSnap] = await Promise.all([
     getDoc(doc(db, "umpires", credential.user.uid)),
-    getDoc(doc(db, "admins", credential.user.uid))
+    getDoc(doc(db, "admins", credential.user.uid)),
+    getDoc(doc(db, "coaches", credential.user.uid))
   ]);
 
   // Admin accounts are always allowed through, regardless of umpires doc
@@ -90,22 +102,26 @@ export async function login(email, password) {
     return credential;
   }
 
-  // Non-admin: must have an approved umpires profile
-  if (!umpireSnap.exists()) {
-    await signOut(auth);
-    throw new Error("Account profile not found. Please contact the league administrator.");
+  // Check umpire profile
+  if (umpireSnap.exists()) {
+    const profile = umpireSnap.data();
+    if (profile.approved === false) { await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
+    if (profile.active === false)   { await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
+    currentProfile = profile;
+    return credential;
   }
-  const profile = umpireSnap.data();
-  if (profile.approved === false) {
-    await signOut(auth);
-    throw new Error("Your account has not yet been approved. Please wait for administrator approval.");
+
+  // Check coach profile
+  if (coachSnap.exists()) {
+    const coach = coachSnap.data();
+    if (coach.approved === false) { await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
+    if (coach.active === false)   { await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
+    currentCoachDoc = coach;
+    return credential;
   }
-  if (profile.active === false) {
-    await signOut(auth);
-    throw new Error("Your account has been deactivated. Please contact the league administrator.");
-  }
-  currentProfile = profile;
-  return credential;
+
+  await signOut(auth);
+  throw new Error("Account profile not found. Please contact the league administrator.");
 }
 
 export async function logout() { await signOut(auth); }
@@ -117,9 +133,10 @@ export async function googleSignIn() {
   const credential = await signInWithPopup(auth, provider);
   const user = credential.user;
 
-  const [umpireSnap, adminSnap] = await Promise.all([
+  const [umpireSnap, adminSnap, coachSnap] = await Promise.all([
     getDoc(doc(db, "umpires", user.uid)),
-    getDoc(doc(db, "admins", user.uid))
+    getDoc(doc(db, "admins", user.uid)),
+    getDoc(doc(db, "coaches", user.uid))
   ]);
 
   // Admin accounts are allowed through even without an umpire profile
@@ -130,23 +147,27 @@ export async function googleSignIn() {
     return credential;
   }
 
-  // No umpire profile — new Google user, hand off to registration form
-  if (!umpireSnap.exists()) {
-    window.location.href = "form.html?google=1";
-    return credential; // navigation is in-flight; won't reach callers
+  // Has umpire profile
+  if (umpireSnap.exists()) {
+    const profile = umpireSnap.data();
+    if (profile.approved === false) { await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
+    if (profile.active === false)   { await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
+    currentProfile = profile;
+    return credential;
   }
 
-  const profile = umpireSnap.data();
-  if (profile.approved === false) {
-    await signOut(auth);
-    throw new Error("Your account has not yet been approved. Please wait for administrator approval.");
+  // Has coach profile
+  if (coachSnap.exists()) {
+    const coach = coachSnap.data();
+    if (coach.approved === false) { await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
+    if (coach.active === false)   { await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
+    currentCoachDoc = coach;
+    return credential;
   }
-  if (profile.active === false) {
-    await signOut(auth);
-    throw new Error("Your account has been deactivated. Please contact the league administrator.");
-  }
-  currentProfile = profile;
-  return credential;
+
+  // No profile at all — new user, hand off to coach registration form
+  window.location.href = "coach-form.html?google=1";
+  return credential; // navigation is in-flight; won't reach callers
 }
 
 export async function updateProfile(fields) {
@@ -195,6 +216,9 @@ export function applyAuthGate() {
   });
   document.querySelectorAll("[data-auth-admin]").forEach(el => {
     el.style.display = (loggedIn && isAdmin()) ? "" : "none";
+  });
+  document.querySelectorAll("[data-auth-coach]").forEach(el => {
+    el.style.display = (loggedIn && isCoach()) ? "" : "none";
   });
 
   // Sync hamburger dropdown to new auth state
@@ -286,6 +310,9 @@ function updateDropdownState() {
     // Show Admin Panel link only for admins
     const adminLink = document.getElementById("hmAdminLink");
     if (adminLink) adminLink.style.display = isAdmin() ? "" : "none";
+    // Show Coach Portal link for coaches
+    const coachPortalLink = document.getElementById("hmCoachPortalLink");
+    if (coachPortalLink) coachPortalLink.style.display = isCoach() ? "" : "none";
     // Show My Earnings link for approved umpires and admins
     const earningsLink = document.getElementById("hmEarningsLink");
     if (earningsLink) earningsLink.style.display = (isApproved() || isAdmin()) ? "" : "none";
@@ -299,6 +326,8 @@ function updateDropdownState() {
     showView("authLoginView");
     const adminLink = document.getElementById("hmAdminLink");
     if (adminLink) adminLink.style.display = "none";
+    const coachPortalLink = document.getElementById("hmCoachPortalLink");
+    if (coachPortalLink) coachPortalLink.style.display = "none";
     const earningsLink = document.getElementById("hmEarningsLink");
     if (earningsLink) earningsLink.style.display = "none";
     const calLink = document.getElementById("hmCalendarLink");
@@ -388,6 +417,7 @@ function initAuthUI() {
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <a id="hmAdminLink" href="admin.html" class="btn print-btn" style="width:100%;display:none;text-align:center">Admin Panel</a>
+          <a id="hmCoachPortalLink" href="coach-portal.html" class="btn print-btn" style="width:100%;display:none;text-align:center">Coach Portal</a>
           <a id="hmEarningsLink" href="earnings.html" class="btn print-btn" style="width:100%;display:none;text-align:center">My Earnings</a>
           <a id="hmCalendarLink" href="calendar.html" class="btn print-btn" style="width:100%;display:none;text-align:center">Calendar</a>
           <button type="button" class="btn print-btn" id="hmInstallBtn" style="width:100%;display:none">Install App</button>

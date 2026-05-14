@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Coach Portal - Tri-Valley Baseball</title>
+  <link rel="stylesheet" href="styles.css?v=16" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Coach Portal</h1>
+  </div>
+
+  <nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <!-- Coach / Admin content -->
+  <div class="container" id="cpAdminContent" data-auth-coach style="display:none">
+
+    <!-- Tab bar -->
+    <div class="tab-bar" style="margin-bottom:20px">
+      <button class="cp-tab-btn tab-btn tab-active" data-pane="schedule">My Schedule</button>
+      <button class="cp-tab-btn tab-btn" data-pane="umpireRequest">Request Umpire</button>
+      <button class="cp-tab-btn tab-btn" data-pane="practiceRequest">Request Practice</button>
+    </div>
+
+    <!-- My Schedule tab -->
+    <div id="cpPane-schedule" class="cp-tab-pane">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <h2 style="margin:0">Game Schedule</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn print-btn" id="cpShowAllBtn" style="font-size:0.88rem">Show All Divisions</button>
+          <button class="btn print-btn" id="cpMyDivBtn" style="font-size:0.88rem">My Division Only</button>
+        </div>
+      </div>
+      <div id="cpScheduleList">
+        <p style="color:var(--light-text);text-align:center;padding:30px">Loading schedule…</p>
+      </div>
+    </div>
+
+    <!-- Request Umpire tab -->
+    <div id="cpPane-umpireRequest" class="cp-tab-pane" style="display:none">
+      <h2>Request an Umpire</h2>
+      <div class="document-note">
+        <p>Use this form to request umpires for an additional game not already on the schedule. An administrator will follow up to confirm availability.</p>
+      </div>
+      <form id="cpUmpireRequestForm" novalidate>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cpUrDate">Date *</label>
+            <input type="date" id="cpUrDate" required />
+            <p class="field-error" id="cpUrDateError"></p>
+          </div>
+          <div class="form-group">
+            <label for="cpUrTime">Time *</label>
+            <input type="time" id="cpUrTime" required />
+            <p class="field-error" id="cpUrTimeError"></p>
+          </div>
+        </div>
+
+        <label for="cpUrLocation">Facility / Location *</label>
+        <input type="text" id="cpUrLocation" required placeholder="e.g. Crooks Complex Field 1" />
+        <p class="field-error" id="cpUrLocationError"></p>
+
+        <label for="cpUrDivision">Division *</label>
+        <select id="cpUrDivision" required>
+          <option value="">-- Select division --</option>
+          <option value="8U">8U</option>
+          <option value="10U">10U</option>
+          <option value="12U">12U</option>
+          <option value="14U">14U</option>
+          <option value="HS JV">HS JV</option>
+          <option value="HS Varsity">HS Varsity</option>
+        </select>
+        <p class="field-error" id="cpUrDivisionError"></p>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cpUrHomeTeam">Home Team *</label>
+            <input type="text" id="cpUrHomeTeam" required placeholder="e.g. Crooks 12U" />
+            <p class="field-error" id="cpUrHomeTeamError"></p>
+          </div>
+          <div class="form-group">
+            <label for="cpUrAwayTeam">Away Team *</label>
+            <input type="text" id="cpUrAwayTeam" required placeholder="e.g. Colton 12U" />
+            <p class="field-error" id="cpUrAwayTeamError"></p>
+          </div>
+        </div>
+
+        <label for="cpUrUmpiresNeeded">Number of Umpires Needed *</label>
+        <select id="cpUrUmpiresNeeded" required>
+          <option value="">-- Select --</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+        <p class="field-error" id="cpUrUmpiresNeededError"></p>
+
+        <label for="cpUrNotes">Notes <span style="font-weight:normal;color:var(--light-text)">(optional)</span></label>
+        <textarea id="cpUrNotes" rows="3" placeholder="Any additional details…"
+          style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cpContactName1">Contact Name *</label>
+            <input type="text" id="cpContactName1" required autocomplete="name" />
+            <p class="field-error" id="cpContactName1Error"></p>
+          </div>
+          <div class="form-group">
+            <label for="cpContactPhone1">Contact Phone *</label>
+            <input type="tel" id="cpContactPhone1" required autocomplete="tel" placeholder="(605) 555-1234" />
+            <p class="field-error" id="cpContactPhone1Error"></p>
+          </div>
+        </div>
+
+        <p id="cpUmpireRequestMessage" class="signup-message" aria-live="polite"></p>
+        <button type="submit" class="btn" id="cpSubmitUmpireRequestBtn">Submit Umpire Request</button>
+      </form>
+    </div>
+
+    <!-- Request Practice tab -->
+    <div id="cpPane-practiceRequest" class="cp-tab-pane" style="display:none">
+      <h2>Request a Practice Time</h2>
+      <div class="document-note">
+        <p>Use this form to request a practice slot at a league facility. An administrator will confirm availability and field assignment.</p>
+      </div>
+      <form id="cpPracticeRequestForm" novalidate>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cpPrDate">Date *</label>
+            <input type="date" id="cpPrDate" required />
+            <p class="field-error" id="cpPrDateError"></p>
+          </div>
+          <div class="form-group">
+            <label for="cpPrStartTime">Start Time *</label>
+            <input type="time" id="cpPrStartTime" required />
+            <p class="field-error" id="cpPrStartTimeError"></p>
+          </div>
+          <div class="form-group">
+            <label for="cpPrEndTime">End Time *</label>
+            <input type="time" id="cpPrEndTime" required />
+            <p class="field-error" id="cpPrEndTimeError"></p>
+          </div>
+        </div>
+
+        <label for="cpPrLocation">Facility / Location *</label>
+        <input type="text" id="cpPrLocation" required placeholder="e.g. Crooks Complex Field 2" />
+        <p class="field-error" id="cpPrLocationError"></p>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cpTeamName">Team Name *</label>
+            <input type="text" id="cpTeamName" required placeholder="e.g. Crooks 12U" />
+            <p class="field-error" id="cpTeamNameError"></p>
+          </div>
+          <div class="form-group">
+            <label for="cpPrDivision">Division *</label>
+            <select id="cpPrDivision" required>
+              <option value="">-- Select division --</option>
+              <option value="8U">8U</option>
+              <option value="10U">10U</option>
+              <option value="12U">12U</option>
+              <option value="14U">14U</option>
+              <option value="HS JV">HS JV</option>
+              <option value="HS Varsity">HS Varsity</option>
+            </select>
+            <p class="field-error" id="cpPrDivisionError"></p>
+          </div>
+        </div>
+
+        <label for="cpPrExpectedPlayers">Expected Players <span style="font-weight:normal;color:var(--light-text)">(optional)</span></label>
+        <input type="number" id="cpPrExpectedPlayers" min="1" placeholder="e.g. 12"
+          style="width:120px;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box" />
+
+        <label for="cpPrNotes">Notes <span style="font-weight:normal;color:var(--light-text)">(optional)</span></label>
+        <textarea id="cpPrNotes" rows="3" placeholder="Any additional details…"
+          style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:15px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cpContactName2">Contact Name *</label>
+            <input type="text" id="cpContactName2" required autocomplete="name" />
+            <p class="field-error" id="cpContactName2Error"></p>
+          </div>
+          <div class="form-group">
+            <label for="cpContactPhone2">Contact Phone *</label>
+            <input type="tel" id="cpContactPhone2" required autocomplete="tel" placeholder="(605) 555-1234" />
+            <p class="field-error" id="cpContactPhone2Error"></p>
+          </div>
+        </div>
+
+        <p id="cpPracticeRequestMessage" class="signup-message" aria-live="polite"></p>
+        <button type="submit" class="btn" id="cpSubmitPracticeRequestBtn">Submit Practice Request</button>
+      </form>
+    </div>
+
+  </div>
+
+  <!-- No-access fallback -->
+  <div class="container" id="cpNoAccess" style="display:none">
+    <div class="document-note">
+      <p>Coach Portal requires a coach account. <a href="coach-form.html">Register as a coach</a> or sign in via the <strong>&#9776; menu</strong>.</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      <a href="https://www.trivalleyball.com" target="_blank">Tri-Valley Baseball Association</a>
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=18"></script>
+  <script type="module" src="coach-portal.js?v=1"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=3"></script>
+  <script type="module" src="nav.js?v=2"></script>
+</body>
+</html>

@@ -17,8 +17,8 @@
 
 <nav id="mainNav" aria-label="Main navigation"></nav>
 
-  <!-- Approved umpires and admins -->
-  <div class="form-container" data-auth-approved style="display:none">
+  <!-- Approved umpires, admins, and coaches -->
+  <div class="form-container" id="incidentFormContainer" style="display:none">
 
     <div class="page-actions">
       <a href="admin-incidents.html" class="back-btn" id="backToIncidents" style="display:none">Back to Incidents</a>
@@ -161,7 +161,7 @@
   <!-- Guest / pending fallback -->
   <div class="container" data-auth-guest>
     <div class="document-note">
-      <p>Incident reports are only available to approved umpires. <a href="form.html">Register here</a> or sign in via the <strong>☰ menu</strong> (top right).</p>
+      <p>Incident reports require an approved account. <a href="form.html">Register as an umpire</a> or <a href="coach-form.html">register as a coach</a>, or sign in via the <strong>&#9776; menu</strong>.</p>
     </div>
   </div>
 
@@ -177,8 +177,8 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=17"></script>
-  <script type="module" src="incident.js?v=9"></script>
+  <script type="module" src="auth.js?v=18"></script>
+  <script type="module" src="incident.js?v=10"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=3"></script>
   <script type="module" src="nav.js?v=2"></script>
