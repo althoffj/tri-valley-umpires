@@ -95,6 +95,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Leagues: public read; admins can write
+    match /leagues/{leagueId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Facility shed codes: signed-in approved umpires and admins can read; only admins can write
     match /facilityCodes/{facilityId} {
       allow read: if isApproved() || isAdmin();
