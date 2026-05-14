@@ -3,7 +3,7 @@ import { db, auth } from "./firebase.js";
 import { isApproved, getCurrentUser } from "./auth.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
-  collection, getDocs, query, orderBy, where
+  collection, getDocs, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -14,12 +14,18 @@ let calYear      = new Date().getFullYear();
 let calMonth     = new Date().getMonth(); // 0-based
 let currentUid   = null;
 let showMineOnly = false;
+let showGames     = true;
+let showPractices = true;
 
 let filterDivision = "";
 let filterCity     = "";
 let filterField    = "";
 
-const MAX_CELL = 4; // max items per month cell; games fill first
+const MAX_CELL = 4;
+
+const MONTH_NAMES = ["January","February","March","April","May","June",
+                     "July","August","September","October","November","December"];
+const DOW_LABELS  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -28,8 +34,8 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
-function isoOf(y, m, d) {
-  return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+function isoFromDate(dt) {
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
 }
 
 function fmtTime(t) {
@@ -64,8 +70,8 @@ function filterPractice(p) {
   return true;
 }
 
-function visibleGames()     { return allGames.filter(filterGame); }
-function visiblePractices() { return allPractices.filter(filterPractice); }
+function visibleGames()     { return showGames     ? allGames.filter(filterGame)         : []; }
+function visiblePractices() { return showPractices ? allPractices.filter(filterPractice) : []; }
 
 // ── Filter UI ─────────────────────────────────────────────────────────────────
 
@@ -77,8 +83,10 @@ function updateFilterCount() {
 }
 
 function populateFilterSelects() {
-  // Division
-  const divs = [...new Set(allGames.map(g => g.division).filter(Boolean))].sort();
+  const divs = [...new Set([
+    ...allGames.map(g => g.division),
+    ...allPractices.map(p => p.division),
+  ].filter(Boolean))].sort();
   const divSel = document.getElementById("calFilterDivision");
   if (divSel) {
     const cur = divSel.value;
@@ -86,7 +94,6 @@ function populateFilterSelects() {
       divs.map(d => `<option value="${esc(d)}"${d===cur?" selected":""}>${esc(d)}</option>`).join("");
   }
 
-  // City / League
   const cities = [...new Set(allGames.map(g => g.city).filter(Boolean))].sort();
   const citySel = document.getElementById("calFilterCity");
   if (citySel) {
@@ -95,7 +102,6 @@ function populateFilterSelects() {
       cities.map(c => `<option value="${esc(c)}"${c===cur?" selected":""}>${esc(c)}</option>`).join("");
   }
 
-  // Field
   const fields = [...new Set([
     ...allGames.map(g => g.field),
     ...allPractices.map(p => p.field),
@@ -110,132 +116,152 @@ function populateFilterSelects() {
 
 // ── Month view ────────────────────────────────────────────────────────────────
 
-function gamesForDate(iso)     { return visibleGames().filter(g => g.date === iso); }
-function practicesForDate(iso) { return visiblePractices().filter(p => p.date === iso); }
-
 function renderMonth() {
+  const grid = document.getElementById("calMonthView");
+  if (!grid) return;
+
   const today = todayISO();
-  const firstDay  = new Date(calYear, calMonth, 1);
-  const lastDay   = new Date(calYear, calMonth + 1, 0);
-  const startDOW  = firstDay.getDay();
-  const totalDays = lastDay.getDate();
 
-  let html = `<div class="cal-month-grid">
-    <div class="cal-dow-header">Sun</div><div class="cal-dow-header">Mon</div>
-    <div class="cal-dow-header">Tue</div><div class="cal-dow-header">Wed</div>
-    <div class="cal-dow-header">Thu</div><div class="cal-dow-header">Fri</div>
-    <div class="cal-dow-header">Sat</div>`;
+  // Build full-week grid (includes greyed days from adjacent months)
+  const firstOfMonth = new Date(calYear, calMonth, 1);
+  const gridStart    = new Date(firstOfMonth);
+  gridStart.setDate(1 - firstOfMonth.getDay());
+  const lastOfMonth  = new Date(calYear, calMonth + 1, 0);
+  const gridEnd      = new Date(lastOfMonth);
+  gridEnd.setDate(lastOfMonth.getDate() + (6 - lastOfMonth.getDay()));
 
-  for (let i = 0; i < startDOW; i++) html += `<div class="cal-month-cell cal-other-month"></div>`;
+  // Build date → {games, practices} map for visible items
+  const dayMap = {};
+  visibleGames().forEach(g => {
+    if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") return;
+    if (!dayMap[g.date]) dayMap[g.date] = { games: [], practices: [] };
+    dayMap[g.date].games.push(g);
+  });
+  visiblePractices().forEach(p => {
+    if (!dayMap[p.date]) dayMap[p.date] = { games: [], practices: [] };
+    dayMap[p.date].practices.push(p);
+  });
 
-  for (let d = 1; d <= totalDays; d++) {
-    const iso      = isoOf(calYear, calMonth, d);
-    const isToday  = iso === today;
-    const games    = gamesForDate(iso);
-    const practices = practicesForDate(iso);
+  let html = `<div class="cal-month-grid">`;
+  html += DOW_LABELS.map(d => `<div class="cal-dow-header">${d}</div>`).join("");
 
-    // Games take priority; practices fill remaining cell space
-    const gamesToShow     = games.slice(0, Math.min(games.length, MAX_CELL));
+  const cur = new Date(gridStart);
+  while (cur <= gridEnd) {
+    const iso          = isoFromDate(cur);
+    const isThisMonth  = cur.getMonth() === calMonth;
+    const isToday      = iso === today;
+    const items        = dayMap[iso] || { games: [], practices: [] };
+
+    html += `<div class="cal-month-cell${!isThisMonth ? " cal-other-month" : ""}${isToday ? " cal-today" : ""}" data-date="${iso}">`;
+    html += `<div class="cal-day-num${isToday ? " cal-today-num" : ""}">${cur.getDate()}</div>`;
+
+    const gamesToShow     = items.games.slice(0, Math.min(items.games.length, MAX_CELL));
     const practiceSlots   = Math.max(0, MAX_CELL - gamesToShow.length);
-    const practicesToShow = practices.slice(0, practiceSlots);
-
-    html += `<div class="cal-month-cell${isToday ? " cal-today" : ""}" data-date="${iso}">
-      <div class="cal-day-num${isToday ? " cal-today-num" : ""}">${d}</div>`;
+    const practicesToShow = items.practices.slice(0, practiceSlots);
 
     gamesToShow.forEach(g => {
-      const mine    = isMyGame(g);
-      const isMuted = g.cancelled && (g.cancellationType === "rainout" || g.cancellationType === "rescheduled");
-      const isCancel = g.cancelled && !isMuted;
+      const mine      = isMyGame(g);
+      const isMuted   = g.cancelled && (g.cancellationType === "rainout" || g.cancellationType === "rescheduled");
       const mutedIcon = g.cancellationType === "rainout" ? "🌧" : "🔄";
       const isAway    = g.isAway === true;
       const isRef     = g.source === "calendar" && !g.needsUmpires;
-      const color = mine ? "#b8f2c4" : isAway ? "#f59e42" : isRef ? "#8888aa" : "var(--accent)";
-      if (isCancel) return; // outright cancelled — skip from month
+      const color     = mine ? "#b8f2c4" : isAway ? "#f59e42" : isRef ? "#8888aa" : "var(--accent)";
+      const assigned  = (g.umpireSlots||[]).filter(s => s.assignedUid).length;
+      const total     = (g.umpireSlots||[]).length;
       const awayLabel = isAway ? `<div style="font-size:0.62rem;color:#f59e42">↗ Away</div>` : "";
       html += `<div class="cal-card${mine ? " cal-card-mine" : ""}${isRef ? " cal-card-ref" : ""}"
         style="border-left-color:${color}${isMuted ? ";opacity:0.5;border-style:dashed" : ""}${isRef ? ";opacity:0.7" : ""}"
-        title="${isMuted ? (g.cancellationType === "rainout" ? "Rain Out" : "Rescheduled") + " · " : ""}${isAway ? "Away · " : ""}${esc(g.city||"")} ${esc(g.division||"")} · ${g.field||""}">
+        title="${isMuted ? (g.cancellationType==="rainout"?"Rain Out":"Rescheduled")+" · " : ""}${isAway ? "Away · " : ""}${esc(g.city||"")} ${esc(g.division||"")} · ${g.field||""}">
         <div style="font-size:0.7rem;color:var(--light-text)">${isMuted ? mutedIcon+" " : ""}${g.time ? fmtTime(g.time).replace(":00","") : ""} ${esc(g.division||"")}</div>
         <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(g.city||"Game")}</div>
         ${awayLabel}${mine ? `<div style="font-size:0.65rem;color:#b8f2c4">★ Yours</div>` : ""}
+        ${total && !isMuted ? `<div style="font-size:0.68rem;color:${assigned===total?"#6fcf97":"#ffcc80"}">${assigned}/${total} ump</div>` : ""}
       </div>`;
     });
 
-    if (games.filter(g => !g.cancelled || g.cancellationType === "rainout" || g.cancellationType === "rescheduled").length > gamesToShow.length) {
-      html += `<div style="font-size:0.7rem;color:var(--light-text);padding:1px 4px">+more</div>`;
+    const hiddenGames = items.games.filter(g =>
+      !g.cancelled || g.cancellationType === "rainout" || g.cancellationType === "rescheduled"
+    ).length - gamesToShow.length;
+    if (hiddenGames > 0) {
+      html += `<div style="font-size:0.7rem;color:var(--light-text);padding:1px 4px">+${hiddenGames} more game${hiddenGames !== 1 ? "s" : ""}</div>`;
     }
 
     practicesToShow.forEach(p => {
-      html += `<div class="cal-card practice"
-        style="border-left-color:#5b8dd9"
+      html += `<div class="cal-card practice" style="border-left-color:#5b8dd9"
         title="Practice: ${esc(p.teamName||"")} · ${p.field||""}">
         <div style="font-size:0.7rem;color:#8ab4f8">${p.startTime ? fmtTime(p.startTime).replace(":00","") : "Practice"}</div>
         <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:0.78rem">${esc(p.teamName||"Practice")}</div>
       </div>`;
     });
 
+    const hiddenPractices = items.practices.length - practicesToShow.length;
+    if (hiddenPractices > 0) {
+      html += `<div style="font-size:0.7rem;color:#8ab4f8;padding:1px 4px">+${hiddenPractices} practice${hiddenPractices !== 1 ? "s" : ""}</div>`;
+    }
+
     html += `</div>`;
+    cur.setDate(cur.getDate() + 1);
   }
 
-  const trailing = (7 - ((startDOW + totalDays) % 7)) % 7;
-  for (let i = 0; i < trailing; i++) html += `<div class="cal-month-cell cal-other-month"></div>`;
   html += `</div>`;
-
-  document.getElementById("calView").innerHTML = html;
+  grid.innerHTML = html;
 }
 
 // ── List view ─────────────────────────────────────────────────────────────────
 
 function renderList() {
-  const games     = visibleGames();
-  const practices = visiblePractices();
-  const today     = todayISO();
+  const el = document.getElementById("calListView");
+  if (!el) return;
 
-  // Build a map of date → {games, practices}
-  const byDate = {};
-  const addItem = (iso, type, item) => {
-    if (!byDate[iso]) byDate[iso] = { games:[], practices:[] };
-    byDate[iso][type].push(item);
-  };
+  const today      = todayISO();
+  const yyyyMM     = `${calYear}-${String(calMonth+1).padStart(2,"0")}`;
+  const games      = visibleGames().filter(g => g.date?.startsWith(yyyyMM));
+  const practices  = visiblePractices().filter(p => p.date?.startsWith(yyyyMM));
 
-  // Only show current month
-  const yyyyMM = `${calYear}-${String(calMonth+1).padStart(2,"0")}`;
-  games.forEach(g => { if (g.date?.startsWith(yyyyMM)) addItem(g.date, "games", g); });
-  practices.forEach(p => { if (p.date?.startsWith(yyyyMM)) addItem(p.date, "practices", p); });
-
-  const dates = Object.keys(byDate).sort();
-
-  if (!dates.length) {
-    document.getElementById("calView").innerHTML =
-      `<p class="cal-list-empty">No games or practices this month.</p>`;
+  if (!games.length && !practices.length) {
+    el.innerHTML = `<p class="cal-list-empty">No games or practices for ${MONTH_NAMES[calMonth]} ${calYear}.</p>`;
     return;
   }
 
+  // Build date → {games, practices} map
+  const byDate = {};
+  games.forEach(g => {
+    if (!byDate[g.date]) byDate[g.date] = { games: [], practices: [] };
+    byDate[g.date].games.push(g);
+  });
+  practices.forEach(p => {
+    if (!byDate[p.date]) byDate[p.date] = { games: [], practices: [] };
+    byDate[p.date].practices.push(p);
+  });
+
+  const dates = Object.keys(byDate).sort();
   let html = "";
+
   dates.forEach(iso => {
     const { games: dGames, practices: dPractices } = byDate[iso];
     const [y, m, d] = iso.split("-").map(Number);
-    const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(y,m-1,d).getDay()];
+    const dow = DOW_LABELS[new Date(y, m-1, d).getDay()];
     const isToday = iso === today;
 
     html += `<div class="cal-list-section">
-      <div class="cal-list-date-header${isToday ? "" : ""}">
-        ${dow}, ${m}/${d}/${y}${isToday ? " <span style=\"color:#b8f2c4;font-size:0.75rem\">● Today</span>" : ""}
+      <div class="cal-list-date-header">
+        ${dow}, ${m}/${d}/${y}${isToday ? ` <span style="color:#b8f2c4;font-size:0.75rem">● Today</span>` : ""}
       </div>`;
 
-    // Games (sorted by time)
     dGames.sort((a,b) => (a.time||"").localeCompare(b.time||""));
     dGames.forEach(g => {
-      const mine    = isMyGame(g);
-      const isMuted = g.cancelled && (g.cancellationType === "rainout" || g.cancellationType === "rescheduled");
-      const isCancel = g.cancelled && !isMuted;
+      const mine      = isMyGame(g);
+      const isMuted   = g.cancelled && (g.cancellationType === "rainout" || g.cancellationType === "rescheduled");
+      const isCancel  = g.cancelled && !isMuted;
       const mutedIcon = g.cancellationType === "rainout" ? "🌧 " : g.cancellationType === "rescheduled" ? "🔄 " : "";
       const cancelIcon = isCancel ? "⛔ " : "";
-      const isAway = g.isAway === true;
-      const isRef  = g.source === "calendar" && !g.needsUmpires;
-      const badge  = isCancel ? "cancelled" : isAway ? "away" : isRef ? "ref" : "game";
+      const isAway    = g.isAway === true;
+      const isRef     = g.source === "calendar" && !g.needsUmpires;
+      const badge     = isCancel ? "cancelled" : isAway ? "away" : isRef ? "ref" : "game";
       const badgeLabel = isCancel ? "Cancelled" : isAway ? "↗ Away" : isRef ? "Ref" : "Game";
-      const teams = [g.homeTeam, g.awayTeam].filter(Boolean).join(" vs ");
+      const teams     = [g.homeTeam, g.awayTeam].filter(Boolean).join(" vs ");
+      const assigned  = (g.umpireSlots||[]).filter(s => s.assignedUid).length;
+      const total     = (g.umpireSlots||[]).length;
 
       html += `<div class="cal-list-item${isMuted ? " cal-cancelled-muted" : ""}${isCancel ? " cal-cancelled-muted" : ""}${isRef ? " cal-ref-item" : ""}">
         <div class="cal-list-time">${g.time ? fmtTime(g.time) : "—"}</div>
@@ -243,22 +269,22 @@ function renderList() {
           <div class="cal-list-primary">
             <span class="cal-list-badge ${badge}">${cancelIcon}${mutedIcon}${badgeLabel}</span>
             ${mine ? `<span style="font-size:0.75rem;color:#b8f2c4">★ Your game</span>` : ""}
+            ${total && !isCancel && !isMuted ? `<span style="font-size:0.75rem;color:${assigned===total?"#6fcf97":"#ffcc80"}">${assigned}/${total} ump</span>` : ""}
           </div>
           <div style="font-weight:600">${esc(g.city||"")} <span style="color:var(--light-text);font-weight:normal">${esc(g.division||"")}</span></div>
           ${teams ? `<div class="cal-list-meta">${esc(teams)}</div>` : ""}
           ${g.field ? `<div class="cal-list-meta">📍 ${esc(g.field)}</div>` : ""}
-          ${(g.umpireSlots||[]).length ? `<div class="cal-list-meta">${(g.umpireSlots||[]).map(s => {
+          ${total ? `<div class="cal-list-meta">${(g.umpireSlots||[]).map(s => {
             const cls = s.type === "Plate" ? "plate" : s.type === "Field" ? "field" : "extra";
             const who = s.assignedName
               ? `<span style="color:var(--light-text)"> → ${esc(s.assignedName)}</span>`
               : `<span style="color:#ffcc80"> Open</span>`;
-            return `<span class="badge badge-${cls}">${s.type}</span>${who}`;
+            return `<span class="badge badge-${cls}">${esc(s.type)}</span>${who}`;
           }).join(" ")}</div>` : ""}
         </div>
       </div>`;
     });
 
-    // Practices
     dPractices.sort((a,b) => (a.startTime||"").localeCompare(b.startTime||""));
     dPractices.forEach(p => {
       html += `<div class="cal-list-item">
@@ -268,8 +294,9 @@ function renderList() {
             <span class="cal-list-badge practice">Practice</span>
           </div>
           <div style="font-weight:600">${esc(p.teamName||"Practice")}</div>
-          ${p.field ? `<div class="cal-list-meta">📍 ${esc(p.field)}</div>` : ""}
           ${p.division ? `<div class="cal-list-meta">${esc(p.division)}</div>` : ""}
+          ${p.field ? `<div class="cal-list-meta">📍 ${esc(p.field)}</div>` : ""}
+          ${p.notes ? `<div class="cal-list-meta" style="color:var(--light-text)">${esc(p.notes)}</div>` : ""}
         </div>
       </div>`;
     });
@@ -277,7 +304,7 @@ function renderList() {
     html += `</div>`;
   });
 
-  document.getElementById("calView").innerHTML = html;
+  el.innerHTML = html;
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -290,6 +317,10 @@ function updateMonthLabel() {
 
 function render() {
   updateMonthLabel();
+  const monthEl = document.getElementById("calMonthView");
+  const listEl  = document.getElementById("calListView");
+  if (monthEl) monthEl.style.display = calView === "month" ? "" : "none";
+  if (listEl)  listEl.style.display  = calView === "list"  ? "" : "none";
   if (calView === "month") renderMonth();
   else                     renderList();
 }
@@ -330,8 +361,8 @@ async function loadData() {
     render();
   } catch (err) {
     console.error(err);
-    document.getElementById("calView").innerHTML =
-      `<div class="document-note"><p style="color:#ffb4b4">Error loading calendar.</p></div>`;
+    const el = document.getElementById("calMonthView") || document.getElementById("calListView");
+    if (el) el.innerHTML = `<div class="document-note"><p style="color:#ffb4b4">Error loading calendar.</p></div>`;
   }
 }
 
@@ -354,6 +385,18 @@ document.querySelectorAll(".cal-view-btn").forEach(btn => {
     });
     render();
   });
+});
+
+document.getElementById("calShowGames")?.addEventListener("change", e => {
+  showGames = e.target.checked;
+  updateFilterCount();
+  render();
+});
+
+document.getElementById("calShowPractices")?.addEventListener("change", e => {
+  showPractices = e.target.checked;
+  updateFilterCount();
+  render();
 });
 
 document.getElementById("calMyGamesBtn")?.addEventListener("click", () => {
@@ -386,12 +429,18 @@ document.getElementById("calFilterReset")?.addEventListener("click", () => {
   filterCity     = "";
   filterField    = "";
   showMineOnly   = false;
-  const divSel = document.getElementById("calFilterDivision");
-  const citySel = document.getElementById("calFilterCity");
+  showGames      = true;
+  showPractices  = true;
+  const divSel   = document.getElementById("calFilterDivision");
+  const citySel  = document.getElementById("calFilterCity");
   const fieldSel = document.getElementById("calFilterField");
+  const gamesCb  = document.getElementById("calShowGames");
+  const pracCb   = document.getElementById("calShowPractices");
   if (divSel)   divSel.value   = "";
   if (citySel)  citySel.value  = "";
   if (fieldSel) fieldSel.value = "";
+  if (gamesCb)  gamesCb.checked  = true;
+  if (pracCb)   pracCb.checked   = true;
   updateMyGamesBtn();
   updateFilterCount();
   render();
@@ -402,6 +451,5 @@ onAuthStateChanged(auth, user => {
   const btn = document.getElementById("calMyGamesBtn");
   if (btn) btn.style.display = currentUid ? "" : "none";
   updateMyGamesBtn();
-  // Reload to pick up practices if just signed in as approved umpire
   loadData();
 });

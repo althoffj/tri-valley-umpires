@@ -19,7 +19,7 @@
 
   <div class="container">
 
-    <!-- Month nav + view toggle -->
+    <!-- Month nav + view toggle + show checkboxes (all on one row, wrapping) -->
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:12px">
         <button type="button" class="btn print-btn" id="calPrev" style="padding:6px 12px">◀</button>
@@ -27,30 +27,41 @@
         <button type="button" class="btn print-btn" id="calNext" style="padding:6px 12px">▶</button>
         <button type="button" class="btn print-btn" id="calToday" style="padding:6px 10px;font-size:0.85rem">Today</button>
       </div>
-      <div class="cal-view-toggle">
-        <button type="button" class="cal-view-btn active" data-view="month">📅 Month</button>
-        <button type="button" class="cal-view-btn"        data-view="list">☰ List</button>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div class="cal-view-toggle">
+          <button type="button" class="cal-view-btn active" data-view="month">📅 Month</button>
+          <button type="button" class="cal-view-btn" data-view="list">☰ List</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer;font-weight:normal">
+          <input type="checkbox" id="calShowGames" checked /> Games
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer;font-weight:normal">
+          <input type="checkbox" id="calShowPractices" checked /> Practices
+        </label>
       </div>
     </div>
 
     <!-- Filter bar -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-      <select id="calFilterDivision" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+      <select id="calFilterDivision" class="gf-select">
         <option value="">All Divisions</option>
       </select>
-      <select id="calFilterCity" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+      <select id="calFilterCity" class="gf-select">
         <option value="">All Leagues</option>
       </select>
-      <select id="calFilterField" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+      <select id="calFilterField" class="gf-select">
         <option value="">All Fields</option>
       </select>
       <button type="button" class="btn print-btn" id="calMyGamesBtn" style="display:none">All Games</button>
-      <button type="button" class="btn print-btn" id="calFilterReset" style="font-size:0.82rem;padding:5px 10px">Reset</button>
+      <button type="button" class="btn print-btn" id="calFilterReset" style="font-size:0.82rem;padding:5px 10px">✕ Clear</button>
       <span id="calFilterCount" style="font-size:0.8rem;color:var(--light-text)"></span>
     </div>
 
-    <!-- Calendar display area -->
-    <div id="calView"></div>
+    <!-- Month view -->
+    <div id="calMonthView" style="overflow-x:auto"></div>
+
+    <!-- List view -->
+    <div id="calListView" style="display:none"></div>
 
   </div>
 
@@ -67,7 +78,7 @@
   </div>
 
   <script type="module" src="auth.js?v=17"></script>
-  <script type="module" src="calendar.js?v=10"></script>
+  <script type="module" src="calendar.js?v=11"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=3"></script>
   <script type="module" src="nav.js?v=2"></script>
