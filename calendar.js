@@ -3,12 +3,15 @@ import { db, auth } from "./firebase.js";
 import { isApproved, getCurrentUser } from "./auth.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
-  collection, getDocs, query, orderBy
+  collection, getDocs, getDoc, query, orderBy, doc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let allGames     = [];
-let allPractices = [];
+let allGames      = [];
+let allPractices  = [];
+let allLeagues    = [];   // [{ id, name, ... }] from leagues collection
+let cityLeagueMap = {};   // { "City of Crooks": "leagueId", ... } built from teams
+
 let calView      = "month";
 let calYear      = new Date().getFullYear();
 let calMonth     = new Date().getMonth(); // 0-based
@@ -18,7 +21,8 @@ let showGames     = true;
 let showPractices = true;
 
 let filterDivision = "";
-let filterCity     = "";
+let filterTown     = "";   // filters on g.city (the city program)
+let filterLeague   = "";   // filters on the competitive league via cityLeagueMap
 let filterField    = "";
 
 const MAX_CELL = 4;
@@ -59,7 +63,11 @@ function isMyGame(g) {
 function filterGame(g) {
   if (showMineOnly && !isMyGame(g)) return false;
   if (filterDivision && g.division !== filterDivision) return false;
-  if (filterCity     && g.city     !== filterCity)     return false;
+  if (filterTown     && g.city     !== filterTown)     return false;
+  if (filterLeague) {
+    const gameLeagueId = cityLeagueMap[g.city];
+    if (gameLeagueId !== filterLeague) return false;
+  }
   if (filterField    && g.field    !== filterField)    return false;
   return true;
 }
@@ -76,13 +84,14 @@ function visiblePractices() { return showPractices ? allPractices.filter(filterP
 // ── Filter UI ─────────────────────────────────────────────────────────────────
 
 function updateFilterCount() {
-  const active = [filterDivision, filterCity, filterField].filter(Boolean).length
+  const active = [filterDivision, filterTown, filterLeague, filterField].filter(Boolean).length
                + (showMineOnly ? 1 : 0);
   const el = document.getElementById("calFilterCount");
   if (el) el.textContent = active ? `${active} filter${active !== 1 ? "s" : ""} active` : "";
 }
 
 function populateFilterSelects() {
+  // Division (games + practices)
   const divs = [...new Set([
     ...allGames.map(g => g.division),
     ...allPractices.map(p => p.division),
@@ -94,14 +103,28 @@ function populateFilterSelects() {
       divs.map(d => `<option value="${esc(d)}"${d===cur?" selected":""}>${esc(d)}</option>`).join("");
   }
 
-  const cities = [...new Set(allGames.map(g => g.city).filter(Boolean))].sort();
-  const citySel = document.getElementById("calFilterCity");
-  if (citySel) {
-    const cur = citySel.value;
-    citySel.innerHTML = '<option value="">All Leagues</option>' +
-      cities.map(c => `<option value="${esc(c)}"${c===cur?" selected":""}>${esc(c)}</option>`).join("");
+  // Town: unique g.city values (the city program)
+  const towns = [...new Set(allGames.map(g => g.city).filter(Boolean))].sort();
+  const townSel = document.getElementById("calFilterTown");
+  if (townSel) {
+    const cur = townSel.value;
+    townSel.innerHTML = '<option value="">All Towns</option>' +
+      towns.map(c => `<option value="${esc(c)}"${c===cur?" selected":""}>${esc(c)}</option>`).join("");
   }
 
+  // League: only leagues that have at least one game (via cityLeagueMap)
+  const leagueSel = document.getElementById("calFilterLeague");
+  if (leagueSel) {
+    const cur = leagueSel.value;
+    const representedIds = new Set(allGames.map(g => cityLeagueMap[g.city]).filter(Boolean));
+    const activeLeagues  = allLeagues.filter(l => representedIds.has(l.id));
+    leagueSel.innerHTML = '<option value="">All Leagues</option>' +
+      activeLeagues.map(l => `<option value="${esc(l.id)}"${l.id===cur?" selected":""}>${esc(l.name)}</option>`).join("");
+    // Show/hide the league filter depending on whether any leagues are present
+    leagueSel.style.display = activeLeagues.length ? "" : "none";
+  }
+
+  // Field (games + practices)
   const fields = [...new Set([
     ...allGames.map(g => g.field),
     ...allPractices.map(p => p.field),
@@ -346,15 +369,27 @@ function updateMyGamesBtn() {
 
 async function loadData() {
   try {
-    const [gamesSnap, practicesSnap] = await Promise.all([
+    const fetches = [
       getDocs(query(collection(db, "games"), orderBy("date"), orderBy("time"))),
+      getDocs(collection(db, "leagues")),
       isApproved()
         ? getDocs(query(collection(db, "practices"), orderBy("date"), orderBy("startTime")))
         : Promise.resolve({ docs: [] }),
-    ]);
+    ];
+    // Load teams for city→league mapping only when signed in (config requires auth)
+    if (currentUid) fetches.push(getDoc(doc(db, "config", "teamCalendars")));
 
-    allGames     = gamesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    allPractices = practicesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const results     = await Promise.all(fetches);
+    allGames          = results[0].docs.map(d => ({ id: d.id, ...d.data() }));
+    allLeagues        = results[1].docs.map(d => ({ id: d.id, ...d.data() }));
+    allPractices      = results[2].docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Build city → leagueId map from team configs (only available when authed)
+    cityLeagueMap = {};
+    if (currentUid && results[3]) {
+      const teams = results[3].exists() ? (results[3].data().teams || []) : [];
+      teams.forEach(t => { if (t.leagueId && t.city) cityLeagueMap[t.city] = t.leagueId; });
+    }
 
     populateFilterSelects();
     updateFilterCount();
@@ -412,8 +447,14 @@ document.getElementById("calFilterDivision")?.addEventListener("change", e => {
   render();
 });
 
-document.getElementById("calFilterCity")?.addEventListener("change", e => {
-  filterCity = e.target.value;
+document.getElementById("calFilterTown")?.addEventListener("change", e => {
+  filterTown = e.target.value;
+  updateFilterCount();
+  render();
+});
+
+document.getElementById("calFilterLeague")?.addEventListener("change", e => {
+  filterLeague = e.target.value;
   updateFilterCount();
   render();
 });
@@ -426,21 +467,24 @@ document.getElementById("calFilterField")?.addEventListener("change", e => {
 
 document.getElementById("calFilterReset")?.addEventListener("click", () => {
   filterDivision = "";
-  filterCity     = "";
+  filterTown     = "";
+  filterLeague   = "";
   filterField    = "";
   showMineOnly   = false;
   showGames      = true;
   showPractices  = true;
-  const divSel   = document.getElementById("calFilterDivision");
-  const citySel  = document.getElementById("calFilterCity");
-  const fieldSel = document.getElementById("calFilterField");
-  const gamesCb  = document.getElementById("calShowGames");
-  const pracCb   = document.getElementById("calShowPractices");
-  if (divSel)   divSel.value   = "";
-  if (citySel)  citySel.value  = "";
-  if (fieldSel) fieldSel.value = "";
-  if (gamesCb)  gamesCb.checked  = true;
-  if (pracCb)   pracCb.checked   = true;
+  const divSel    = document.getElementById("calFilterDivision");
+  const townSel   = document.getElementById("calFilterTown");
+  const leagueSel = document.getElementById("calFilterLeague");
+  const fieldSel  = document.getElementById("calFilterField");
+  const gamesCb   = document.getElementById("calShowGames");
+  const pracCb    = document.getElementById("calShowPractices");
+  if (divSel)    divSel.value    = "";
+  if (townSel)   townSel.value   = "";
+  if (leagueSel) leagueSel.value = "";
+  if (fieldSel)  fieldSel.value  = "";
+  if (gamesCb)   gamesCb.checked  = true;
+  if (pracCb)    pracCb.checked   = true;
   updateMyGamesBtn();
   updateFilterCount();
   render();
