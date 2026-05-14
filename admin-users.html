@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Users &amp; Permissions - Admin - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=13" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html">Games</a>
+      <a href="admin-scheduler.html">Scheduler</a>
+      <a href="admin-tournament.html">Tournaments</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-incidents.html">Incidents</a>
+      <a href="admin-config.html">Config</a>
+      <a href="admin-analytics.html">Analytics</a>
+      <a href="admin-users.html" class="admin-subnav-active">Users</a>
+    </nav>
+
+    <!-- Section tabs -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;border-bottom:1px solid #333;padding-bottom:12px">
+      <button class="sched-sec-btn active" data-section="umpires">👤 Umpires</button>
+      <button class="sched-sec-btn" data-section="admins">🔑 Admins &amp; Permissions</button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════════
+         UMPIRES SECTION
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="sec-umpires">
+
+      <!-- Pending approvals -->
+      <div id="pendingSection">
+        <h2 style="margin-top:0">⏳ Pending Approvals</h2>
+        <p id="pendingNote" class="schedule-source"></p>
+        <div id="pendingList" style="margin-bottom:28px"></div>
+      </div>
+
+      <!-- Roster -->
+      <h2>Umpire Directory</h2>
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0">All umpire accounts. Approved umpires can sign up for games. Inactive umpires are hidden from game signups but their records are retained. Super admins can edit account details, manage parent/guardian info for minors, and permanently delete accounts.</p>
+      </div>
+
+      <!-- Filters -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+        <select id="rosterFilterStatus" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+          <option value="">All Statuses</option>
+          <option value="approved">Approved</option>
+          <option value="pending">Pending</option>
+          <option value="denied">Denied</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <input type="text" id="rosterSearch" placeholder="Search name or email…"
+          style="padding:5px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem;min-width:200px" />
+        <button type="button" class="btn print-btn" id="exportRosterBtn" style="font-size:0.85rem;padding:5px 12px">⬇ Export CSV</button>
+        <span id="rosterCount" style="font-size:0.8rem;color:var(--light-text)"></span>
+      </div>
+
+      <div class="schedule-section" style="margin-top:0">
+        <table id="rosterTable">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Address</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="rosterBody">
+            <tr><td colspan="6" style="color:var(--light-text);text-align:center">Loading roster…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════════
+         ADMINS & PERMISSIONS SECTION
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="sec-admins" style="display:none">
+      <div class="document-note" style="margin-bottom:20px">
+        <p style="margin:0">Manage who can access the admin panel and what they can do. <strong>Super Admins</strong> have unrestricted access. Role-limited admins only see the sections their roles grant. Changes take effect on the admin's next page load.</p>
+      </div>
+
+      <!-- Admin Users Table -->
+      <h2 style="margin-top:0">Admin Accounts</h2>
+      <div class="schedule-section" style="margin-top:0;margin-bottom:32px">
+        <table id="adminUsersTable">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email / UID</th>
+              <th>Roles</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="adminUsersBody">
+            <tr><td colspan="4" style="color:var(--light-text);text-align:center">Loading admins…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Add Admin -->
+      <h2>Add Admin</h2>
+      <form id="addAdminForm" class="signup-form" style="margin-top:8px">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="addAdminName">Full Name</label>
+            <input type="text" id="addAdminName" placeholder="Jane Smith" />
+          </div>
+          <div class="form-group">
+            <label for="addAdminEmail">Email Address</label>
+            <input type="email" id="addAdminEmail" placeholder="admin@example.com" required />
+          </div>
+        </div>
+        <p style="font-size:0.82rem;color:var(--light-text);margin:0 0 12px">
+          If this person already has an umpire account their email will match it automatically.
+          Otherwise a new admin-only account will be created and you'll receive a one-time setup link to share with them.
+        </p>
+
+        <label style="margin:16px 0 8px;display:block;color:#ccc">Permissions — click a card to grant or revoke</label>
+        <p style="font-size:0.82rem;color:var(--light-text);margin:0 0 12px">
+          Leaving all unchecked without granting Super Admin results in no access. Grant Super Admin for full unrestricted access.
+        </p>
+        <div id="addPermCards"></div>
+
+        <div class="page-actions" style="margin-top:20px">
+          <button type="submit" class="btn">Add Admin</button>
+        </div>
+        <p id="addAdminMessage" class="signup-message" aria-live="polite"></p>
+      </form>
+    </div>
+
+  </div>
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+    </p>
+  </div>
+
+  <!-- ── Edit Account Modal ───────────────────────────────────────────────────── -->
+  <div id="editAccountModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto">
+      <h2 id="editAccountTitle" style="margin-top:0">Edit Account</h2>
+
+      <div class="document-note" style="border-left-color:#f5a623;margin-bottom:20px">
+        <p style="margin:0;font-size:0.88rem">Changing the email address updates the umpire's Firebase sign-in credentials. They will need to use the new email to log in.</p>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editFirstName">First Name</label>
+          <input type="text" id="editFirstName" />
+        </div>
+        <div class="form-group">
+          <label for="editLastName">Last Name</label>
+          <input type="text" id="editLastName" />
+        </div>
+      </div>
+      <label for="editEmail">Email (sign-in address)</label>
+      <input type="email" id="editEmail" />
+      <label for="editPhone">Phone</label>
+      <input type="text" id="editPhone" />
+      <label for="editStreet">Street</label>
+      <input type="text" id="editStreet" />
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editCity">City</label>
+          <input type="text" id="editCity" />
+        </div>
+        <div class="form-group" style="flex:0 0 80px">
+          <label for="editState">State</label>
+          <input type="text" id="editState" maxlength="2" />
+        </div>
+        <div class="form-group" style="flex:0 0 110px">
+          <label for="editZip">ZIP</label>
+          <input type="text" id="editZip" maxlength="10" />
+        </div>
+      </div>
+      <label for="editCertifications">Certifications <span style="font-weight:normal;color:var(--light-text)">(comma-separated)</span></label>
+      <input type="text" id="editCertifications" placeholder="e.g. NFHS, BRD Level 1" />
+      <label for="editNotes">Notes</label>
+      <textarea id="editNotes" rows="2" style="resize:vertical"></textarea>
+
+      <div id="editParentSection" style="display:none;margin-top:8px">
+        <div style="background:rgba(255,200,100,0.08);border:1px solid rgba(255,200,100,0.3);border-radius:8px;padding:14px">
+          <p style="font-weight:bold;color:#ffd580;margin:0 0 12px">👤 Parent / Guardian (minor)</p>
+          <label for="editParentName">Parent Name</label>
+          <input type="text" id="editParentName" placeholder="Full name" />
+          <div class="form-row" style="margin-top:8px">
+            <div class="form-group">
+              <label for="editParentEmail">Parent Email</label>
+              <input type="email" id="editParentEmail" />
+            </div>
+            <div class="form-group">
+              <label for="editParentPhone">Parent Phone</label>
+              <input type="text" id="editParentPhone" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
+          <input type="checkbox" id="editIsMinor" />
+          Umpire is under 18 (show parent fields)
+        </label>
+      </div>
+      <div style="margin-top:16px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
+          <input type="checkbox" id="editApproved" />
+          Approved
+        </label>
+      </div>
+
+      <p id="editAccountMsg" class="signup-message" aria-live="polite" style="margin-top:12px"></p>
+      <div class="page-actions" style="margin-top:20px">
+        <button type="button" class="btn" id="saveAccountBtn">Save Changes</button>
+        <button type="button" class="btn print-btn" id="cancelAccountBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Edit Permissions Modal ──────────────────────────────────────────────── -->
+  <div id="editPermModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:900px;max-height:90vh;overflow-y:auto">
+      <h2 id="editPermTitle" style="margin-top:0">Edit Permissions</h2>
+      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 16px">Click a card to grant or revoke that permission. Changes take effect on the admin's next page load.</p>
+      <div id="editPermCards"></div>
+      <div class="page-actions" style="margin-top:20px">
+        <button type="button" class="btn" id="savePermBtn">Save Permissions</button>
+        <button type="button" class="btn print-btn" id="cancelPermBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="auth.js?v=16"></script>
+  <script type="module" src="admin-users.js?v=2"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=2"></script>
+  <script type="module" src="nav.js?v=2"></script>
+</body>
+</html>

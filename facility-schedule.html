@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Field Schedule - Tri-Valley Baseball</title>
+  <link rel="stylesheet" href="styles.css?v=13" />
+  <style>
+    /* ── Facility info bar (facility-specific layout) ─────────────────── */
+    .fs-facility-info {
+      background: var(--container);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      border-left: 4px solid var(--accent);
+    }
+    .fs-facility-name { margin: 0 0 4px; font-size: 1.3rem; }
+    .fs-facility-meta { color: var(--light-text); font-size: 0.9rem; }
+
+    /* ── Calendar nav bar ─────────────────────────────────────────────── */
+    .fs-nav {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .fs-month-label { margin: 0; font-size: 1.1rem; min-width: 160px; text-align: center; }
+
+    /* ── Filter bar ───────────────────────────────────────────────────── */
+    .fs-filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+    .fs-filter-bar select {
+      padding: 5px 8px;
+      background: var(--field);
+      color: var(--text);
+      border: 1px solid #555;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+
+    /* ── Print ────────────────────────────────────────────────────────── */
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white !important; color: black !important; }
+      .header, .footer { background: white !important; color: black !important; }
+      .fs-facility-info { background: #f5f5f5 !important; color: black !important; }
+      .fs-month-label, h1, h2, h3 { color: black !important; }
+      .cal-card { background: #f9f9f9 !important; color: black !important; }
+      .cal-list-date-header { color: #601929 !important; }
+      .cal-list-meta { color: #555 !important; }
+      .cal-month-cell { background: white !important; border: 1px solid #ddd; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Field Schedule</h1>
+  </div>
+
+  <nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <!-- Loading state -->
+  <div class="container" id="loadingState">
+    <p style="color:var(--light-text)">Loading schedule…</p>
+  </div>
+
+  <!-- Error state -->
+  <div class="container" id="errorState" style="display:none">
+    <div class="document-note">
+      <p id="errorMsg">Facility not found.</p>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="container" id="scheduleContent" style="display:none">
+
+    <!-- Facility info bar -->
+    <div class="fs-facility-info" id="facilityInfo"></div>
+
+    <!-- Nav + controls -->
+    <div class="fs-nav no-print">
+      <button class="btn print-btn" id="prevMonthBtn" style="padding:6px 12px">◀</button>
+      <h3 class="fs-month-label" id="monthLabel"></h3>
+      <button class="btn print-btn" id="nextMonthBtn" style="padding:6px 12px">▶</button>
+      <button class="btn print-btn" id="todayBtn" style="font-size:0.85rem;padding:5px 10px">Today</button>
+      <div class="cal-view-toggle">
+        <button class="cal-view-btn active" data-view="list">☰ List</button>
+        <button class="cal-view-btn" data-view="month">📅 Month</button>
+      </div>
+      <button class="btn print-btn" onclick="window.print()" style="font-size:0.85rem;padding:5px 12px">🖨 Print</button>
+    </div>
+
+    <!-- Filters -->
+    <div class="fs-filter-bar no-print">
+      <select id="fsFilterField">
+        <option value="">All Fields</option>
+      </select>
+      <select id="fsFilterType">
+        <option value="">Games &amp; Practices</option>
+        <option value="game">Games only</option>
+        <option value="practice">Practices only</option>
+      </select>
+      <select id="fsFilterDiv">
+        <option value="">All Divisions</option>
+        <option value="10U">10U</option>
+        <option value="12U">12U</option>
+        <option value="14U">14U</option>
+        <option value="HS JV">HS JV</option>
+        <option value="HS Varsity">HS Varsity</option>
+      </select>
+      <button type="button" id="fsClearFiltersBtn" class="btn print-btn" style="font-size:0.8rem;padding:4px 12px">✕ Clear</button>
+      <span id="fsFilterCount" style="font-size:0.8rem;color:var(--light-text)"></span>
+    </div>
+
+    <!-- Month view -->
+    <div id="fsMonthView" style="display:none;overflow-x:auto"></div>
+
+    <!-- List view -->
+    <div id="fsListView"></div>
+
+  </div>
+
+  <div class="footer">
+    <p>
+      Tri-Valley Baseball Umpires ·
+      <a href="index.html">Home</a>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=16"></script>
+  <script type="module" src="facility-schedule.js?v=2"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=2"></script>
+  <script type="module" src="nav.js?v=2"></script>
+</body>
+</html>

@@ -776,6 +776,47 @@ th {
   background: rgba(184,242,196,0.08);
 }
 
+/* Card state variants — used by both admin and public schedule calendars */
+.cal-card.practice  { border-left-color: #5b8dd9; }
+.cal-card.cancelled { opacity: 0.5; border-style: dashed; }
+
+/* ── Shared schedule list view ──────────────────────────────────────────────
+   Used by admin-scheduler Calendar tab (list mode) and facility-schedule.html
+   ───────────────────────────────────────────────────────────────────────── */
+.cal-list-section       { margin-bottom: 24px; }
+.cal-list-date-header   {
+  font-size: 0.82rem; font-weight: 700; color: var(--accent);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 8px 0 4px; border-bottom: 1px solid #333; margin-bottom: 6px;
+}
+.cal-list-item          {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid #2a2a2a; font-size: 0.88rem;
+}
+.cal-list-time          { color: var(--light-text); min-width: 68px; font-size: 0.82rem; }
+.cal-list-badge         {
+  font-size: 0.72rem; padding: 2px 6px; border-radius: 3px;
+  white-space: nowrap; flex-shrink: 0;
+}
+.cal-list-badge.game      { background: rgba(96,25,41,0.4);   color: #ffb0b0; border: 1px solid #601929; }
+.cal-list-badge.practice  { background: rgba(91,141,217,0.2); color: #8ab4f8; border: 1px solid #3b6ea8; }
+.cal-list-badge.cancelled { background: rgba(80,80,80,0.2);   color: #888;    border: 1px solid #555; }
+.cal-list-body            { flex: 1; min-width: 0; }
+.cal-list-primary         { font-weight: 600; }
+.cal-list-meta            { color: var(--light-text); font-size: 0.8rem; margin-top: 1px; }
+.cal-list-empty           { color: var(--light-text); padding: 24px 0; text-align: center; }
+.cal-cancelled-muted      { opacity: 0.55; }
+.cal-list-badge.rainout   { background: rgba(100,150,255,0.15); color: #8ab4f8; border: 1px solid #3b6ea8; }
+.cal-list-badge.rescheduled { background: rgba(255,204,0,0.12); color: #ffcc80; border: 1px solid #cc8800; }
+
+/* ── View toggle (shared nav control) ──────────────────────────────────────── */
+.cal-view-toggle { display: flex; border: 1px solid #444; border-radius: 6px; overflow: hidden; }
+.cal-view-btn    {
+  padding: 5px 14px; font-size: 0.85rem;
+  background: transparent; color: var(--light-text); border: none; cursor: pointer;
+}
+.cal-view-btn.active { background: var(--accent); color: white; }
+
 .cal-week-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);

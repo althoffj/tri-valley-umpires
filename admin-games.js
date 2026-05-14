@@ -225,7 +225,12 @@ function renderAdminGames() {
       <td>${esc(g.field || "—")}${linkedBadge}</td>
       <td>${g.cancelled ? cancelledLabel(g) : slotHtml}${changeWarning}${notesHtml}</td>
       <td style="white-space:nowrap;vertical-align:top">
-        ${g.cancelled ? "" : `
+        ${g.cancelled
+          ? (g.cancellationType === "rescheduled"
+              ? `<button class="btn print-btn makeup-btn" style="margin-bottom:4px;display:block;width:100%;font-size:0.8rem"
+                   data-game-id="${esc(g.id)}">📅 Schedule Makeup</button>`
+              : "")
+          : `
           <button class="btn print-btn edit-game-btn" style="margin-bottom:4px;display:block;width:100%"
             data-game-id="${esc(g.id)}">Edit</button>
           <button class="btn print-btn cancel-game-btn" style="margin-bottom:4px;display:block;width:100%"
@@ -255,6 +260,42 @@ function openCancelModal(gameId) {
   document.getElementById("cancelGameModal").style.display = "flex";
 }
 
+// ── Schedule Makeup ───────────────────────────────────────────────────────────
+
+function scheduleMakeup(gameId) {
+  const g = allGames.find(g => g.id === gameId);
+  if (!g) return;
+  // Scroll to the Add Game form
+  const formEl = document.getElementById("addGameForm");
+  formEl?.scrollIntoView({ behavior: "smooth", block: "start" });
+  // Pre-fill matching fields; leave date blank so admin must pick the new date
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+  set("gameCity",     g.city     || "");
+  set("gameDivision", g.division || "");
+  set("gameTime",     g.time     || "");
+  set("gameType",     g.type     || "");
+  set("gameHomeTeam", g.homeTeam || "");
+  set("gameAwayTeam", g.awayTeam || "");
+  set("gameDate",     "");  // must be chosen by admin
+  // Field text input
+  const fieldInp = document.getElementById("gameField");
+  const fieldSel = document.getElementById("gameFieldSelect");
+  if (fieldInp) { fieldInp.value = g.field || ""; fieldInp.style.display = ""; }
+  if (fieldSel) fieldSel.style.display = "none";
+  // Restore umpire slot checkboxes + pay rates from original game
+  document.querySelectorAll("#gameUmpireTypes input[type=checkbox]").forEach(cb => { cb.checked = false; });
+  document.querySelectorAll(".slot-pay-input").forEach(inp => { inp.disabled = true; inp.value = ""; });
+  (g.umpireSlots || []).forEach(slot => {
+    const cb = document.querySelector(`#gameUmpireTypes input[value="${slot.type}"]`);
+    if (cb) {
+      cb.checked = true;
+      const payInp = document.querySelector(`.slot-pay-input[data-slot-type="${slot.type}"]`);
+      if (payInp) { payInp.value = slot.payRate != null ? slot.payRate : ""; payInp.disabled = false; }
+    }
+  });
+  setMsg("addGameMessage", `ℹ Makeup game pre-filled from ${fmtDate(g.date)} rescheduled game — set a new date and submit.`, "info");
+}
+
 // Show/hide the reschedule note when radio changes
 document.querySelectorAll('input[name="cancelType"]').forEach(radio => {
   radio.addEventListener("change", () => {
@@ -279,8 +320,16 @@ document.getElementById("confirmCancelBtn").addEventListener("click", async () =
       cancellationType: type,
       ...(notes ? { cancelNotes: notes } : {}),
     });
-    const g = allGames.find(g => g.id === gameId);
-    if (g) { g.cancelled = true; g.cancellationType = type; if (notes) g.cancelNotes = notes; }
+    // Fire-and-forget: push + Slack notification to any assigned umpires
+    const game = allGames.find(g => g.id === gameId);
+    const assignedCount = (game?.umpireSlots || []).filter(s => s.assignedUid).length;
+    if (assignedCount > 0) {
+      try {
+        const notifyCancelFn = httpsCallable(getFunctions(app, "us-central1"), "notifyGameCancellation");
+        notifyCancelFn({ gameId, type, notes }).catch(() => {});
+      } catch (_) {}
+    }
+    if (game) { game.cancelled = true; game.cancellationType = type; if (notes) game.cancelNotes = notes; }
     document.getElementById("cancelGameModal").style.display = "none";
     renderAdminGames();
   } catch (err) {
@@ -713,86 +762,6 @@ document.getElementById("gameUmpireTypes").addEventListener("change", e => {
   payInput.disabled = !e.target.checked;
 });
 
-// ── Team Calendars (read-only — managed in Scheduler → Teams) ─────────────────
-
-async function loadTeamCalendars() {
-  const listEl = document.getElementById("teamCalendarList");
-  try {
-    const snap = await getDoc(doc(db, "config", "teamCalendars"));
-    const teams = snap.exists() ? (snap.data().teams || []) : [];
-
-    if (teams.length === 0) {
-      listEl.innerHTML = `<p class="schedule-source">No teams configured. <a href="admin-scheduler.html">Add teams in the Scheduler.</a></p>`;
-      return;
-    }
-
-    listEl.innerHTML = teams.map((t, i) => `
-      <div data-team-row="${i}" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #444">
-        ${t.color ? `<span style="width:12px;height:12px;border-radius:2px;background:${esc(t.color)};flex-shrink:0"></span>` : ""}
-        <span style="flex:1">
-          <strong>${esc(t.name)}</strong>
-          ${t.division ? `<span style="color:var(--light-text);font-size:0.82rem;margin-left:8px">${esc(t.division)}</span>` : ""}
-          ${t.icsUrl ? `<br><span style="color:var(--light-text);font-size:0.78rem;word-break:break-all">📅 ${esc(t.icsUrl)}</span>` : ""}
-        </span>
-        ${t.icsUrl ? `<button class="btn print-btn sync-team-btn" data-index="${i}" style="flex-shrink:0">Sync</button>` : ""}
-      </div>`).join("");
-  } catch (err) {
-    listEl.innerHTML = `<p style="color:#ffb4b4">Failed to load teams.</p>`;
-  }
-}
-
-// ── Calendar Sync ─────────────────────────────────────────────────────────────
-
-async function syncGamesFromCalendars() {
-  const btn = document.getElementById("syncCalBtn");
-  btn.disabled = true;
-  setMsg("syncCalMessage", "Syncing calendars…", "info");
-  try {
-    const functions    = getFunctions(app, "us-central1");
-    const syncGamesNow = httpsCallable(functions, "syncGamesNow");
-    const { data } = await syncGamesNow();
-    const parts = [];
-    if (data.added)     parts.push(`${data.added} new`);
-    if (data.corrected) parts.push(`${data.corrected} corrected`);
-    if (data.linked)    parts.push(`${data.linked} linked`);
-    if (data.flagged)   parts.push(`${data.flagged} possible change${data.flagged !== 1 ? "s" : ""} flagged`);
-    if (data.failed)    parts.push(`${data.failed} feed${data.failed !== 1 ? "s" : ""} failed`);
-    setMsg("syncCalMessage", parts.length ? `Sync: ${parts.join(", ")}.` : "Sync complete — nothing new.", data.flagged > 0 ? "warning" : "success");
-    if (data.linked || data.flagged || data.corrected) await loadGames();
-  } catch (err) {
-    setMsg("syncCalMessage", `Error: ${err.message}`, "error");
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function syncTeamNow(teamIndex) {
-  const functions = getFunctions(app, "us-central1");
-  const callable  = httpsCallable(functions, "syncTeamNow");
-  const { data }  = await callable({ teamIndex });
-  return data;
-}
-
-document.getElementById("syncCalBtn").addEventListener("click", syncGamesFromCalendars);
-
-document.getElementById("importScheduleBtn").addEventListener("click", async () => {
-  const btn = document.getElementById("importScheduleBtn");
-  btn.disabled = true;
-  setMsg("syncCalMessage", "Importing city schedule…", "info");
-  try {
-    const functions          = getFunctions(app, "us-central1");
-    const importCitySchedule = httpsCallable(functions, "importCitySchedule");
-    const { data } = await importCitySchedule();
-    const msg = `Imported: ${data.added} game${data.added !== 1 ? "s" : ""} added${data.skipped ? `, ${data.skipped} already existed` : ""}.`;
-    setMsg("syncCalMessage", msg, data.added > 0 ? "success" : "info");
-    if (data.added > 0) await loadGames();
-  } catch (err) {
-    setMsg("syncCalMessage", `Error: ${err.message}`, "error");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
 // ── Edit modal wiring ─────────────────────────────────────────────────────────
 
 document.getElementById("saveEditGameBtn").addEventListener("click", saveGameEdit);
@@ -825,23 +794,8 @@ document.addEventListener("click", e => {
   const notifyBtn = e.target.closest(".notify-slots-btn");
   if (notifyBtn) { notifyOpenSlots(notifyBtn.dataset.gameId); return; }
 
-  const syncTeamBtn = e.target.closest(".sync-team-btn");
-  if (syncTeamBtn) {
-    const index = Number(syncTeamBtn.dataset.index);
-    syncTeamBtn.disabled = true;
-    syncTeamBtn.textContent = "Syncing…";
-    const msgEl = document.getElementById("syncCalMessage");
-    if (msgEl) { msgEl.textContent = "Syncing team…"; msgEl.className = "signup-message info"; }
-    syncTeamNow(index)
-      .then(r => {
-        if (msgEl) { msgEl.textContent = `Done — ${r.added ?? 0} added, ${r.linked ?? 0} linked.`; msgEl.className = "signup-message success"; }
-      })
-      .catch(err => {
-        if (msgEl) { msgEl.textContent = `Error: ${err.message}`; msgEl.className = "signup-message error"; }
-      })
-      .finally(() => { syncTeamBtn.disabled = false; syncTeamBtn.textContent = "Sync"; });
-    return;
-  }
+  const makeupBtn = e.target.closest(".makeup-btn");
+  if (makeupBtn) { scheduleMakeup(makeupBtn.dataset.gameId); return; }
 
   const filterBtn = e.target.closest(".filter-btn");
   if (filterBtn) {
@@ -989,7 +943,6 @@ authReadyPromise.then(() => {
 
   loadPayRates();
   loadGames();
-  loadTeamCalendars();
   loadFacilitiesIntoSelects();
   loadPendingCancellations();
 });

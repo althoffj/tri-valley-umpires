@@ -1,5 +1,5 @@
 const { onSchedule }                  = require("firebase-functions/v2/scheduler");
-const { onCall, HttpsError }          = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentWritten }           = require("firebase-functions/v2/firestore");
 const { defineSecret }                = require("firebase-functions/params");
 const { initializeApp }               = require("firebase-admin/app");
@@ -300,6 +300,16 @@ function parseVEvents(icsText) {
   return events;
 }
 
+// ── Practice detection ────────────────────────────────────────────────────────
+
+/**
+ * Returns true if the SUMMARY field looks like a practice, workout, or other
+ * non-game event that should be stored in the `practices` collection, not `games`.
+ */
+function isPracticeEvent(summary) {
+  return /\bpractice\b|\bworkout\b|\btraining\b/i.test(summary || "");
+}
+
 // ── Core sync logic ───────────────────────────────────────────────────────────
 
 function todayISO() {
@@ -324,8 +334,12 @@ async function runSync() {
   if (teams.length === 0) return { added: 0, linked: 0, flagged: 0, failed: 0 };
 
   // Load all existing games for dedup
-  const gamesSnap         = await db.collection("games").get();
-  const existingExtIds    = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
+  const [gamesSnap, practicesSnap] = await Promise.all([
+    db.collection("games").get(),
+    db.collection("practices").get(),
+  ]);
+  const existingExtIds         = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
+  const existingPracticeExtIds = new Set(practicesSnap.docs.map(d => d.data().externalId).filter(Boolean));
   const linkedUids        = new Set();
   const cityGames         = [];
   for (const d of gamesSnap.docs) {
@@ -358,6 +372,25 @@ async function runSync() {
 
     for (const ev of parseVEvents(icsText)) {
       if (!ev.uid) continue;
+
+      // ── Route practice events to `practices` collection ─────────────────────
+      if (isPracticeEvent(ev.summary)) {
+        if (!existingPracticeExtIds.has(ev.uid)) {
+          await db.collection("practices").add({
+            teamName:   team.name,
+            date:       ev.date,
+            startTime:  ev.time || "",
+            endTime:    "",
+            field:      (ev.location || "").split(",")[0].trim(),
+            source:     "calendar",
+            externalId: ev.uid,
+            createdAt:  FieldValue.serverTimestamp(),
+          });
+          existingPracticeExtIds.add(ev.uid);
+          added++;
+        }
+        continue; // never add to games
+      }
 
       // Build divDate map (all divisions — used for matching below)
       const key = `${division}|${ev.date}`;
@@ -541,8 +574,12 @@ exports.previewCalendarImport = onCall({ cors: CORS }, async request => {
     const events   = parseVEvents(icsText);
     const division = inferDivision(team.name);
 
+    let skippedPractices = 0;
     for (const ev of events) {
       if (!ev.date || ev.date < today) continue; // skip past events
+
+      // Skip practice/workout events — they go to the practices collection, not games
+      if (isPracticeEvent(ev.summary)) { skippedPractices++; continue; }
 
       // Skip if no location (can't determine field)
       const rawLocation = ev.location || "";
@@ -638,6 +675,12 @@ exports.previewCalendarImport = onCall({ cors: CORS }, async request => {
       } else {
         conflicts.push({ game: candidate, issues: gameConflicts });
       }
+    }
+    if (skippedPractices > 0) {
+      warnings.push({
+        source: team.name,
+        message: `${skippedPractices} practice event${skippedPractices !== 1 ? "s" : ""} skipped — visible on Scheduler → Calendar`
+      });
     }
   }
 
@@ -1127,6 +1170,142 @@ exports.notifyOpenSlots = onCall({ cors: ["https://tri-valley-baseball-umpires.w
   }
 
   return { slacked: sends.length, pushed };
+});
+
+// ── Public facility schedule (no auth required) ───────────────────────────────
+
+exports.getFacilitySchedule = onRequest({ cors: true }, async (req, res) => {
+  const facilityId = req.query.facilityId;
+  const year  = parseInt(req.query.year)  || new Date().getFullYear();
+  const month = parseInt(req.query.month) || (new Date().getMonth() + 1); // 1-based
+
+  if (!facilityId) { res.status(400).json({ error: "facilityId required" }); return; }
+
+  const db = getFirestore();
+  const facSnap = await db.doc(`facilities/${facilityId}`).get();
+  if (!facSnap.exists) { res.status(404).json({ error: "Facility not found" }); return; }
+
+  const fac = facSnap.data();
+  const fieldNames = (fac.fields || []).map(f => f.name).filter(Boolean);
+
+  // Date range for the requested month
+  const mm = String(month).padStart(2, "0");
+  const firstOfMonth = `${year}-${mm}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const lastOfMonth = `${year}-${mm}-${String(lastDay).padStart(2, "0")}`;
+
+  let games = [], practices = [];
+  if (fieldNames.length > 0) {
+    const fieldSet = new Set(fieldNames);
+    const [gSnap, pSnap] = await Promise.all([
+      db.collection("games")
+        .where("date", ">=", firstOfMonth)
+        .where("date", "<=", lastOfMonth)
+        .orderBy("date").orderBy("time").get(),
+      db.collection("practices")
+        .where("date", ">=", firstOfMonth)
+        .where("date", "<=", lastOfMonth)
+        .orderBy("date").get(),
+    ]);
+    games = gSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(g => fieldSet.has(g.field))
+      .map(g => ({
+        id: g.id, date: g.date, time: g.time, field: g.field,
+        division: g.division, homeTeam: g.homeTeam, awayTeam: g.awayTeam,
+        city: g.city, gameType: g.gameType,
+        cancelled: g.cancelled, cancellationType: g.cancellationType,
+      }));
+    practices = pSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(p => fieldSet.has(p.field))
+      .map(p => ({
+        id: p.id, date: p.date, startTime: p.startTime, endTime: p.endTime,
+        field: p.field, teamName: p.teamName, division: p.division,
+      }));
+  }
+
+  res.json({
+    facility: {
+      id:           facSnap.id,
+      name:         fac.name         || "",
+      address:      fac.address      || "",
+      googleMapsUrl: fac.googleMapsUrl || "",
+      notes:        fac.notes        || "",
+      fields:       (fac.fields || []).map(f => ({ name: f.name, notes: f.notes || "" })),
+    },
+    year, month, games, practices,
+  });
+});
+
+// ── Notify assigned umpires of game cancellation / rainout / reschedule ──────
+
+exports.notifyGameCancellation = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db       = getFirestore();
+  const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { gameId, type, notes } = request.data || {};
+  if (!gameId) throw new HttpsError("invalid-argument", "gameId required.");
+
+  const gameSnap = await db.doc(`games/${gameId}`).get();
+  if (!gameSnap.exists) throw new HttpsError("not-found", "Game not found.");
+  const game = gameSnap.data();
+
+  // Collect UIDs of assigned umpires
+  const assignedUids = [...new Set(
+    (game.umpireSlots || []).filter(s => s.assignedUid).map(s => s.assignedUid)
+  )];
+  if (assignedUids.length === 0) return { notified: 0, slacked: 0 };
+
+  const label     = gameLabel(game);
+  const typeLabel = type === "rainout"     ? "🌧 Rain Out"
+                  : type === "rescheduled" ? "🔄 Rescheduled"
+                  :                         "⛔ Cancelled";
+  const notesStr  = notes ? ` — ${notes}` : "";
+  const pushTitle = type === "rainout"     ? "Game Rained Out"
+                  : type === "rescheduled" ? "Game Rescheduled"
+                  :                         "Game Cancelled";
+  const pushBody  = `${label}${notesStr}`;
+  const slackMsg  = `${typeLabel} · ${label}${notesStr}\n` +
+    `Assigned: ${(game.umpireSlots || []).filter(s => s.assignedUid).map(s => s.assignedName || s.assignedUid).join(", ")}\n` +
+    `These umpires will not be paid for this game.`;
+
+  // Targeted push notifications to each assigned umpire
+  const tokenSnaps = await Promise.all(
+    assignedUids.map(uid => db.doc(`notifications/${uid}`).get())
+  );
+  const tokens = tokenSnaps.map(s => s.exists ? s.data()?.token : null).filter(Boolean);
+  let pushed = 0;
+  if (tokens.length > 0) {
+    const result = await getMessaging().sendEachForMulticast({
+      tokens,
+      notification: { title: pushTitle, body: pushBody },
+      webpush: { fcmOptions: { link: "https://tri-valley-baseball-umpires.web.app/schedule.html" } },
+    });
+    pushed = result.successCount;
+    // Prune stale tokens
+    const stale = result.responses.map((r, i) => r.error ? tokens[i] : null).filter(Boolean);
+    if (stale.length > 0) {
+      const batch = db.batch();
+      for (const snap of tokenSnaps) {
+        if (snap.exists && stale.includes(snap.data()?.token)) batch.delete(snap.ref);
+      }
+      await batch.commit();
+    }
+  }
+
+  // Slack — Jeff + division channel
+  const hooks   = await getSlackWebhooks(db);
+  const div     = game.division ?? "";
+  const channel = /10U/i.test(div) ? hooks.ch10u : /12U/i.test(div) ? hooks.ch12u : null;
+  const sends   = [];
+  if (hooks.jeff) sends.push(postSlack(hooks.jeff, slackMsg));
+  if (channel)    sends.push(postSlack(channel,    slackMsg));
+  if (sends.length) await Promise.allSettled(sends);
+
+  return { notified: pushed, slacked: sends.length };
 });
 
 // ── Email broadcast to all active approved umpires ───────────────────────────

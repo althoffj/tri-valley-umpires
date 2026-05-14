@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Calendar - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=11" />
+  <link rel="stylesheet" href="styles.css?v=13" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
 </head>
 <body>
@@ -15,27 +15,38 @@
     <h1>Game Calendar</h1>
   </div>
 
-<nav id="mainNav" aria-label="Main navigation"></nav>
+  <nav id="mainNav" aria-label="Main navigation"></nav>
 
   <div class="container">
 
-    <!-- View tabs + nav -->
-    <div class="page-actions" style="justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px">
-      <div style="display:flex;gap:8px">
-        <button class="btn cal-tab-btn filter-active" data-view="month">Month</button>
-        <button class="btn print-btn cal-tab-btn" data-view="week">Week</button>
-        <button class="btn print-btn cal-tab-btn" data-view="day">Day</button>
+    <!-- Month nav + view toggle -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button type="button" class="btn print-btn" id="calPrev" style="padding:6px 12px">◀</button>
+        <span id="calLabel" style="font-weight:bold;font-size:1.1rem;min-width:170px;text-align:center"></span>
+        <button type="button" class="btn print-btn" id="calNext" style="padding:6px 12px">▶</button>
+        <button type="button" class="btn print-btn" id="calToday" style="padding:6px 10px;font-size:0.85rem">Today</button>
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn print-btn" id="calPrev">&larr;</button>
-        <span id="calLabel" style="color:white;font-weight:bold;min-width:160px;text-align:center"></span>
-        <button class="btn print-btn" id="calNext">&rarr;</button>
-        <button class="btn print-btn" id="calToday">Today</button>
+      <div class="cal-view-toggle">
+        <button type="button" class="cal-view-btn active" data-view="month">📅 Month</button>
+        <button type="button" class="cal-view-btn"        data-view="list">☰ List</button>
       </div>
     </div>
-    <!-- My Games filter — shown only to signed-in users -->
-    <div style="margin-bottom:16px" id="calMyGamesRow" style="display:none">
-      <button class="btn print-btn" id="calMyGamesBtn" data-auth-required style="display:none">All Games</button>
+
+    <!-- Filter bar -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+      <select id="calFilterDivision" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+        <option value="">All Divisions</option>
+      </select>
+      <select id="calFilterCity" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+        <option value="">All Leagues</option>
+      </select>
+      <select id="calFilterField" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+        <option value="">All Fields</option>
+      </select>
+      <button type="button" class="btn print-btn" id="calMyGamesBtn" style="display:none">All Games</button>
+      <button type="button" class="btn print-btn" id="calFilterReset" style="font-size:0.82rem;padding:5px 10px">Reset</button>
+      <span id="calFilterCount" style="font-size:0.8rem;color:var(--light-text)"></span>
     </div>
 
     <!-- Calendar display area -->
@@ -55,10 +66,10 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=14"></script>
-  <script type="module" src="calendar.js?v=8"></script>
+  <script type="module" src="auth.js?v=16"></script>
+  <script type="module" src="calendar.js?v=9"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=2"></script>
-  <script type="module" src="nav.js?v=1"></script>
+  <script type="module" src="nav.js?v=2"></script>
 </body>
 </html>

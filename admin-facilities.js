@@ -485,7 +485,11 @@ function renderFacilityCard(id, data, shedCode = "") {
           ${shedCode ? `<div style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;background:#1a2a1a;border:1px solid #2a6a2a;border-radius:6px;padding:6px 12px;font-size:0.9rem">🔑 <strong>Shed Code:</strong> <span style="font-family:monospace;font-size:1rem;letter-spacing:0.1em">${esc(shedCode)}</span></div>` : `<div style="margin-top:8px;font-size:0.82rem;color:var(--light-text)">🔑 No shed code set</div>`}
           ${issuesBanner(data.activeIssues)}
         </div>
-        <div style="display:flex;gap:6px;flex-shrink:0">
+        <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+          <a href="facility-schedule.html?id=${esc(id)}" target="_blank"
+            class="btn print-btn" style="font-size:0.82rem;padding:5px 12px;text-decoration:none">📅 Schedule</a>
+          <button class="btn print-btn copy-schedule-link-btn" data-facility-id="${esc(id)}"
+            style="font-size:0.82rem;padding:5px 12px" title="Copy shareable link to clipboard">🔗 Copy Link</button>
           <button class="btn print-btn edit-facility-btn" data-facility-id="${esc(id)}"
             style="font-size:0.82rem;padding:5px 12px">Edit</button>
           <button class="btn delete-facility-btn" data-facility-id="${esc(id)}"
@@ -829,6 +833,19 @@ document.addEventListener("click", e => {
   const removeRowBtnEl = e.target.closest(".remove-row-btn");
   if (removeRowBtnEl) {
     removeRowBtnEl.closest(".dynamic-row")?.remove();
+    return;
+  }
+
+  // Copy schedule link
+  const copyLinkBtn = e.target.closest(".copy-schedule-link-btn");
+  if (copyLinkBtn) {
+    const id  = copyLinkBtn.dataset.facilityId;
+    const url = `${window.location.origin}/facility-schedule.html?id=${id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      const orig = copyLinkBtn.textContent;
+      copyLinkBtn.textContent = "✓ Copied!";
+      setTimeout(() => { copyLinkBtn.textContent = orig; }, 2000);
+    }).catch(() => { prompt("Copy this link:", url); });
     return;
   }
 

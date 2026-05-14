@@ -671,35 +671,61 @@ function buildActionCell(game) {
   }).join("")}</div>`;
 }
 
+function buildGameRow(g) {
+  const teams = (g.homeTeam && g.awayTeam)
+    ? (g.isAway
+        ? `<span style="font-size:0.72rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px;vertical-align:middle">AWAY</span>${esc(g.awayTeam)} <span style="color:var(--light-text)">@</span> ${esc(g.homeTeam)}`
+        : `${esc(g.homeTeam)} <span style="color:var(--light-text)">vs</span> ${esc(g.awayTeam)}`)
+    : "—";
+  return `
+    <tr>
+      <td>${esc(fmtDate(g.date))} ${dateBadge(g)}</td>
+      <td>${esc(g.time || "—")}</td>
+      <td>${esc(g.division || "—")}${g.tournamentId ? ' <span class="badge" style="background:#2d1a4a;color:#c9a0ff;font-size:0.72rem">🏆</span>' : ""}</td>
+      <td>${teams}</td>
+      <td>${buildTypesCell(g)}</td>
+      <td>${esc(g.field || "—")}</td>
+      <td class="${buildStatusClass(g)}">${buildStatusCell(g)}</td>
+      <td style="white-space:nowrap">${buildActionCell(g)}</td>
+    </tr>`;
+}
+
 function renderGameRows() {
-  document.querySelectorAll("[data-game-list]").forEach(tbody => {
-    const city = tbody.dataset.city;
-    const visible = games.filter(g => g.city === city && gameMatchesFilter(g));
+  const container = document.getElementById("gameSchedule");
+  if (!container) return;
 
-    if (visible.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--light-text);padding:20px">No games match this filter.</td></tr>`;
-      return;
-    }
+  const visible = games.filter(gameMatchesFilter);
 
-    tbody.innerHTML = visible.map(g => {
-      const teams = (g.homeTeam && g.awayTeam)
-        ? (g.isAway
-            ? `<span style="font-size:0.72rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px;vertical-align:middle">AWAY</span>${esc(g.awayTeam)} <span style="color:var(--light-text)">@</span> ${esc(g.homeTeam)}`
-            : `${esc(g.homeTeam)} <span style="color:var(--light-text)">vs</span> ${esc(g.awayTeam)}`)
-        : "—";
-      return `
-      <tr>
-        <td>${esc(fmtDate(g.date))} ${dateBadge(g)}</td>
-        <td>${esc(g.time || "—")}</td>
-        <td>${esc(g.division || "—")}${g.tournamentId ? ' <span class="badge" style="background:#2d1a4a;color:#c9a0ff;font-size:0.72rem">🏆</span>' : ""}</td>
-        <td>${teams}</td>
-        <td>${buildTypesCell(g)}</td>
-        <td>${esc(g.field || "—")}</td>
-        <td class="${buildStatusClass(g)}">${buildStatusCell(g)}</td>
-        <td style="white-space:nowrap">${buildActionCell(g)}</td>
-      </tr>`;
-    }).join("");
+  if (visible.length === 0) {
+    container.innerHTML = `<div class="document-note"><p style="margin:0;text-align:center;color:var(--light-text)">No games match this filter.</p></div>`;
+    renderCount();
+    renderPaySummary();
+    renderGameDayBar();
+    return;
+  }
+
+  // Group by city, preserving insertion order (already sorted by date/time from Firestore)
+  const cityOrder = [];
+  const byCity = {};
+  visible.forEach(g => {
+    const city = g.city || "Other";
+    if (!byCity[city]) { byCity[city] = []; cityOrder.push(city); }
+    byCity[city].push(g);
   });
+
+  const TABLE_HEAD = `
+    <thead><tr>
+      <th>Date</th><th>Time</th><th>Div</th><th>Teams</th>
+      <th>Type</th><th>Field</th><th>Status</th><th>Action</th>
+    </tr></thead>`;
+
+  container.innerHTML = cityOrder.map(city => `
+    <div class="schedule-section">
+      <h2>${esc(city)}</h2>
+      <table>${TABLE_HEAD}
+        <tbody>${byCity[city].map(buildGameRow).join("")}</tbody>
+      </table>
+    </div>`).join("");
 
   renderCount();
   renderPaySummary();
@@ -709,9 +735,8 @@ function renderGameRows() {
 // ── Load from Firestore ───────────────────────────────────────────────────────
 
 function showLoading() {
-  document.querySelectorAll("[data-game-list]").forEach(tbody => {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--light-text);padding:30px">Loading schedule…</td></tr>`;
-  });
+  const container = document.getElementById("gameSchedule");
+  if (container) container.innerHTML = `<p style="color:var(--light-text);text-align:center;padding:30px">Loading schedule…</p>`;
 }
 
 async function loadPendingCancels() {
@@ -748,9 +773,8 @@ async function loadGames() {
     games = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderGameRows();
   } catch (err) {
-    document.querySelectorAll("[data-game-list]").forEach(tbody => {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#ffb4b4;padding:20px">Failed to load schedule. Please refresh the page.</td></tr>`;
-    });
+    const container = document.getElementById("gameSchedule");
+    if (container) container.innerHTML = `<div class="document-note"><p style="color:#ffb4b4;margin:0">Failed to load schedule. Please refresh the page.</p></div>`;
     console.error("loadGames:", err);
   }
 }

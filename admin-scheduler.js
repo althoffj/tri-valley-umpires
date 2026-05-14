@@ -4,7 +4,7 @@ import { authReadyPromise, isAdmin }      from "./auth.js";
 import { getFunctions, httpsCallable }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 import {
   collection, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
-  doc, query, where, orderBy
+  doc, query, where, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const fns       = getFunctions(app);
@@ -38,6 +38,43 @@ let calPracticesCache = [];
 let calUnavailByDate   = {}; // { "YYYY-MM-DD": count }
 let calPendingCancelIds = new Set(); // Set of gameIds with pending cancellations
 
+// Calendar filter state
+let calFilterDivision = "";
+let calFilterCity     = "";
+let calFilterField    = "";
+
+function filterGame(g) {
+  if (calFilterDivision && g.division !== calFilterDivision) return false;
+  if (calFilterCity     && g.city     !== calFilterCity)     return false;
+  if (calFilterField    && g.field    !== calFilterField)    return false;
+  return true;
+}
+function filterPractice(p) {
+  if (calFilterDivision && p.division !== calFilterDivision) return false;
+  if (calFilterField    && p.field    !== calFilterField)    return false;
+  return true;
+}
+function updateFilterCount() {
+  const active = [calFilterDivision, calFilterCity, calFilterField].filter(Boolean).length;
+  const el = document.getElementById("calFilterCount");
+  if (el) el.textContent = active ? `${active} filter${active !== 1 ? "s" : ""} active` : "";
+}
+function populateFieldFilter() {
+  const sel = document.getElementById("calFilterField");
+  if (!sel) return;
+  const fields = new Set();
+  calGamesCache.forEach(g => { if (g.field) fields.add(g.field); });
+  calPracticesCache.forEach(p => { if (p.field) fields.add(p.field); });
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All Fields</option>' +
+    [...fields].sort().map(f => `<option value="${esc(f)}"${f === current ? " selected" : ""}>${esc(f)}</option>`).join("");
+  if (current && !fields.has(current)) calFilterField = ""; // reset if field no longer visible
+}
+
+// ── League state ─────────────────────────────────────────────────────────────
+let leagues              = []; // [{ id, name, division, websiteUrl, notes, contacts, homeLocations }]
+let facilitiesForLeagues = []; // [{ id, name, address }]
+
 // ── Settings constants ────────────────────────────────────────────────────────
 const SCHED_DEFAULTS = { "10U": 90, "12U": 90, "14U": 120, "HS JV": 120, "HS Varsity": 150, default: 90 };
 const DUR_IDS = {
@@ -51,6 +88,8 @@ let schedUmpireUnavailable = {}; // { uid: Set<"YYYY-MM-DD"> }
 let schedAssignTarget      = null; // { gameId, slotType, gameDate, gameTime }
 // The game object currently open in the edit modal (refreshed after slot changes)
 let seCurrentGame          = null;
+// The practice object currently open in the practice edit modal
+let peCurrentPractice      = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -128,11 +167,12 @@ function switchSection(section) {
   document.querySelectorAll(".sched-sec-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.section === section);
   });
-  ["teams","import","calendar","practices","settings"].forEach(s => {
+  ["teams","leagues","import","calendar","practices","settings"].forEach(s => {
     const el = document.getElementById(`sec-${s}`);
     if (el) el.style.display = s === section ? "" : "none";
   });
   // Lazy load section data
+  if (section === "leagues")   loadLeagues();
   if (section === "calendar")  loadCalendar();
   if (section === "practices") loadPractices();
   if (section === "settings")  loadSettings();
@@ -272,12 +312,17 @@ document.getElementById("sSchedulingForm").addEventListener("submit", async func
 
 async function loadTeams() {
   try {
-    const snap = await getDoc(doc(db, "config/teamCalendars"));
-    teams = snap.exists() ? (snap.data().teams || []) : [];
+    const [teamsSnap, leaguesSnap] = await Promise.all([
+      getDoc(doc(db, "config/teamCalendars")),
+      getDocs(query(collection(db, "leagues"), orderBy("name"))),
+    ]);
+    teams   = teamsSnap.exists() ? (teamsSnap.data().teams || []) : [];
+    leagues = leaguesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch {
     teams = [];
   }
   renderTeamList();
+  populateLeagueSelector();
 }
 
 async function saveTeams(showMsg) {
@@ -303,6 +348,7 @@ function renderTeamList() {
       <span class="team-row-name">${esc(t.name)}</span>
       <span class="team-row-meta">${esc(t.division || "")}${t.city ? " · " + esc(t.city) : ""}</span>
       ${t.needsUmpireForHome ? `<span class="team-needs-ump">⚾ Needs umpire</span>` : ""}
+      ${t.leagueName ? `<span style="font-size:0.75rem;color:#8ab4f8;background:rgba(91,141,217,0.12);border:1px solid rgba(91,141,217,0.3);border-radius:4px;padding:1px 6px">🏆 ${esc(t.leagueName)}</span>` : ""}
       ${t.icsUrl ? `<span style="color:var(--light-text);font-size:0.78rem">📅 iCal linked</span>` : ""}
       <div style="margin-left:auto;display:flex;gap:6px">
         <button type="button" class="btn print-btn team-edit-btn" data-idx="${i}" style="padding:4px 10px;font-size:0.82rem">Edit</button>
@@ -327,6 +373,8 @@ function startEditTeam(idx) {
   document.getElementById("tColor").value        = t.color || "#601929";
   document.getElementById("tIcsUrl").value       = t.icsUrl || "";
   document.getElementById("tNeedsUmpire").checked = !!t.needsUmpireForHome;
+  const leagueSel = document.getElementById("tLeague");
+  if (leagueSel) leagueSel.value = t.leagueId || "";
   document.getElementById("teamFormTitle").textContent = "Edit Team";
   document.getElementById("teamFormSubmitBtn").textContent = "Save Changes";
   document.getElementById("teamFormCancelBtn").style.display = "";
@@ -357,13 +405,17 @@ document.getElementById("teamFormCancelBtn").addEventListener("click", cancelEdi
 document.getElementById("teamForm").addEventListener("submit", async e => {
   e.preventDefault();
   const msg = document.getElementById("teamFormMsg");
+  const leagueId  = document.getElementById("tLeague")?.value || "";
+  const leagueObj = leagues.find(l => l.id === leagueId);
   const teamData = {
-    name:              document.getElementById("tName").value.trim(),
-    division:          document.getElementById("tDivision").value,
-    city:              document.getElementById("tCity").value,
-    color:             document.getElementById("tColor").value,
-    icsUrl:            document.getElementById("tIcsUrl").value.trim(),
+    name:               document.getElementById("tName").value.trim(),
+    division:           document.getElementById("tDivision").value,
+    city:               document.getElementById("tCity").value,
+    color:              document.getElementById("tColor").value,
+    icsUrl:             document.getElementById("tIcsUrl").value.trim(),
     needsUmpireForHome: document.getElementById("tNeedsUmpire").checked,
+    leagueId,
+    leagueName:         leagueObj?.name || "",
   };
   if (!teamData.name) return;
 
@@ -383,6 +435,250 @@ document.getElementById("teamForm").addEventListener("submit", async e => {
     cancelEditTeam();
     renderTeamList();
     setTimeout(() => { msg.textContent = ""; msg.className = "signup-message"; }, 2000);
+  } catch (err) {
+    msg.textContent = "Error: " + err.message;
+    msg.className   = "signup-message error";
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  LEAGUES SECTION
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function loadLeagues() {
+  try {
+    const [leaguesSnap, facSnap] = await Promise.all([
+      getDocs(query(collection(db, "leagues"), orderBy("name"))),
+      getDocs(collection(db, "facilities")),
+    ]);
+    leagues              = leaguesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    facilitiesForLeagues = facSnap.docs.map(d => ({ id: d.id, name: d.data().name || "", address: d.data().address || "" }));
+  } catch (err) {
+    leagues = []; facilitiesForLeagues = [];
+    console.error("loadLeagues:", err);
+  }
+  renderLeagueList();
+  populateLeagueLocations();
+  populateLeagueSelector();
+}
+
+function populateLeagueSelector() {
+  const sel = document.getElementById("tLeague");
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— No league —</option>' +
+    leagues.map(l =>
+      `<option value="${esc(l.id)}"${l.id === current ? " selected" : ""}>` +
+      `${esc(l.name)}${l.division ? " (" + esc(l.division) + ")" : ""}</option>`
+    ).join("");
+}
+
+function populateLeagueLocations(checkedIds = []) {
+  const wrap = document.getElementById("lLocationsWrap");
+  if (!wrap) return;
+  if (!facilitiesForLeagues.length) {
+    wrap.innerHTML = `<p style="color:var(--light-text);font-size:0.85rem;margin:0">No facilities configured yet — add some in the <a href="admin-facilities.html" style="color:#8ab4f8">Facilities</a> page first.</p>`;
+    return;
+  }
+  wrap.innerHTML = facilitiesForLeagues.map(f =>
+    `<label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;padding:3px 0;min-width:180px">
+       <input type="checkbox" class="league-location-cb" value="${esc(f.id)}" data-name="${esc(f.name)}"${checkedIds.includes(f.id) ? " checked" : ""} />
+       <span>${esc(f.name)}${f.address ? `<span style="color:var(--light-text);font-size:0.8rem;margin-left:4px">${esc(f.address)}</span>` : ""}</span>
+     </label>`
+  ).join("");
+}
+
+function renderLeagueList() {
+  const el = document.getElementById("leagueList");
+  if (!el) return;
+  if (!leagues.length) {
+    el.innerHTML = `<p style="color:var(--light-text)">No leagues configured yet. Add your first league below.</p>`;
+    return;
+  }
+  el.innerHTML = leagues.map(l => {
+    const divBadge = l.division
+      ? `<span style="font-size:0.75rem;background:rgba(96,25,41,0.3);border:1px solid #601929;border-radius:4px;padding:1px 6px;color:#ffb0b0">${esc(l.division)}</span>`
+      : "";
+    const websiteLink = l.websiteUrl
+      ? `<a href="${esc(l.websiteUrl)}" target="_blank" rel="noopener" style="font-size:0.85rem;color:#8ab4f8">${esc(l.websiteUrl)}</a>`
+      : "";
+    const locations = (l.homeLocations || []).map(loc => esc(loc.facilityName)).join(" · ");
+    const contacts = (l.contacts || []).map(c => `
+      <div style="display:flex;gap:12px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid #2a2a2a;font-size:0.85rem;align-items:baseline">
+        <div>
+          <strong>${esc(c.name)}</strong>
+          ${c.role ? `<span style="color:var(--light-text);margin-left:6px;font-size:0.8rem">${esc(c.role)}</span>` : ""}
+        </div>
+        ${c.email ? `<a href="mailto:${esc(c.email)}" style="color:#8ab4f8">${esc(c.email)}</a>` : ""}
+        ${c.phone ? `<a href="tel:${esc(c.phone.replace(/\D/g,""))}" style="color:var(--text)">${esc(c.phone)}</a>` : ""}
+      </div>`).join("");
+    return `
+      <div class="team-row" style="flex-direction:column;align-items:stretch;gap:0;padding:16px;margin-bottom:12px" id="leagueCard_${esc(l.id)}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+              <strong style="font-size:1rem">🏆 ${esc(l.name)}</strong>
+              ${divBadge}
+            </div>
+            ${websiteLink ? `<div style="margin-bottom:4px">${websiteLink}</div>` : ""}
+            ${locations   ? `<div style="font-size:0.82rem;color:var(--light-text);margin-bottom:4px">🏟 Home at: ${locations}</div>` : ""}
+            ${l.notes     ? `<div style="font-size:0.85rem;color:#ccc;margin-top:2px">${esc(l.notes)}</div>` : ""}
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button class="btn print-btn league-edit-btn" data-id="${esc(l.id)}"
+              style="font-size:0.82rem;padding:5px 10px">Edit</button>
+            <button class="btn league-delete-btn" data-id="${esc(l.id)}"
+              style="font-size:0.82rem;padding:5px 10px;background:#5a1a1a">Delete</button>
+          </div>
+        </div>
+        ${contacts ? `
+          <div style="margin-top:12px">
+            <div style="font-size:0.75rem;font-weight:700;color:var(--light-text);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px">Contacts</div>
+            ${contacts}
+          </div>` : ""}
+      </div>`;
+  }).join("");
+
+  el.querySelectorAll(".league-edit-btn").forEach(btn =>
+    btn.addEventListener("click", () => startEditLeague(btn.dataset.id)));
+  el.querySelectorAll(".league-delete-btn").forEach(btn =>
+    btn.addEventListener("click", () => deleteLeague(btn.dataset.id)));
+}
+
+function addLeagueContactRow(contact = {}) {
+  const wrap = document.getElementById("lContactsWrap");
+  if (!wrap) return;
+  document.getElementById("lContactsHint").style.display = "none";
+  const row = document.createElement("div");
+  row.className = "league-contact-row";
+  row.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;padding:10px;background:rgba(255,255,255,0.03);border:1px solid #333;border-radius:6px;align-items:flex-start";
+  const inp = (cls, type, ph, val) =>
+    `<input class="${cls}" type="${type}" placeholder="${ph}" value="${esc(val || "")}"
+      style="flex:1;min-width:130px;padding:7px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.88rem" />`;
+  row.innerHTML =
+    inp("lc-name",  "text",  "Name *",               contact.name  || "") +
+    inp("lc-role",  "text",  "Role (e.g. Director)",  contact.role  || "") +
+    inp("lc-email", "email", "Email",                 contact.email || "") +
+    inp("lc-phone", "tel",   "Phone",                 contact.phone || "") +
+    `<button type="button" class="btn print-btn remove-contact-row-btn"
+       style="flex-shrink:0;padding:7px 10px;font-size:0.85rem;align-self:flex-start">✕</button>`;
+  row.querySelector(".remove-contact-row-btn").addEventListener("click", () => {
+    row.remove();
+    if (!document.querySelectorAll("#lContactsWrap .league-contact-row").length)
+      document.getElementById("lContactsHint").style.display = "";
+  });
+  wrap.appendChild(row);
+}
+
+function getLeagueContactRows() {
+  return [...document.querySelectorAll("#lContactsWrap .league-contact-row")]
+    .map(row => ({
+      name:  row.querySelector(".lc-name")?.value.trim()  || "",
+      role:  row.querySelector(".lc-role")?.value.trim()  || "",
+      email: row.querySelector(".lc-email")?.value.trim() || "",
+      phone: row.querySelector(".lc-phone")?.value.trim() || "",
+    }))
+    .filter(c => c.name || c.email || c.phone);
+}
+
+function resetLeagueForm() {
+  document.getElementById("leagueEditId").value      = "";
+  document.getElementById("leagueForm").reset();
+  document.getElementById("lContactsWrap").innerHTML = "";
+  document.getElementById("lContactsHint").style.display = "";
+  document.getElementById("leagueFormTitle").textContent      = "Add League";
+  document.getElementById("leagueFormSubmitBtn").textContent  = "Add League";
+  document.getElementById("leagueFormCancelBtn").style.display = "none";
+  document.getElementById("leagueFormMsg").textContent = "";
+  document.getElementById("leagueFormMsg").className   = "signup-message";
+  populateLeagueLocations();
+}
+
+function startEditLeague(id) {
+  const l = leagues.find(x => x.id === id);
+  if (!l) return;
+  document.getElementById("leagueEditId").value = id;
+  document.getElementById("lName").value         = l.name      || "";
+  document.getElementById("lDivision").value     = l.division  || "";
+  document.getElementById("lWebsite").value      = l.websiteUrl || "";
+  document.getElementById("lNotes").value        = l.notes     || "";
+  // Contacts
+  document.getElementById("lContactsWrap").innerHTML = "";
+  (l.contacts || []).forEach(c => addLeagueContactRow(c));
+  document.getElementById("lContactsHint").style.display =
+    (l.contacts || []).length ? "none" : "";
+  // Home locations
+  const checkedIds = (l.homeLocations || []).map(loc => loc.facilityId);
+  populateLeagueLocations(checkedIds);
+  document.getElementById("leagueFormTitle").textContent     = "Edit League";
+  document.getElementById("leagueFormSubmitBtn").textContent = "Save Changes";
+  document.getElementById("leagueFormCancelBtn").style.display = "";
+  document.getElementById("leagueFormWrap").scrollIntoView({ behavior: "smooth" });
+}
+
+async function deleteLeague(id) {
+  const l = leagues.find(x => x.id === id);
+  if (!l || !confirm(`Delete league "${l.name}"?\n\nTeams assigned to this league will be unlinked.`)) return;
+  try {
+    await deleteDoc(doc(db, "leagues", id));
+    // Unlink teams that referenced this league
+    const anyLinked = teams.some(t => t.leagueId === id);
+    if (anyLinked) {
+      teams.forEach(t => { if (t.leagueId === id) { t.leagueId = ""; t.leagueName = ""; } });
+      await saveTeams(false);
+      renderTeamList();
+    }
+    leagues = leagues.filter(x => x.id !== id);
+    renderLeagueList();
+    populateLeagueSelector();
+  } catch (err) {
+    alert("Delete failed: " + err.message);
+  }
+}
+
+document.getElementById("addLeagueContactBtn").addEventListener("click", () => addLeagueContactRow());
+document.getElementById("leagueFormCancelBtn").addEventListener("click", resetLeagueForm);
+
+document.getElementById("leagueForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const msg     = document.getElementById("leagueFormMsg");
+  const editId  = document.getElementById("leagueEditId").value;
+  const contacts = getLeagueContactRows();
+  const homeLocations = [...document.querySelectorAll("#lLocationsWrap .league-location-cb:checked")]
+    .map(cb => ({ facilityId: cb.value, facilityName: cb.dataset.name }));
+  const data = {
+    name:          document.getElementById("lName").value.trim(),
+    division:      document.getElementById("lDivision").value,
+    websiteUrl:    document.getElementById("lWebsite").value.trim(),
+    notes:         document.getElementById("lNotes").value.trim(),
+    contacts,
+    homeLocations,
+  };
+  if (!data.name) return;
+  msg.textContent = "Saving…";
+  msg.className   = "signup-message info";
+  try {
+    if (editId) {
+      await setDoc(doc(db, "leagues", editId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+      const idx = leagues.findIndex(l => l.id === editId);
+      if (idx >= 0) leagues[idx] = { id: editId, ...data };
+      // Update denormalized leagueName on affected teams
+      const nameChanged = teams.some(t => t.leagueId === editId && t.leagueName !== data.name);
+      if (nameChanged) {
+        teams.forEach(t => { if (t.leagueId === editId) t.leagueName = data.name; });
+        await saveTeams(false);
+        renderTeamList();
+      }
+    } else {
+      const ref = await addDoc(collection(db, "leagues"), { ...data, createdAt: serverTimestamp() });
+      leagues.push({ id: ref.id, ...data });
+    }
+    msg.textContent = "✓ League saved.";
+    msg.className   = "signup-message success";
+    resetLeagueForm();
+    renderLeagueList();
+    populateLeagueSelector();
+    setTimeout(() => { msg.textContent = ""; msg.className = "signup-message"; }, 2500);
   } catch (err) {
     msg.textContent = "Error: " + err.message;
     msg.className   = "signup-message error";
@@ -1326,6 +1622,9 @@ async function fetchCalendarData() {
 
   // Build pending-cancellation set: gameIds that have pending cancellation requests
   calPendingCancelIds = new Set(cancelSnap.docs.map(d => d.data().gameId).filter(Boolean));
+
+  // Rebuild field filter options from fresh data
+  populateFieldFilter();
 }
 
 function renderCalendarLegend() {
@@ -1361,17 +1660,21 @@ function renderMonthView() {
   const dayMap = {};
   if (showGames) {
     calGamesCache.forEach(g => {
-      if (g.cancelled) return;
+      // Only hide outright-cancelled games; show rainout/rescheduled as muted cards
+      if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") return;
+      if (!filterGame(g)) return;
       if (!dayMap[g.date]) dayMap[g.date] = { games: [], practices: [] };
       dayMap[g.date].games.push(g);
     });
   }
   if (showPractices) {
     calPracticesCache.forEach(p => {
+      if (!filterPractice(p)) return;
       if (!dayMap[p.date]) dayMap[p.date] = { games: [], practices: [] };
       dayMap[p.date].practices.push(p);
     });
   }
+  updateFilterCount();
 
   const todayISO_ = todayISO();
   // Collect game data keyed by a card ID so we can open edit modal on click
@@ -1395,8 +1698,14 @@ function renderMonthView() {
       ${unavailCount ? `<div title="${unavailCount} umpire${unavailCount !== 1 ? "s" : ""} unavailable" style="font-size:0.62rem;color:#fca;padding:1px 4px;background:#5a200033;border-radius:3px">${unavailCount} out</div>` : ""}
     </div>`;
 
+    // Games always get priority: fill up to MAX_CELL slots; practices take whatever remains.
+    const MAX_CELL      = 4;
+    const gamesToShow   = items.games.slice(0, Math.min(items.games.length, MAX_CELL));
+    const practiceSlots = Math.max(0, MAX_CELL - gamesToShow.length);
+    const practicesToShow = items.practices.slice(0, practiceSlots);
+
     // Game cards (clickable → edit)
-    items.games.slice(0, 3).forEach(g => {
+    gamesToShow.forEach(g => {
       const color    = teamColor(g);
       const slots    = g.umpireSlots || [];
       const assigned = slots.filter(s => s.assignedUid).length;
@@ -1405,31 +1714,34 @@ function renderMonthView() {
         ? `${g.awayTeam.split(" ").pop()} @ ${g.homeTeam.split(" ").pop()}`
         : (g.homeTeam || g.division || "Game");
       const hasPendingCancel = calPendingCancelIds.has(g.id);
+      const isMuted = g.cancelled && (g.cancellationType === "rainout" || g.cancellationType === "rescheduled");
+      const mutedIcon = g.cancellationType === "rainout" ? "🌧" : "🔄";
       html += `<div class="cal-card cal-card-clickable" data-game-id="${esc(g.id)}"
-          style="border-left-color:${color};cursor:pointer${hasPendingCancel ? ";outline:1px solid #f57c00" : ""}"
-          title="Click to edit · ${esc(g.homeTeam||"")} vs ${esc(g.awayTeam||"")} · ${g.city||""} · ${g.field||""}">
+          style="border-left-color:${color};cursor:pointer${isMuted ? ";opacity:0.5;border-style:dashed" : ""}${hasPendingCancel ? ";outline:1px solid #f57c00" : ""}"
+          title="${isMuted ? (g.cancellationType === "rainout" ? "Rain Out" : "Rescheduled") + " · " : "Click to edit · "}${esc(g.homeTeam||"")} vs ${esc(g.awayTeam||"")} · ${g.city||""} · ${g.field||""}">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <div style="font-size:0.7rem;color:var(--light-text)">${g.time ? fmt12(g.time).replace(":00","") : ""} ${esc(g.division || "")}</div>
+            <div style="font-size:0.7rem;color:var(--light-text)">${isMuted ? mutedIcon : ""} ${g.time ? fmt12(g.time).replace(":00","") : ""} ${esc(g.division || "")}</div>
             ${hasPendingCancel ? `<span title="Pending cancellation request" style="font-size:0.65rem;color:#f57c00">⚠</span>` : ""}
           </div>
           <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(label)}</div>
-          ${total ? `<div style="font-size:0.68rem;color:${assigned===total?"#6fcf97":"#ffcc80"}">${assigned}/${total} ump</div>` : ""}
+          ${total && !isMuted ? `<div style="font-size:0.68rem;color:${assigned===total?"#6fcf97":"#ffcc80"}">${assigned}/${total} ump</div>` : ""}
         </div>`;
     });
-    if (items.games.length > 3) {
-      html += `<div style="font-size:0.7rem;color:var(--light-text);padding:1px 4px">+${items.games.length - 3} more</div>`;
+    if (items.games.length > gamesToShow.length) {
+      html += `<div style="font-size:0.7rem;color:var(--light-text);padding:1px 4px">+${items.games.length - gamesToShow.length} more game${items.games.length - gamesToShow.length !== 1 ? "s" : ""}</div>`;
     }
 
-    // Practice cards
-    items.practices.slice(0, 2).forEach(p => {
-      html += `<div class="cal-card" style="border-left-color:#5b8dd9"
-          title="Practice: ${esc(p.teamName||"")} · ${p.field||""}">
+    // Practice cards (fill remaining cell space after games)
+    practicesToShow.forEach(p => {
+      html += `<div class="cal-card cal-practice-clickable" data-practice-id="${esc(p.id)}" style="border-left-color:#5b8dd9;cursor:pointer"
+          title="Practice: ${esc(p.teamName||"")} · ${p.field||""} — click to edit">
           <div style="font-size:0.7rem;color:#8ab4f8">${p.startTime ? fmt12(p.startTime).replace(":00","") : "Practice"}</div>
           <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:0.78rem">${esc(p.teamName||"Practice")}</div>
         </div>`;
     });
-    if (items.practices.length > 2) {
-      html += `<div style="font-size:0.7rem;color:#8ab4f8;padding:1px 4px">+${items.practices.length - 2} more</div>`;
+    if (items.practices.length > practicesToShow.length) {
+      const hiddenPractices = items.practices.length - practicesToShow.length;
+      html += `<div style="font-size:0.7rem;color:#8ab4f8;padding:1px 4px">+${hiddenPractices} practice${hiddenPractices !== 1 ? "s" : ""}</div>`;
     }
 
     html += `</div>`;
@@ -1445,6 +1757,16 @@ function renderMonthView() {
       if (g) openGameEditModal(g);
     });
   });
+
+  // Wire click handlers on practice cards
+  const practiceByIdMonth = {};
+  calPracticesCache.forEach(p => { practiceByIdMonth[p.id] = p; });
+  grid.querySelectorAll(".cal-practice-clickable").forEach(card => {
+    card.addEventListener("click", () => {
+      const p = practiceByIdMonth[card.dataset.practiceId];
+      if (p) openPracticeEditModal(p);
+    });
+  });
 }
 
 function renderListView() {
@@ -1458,11 +1780,17 @@ function renderListView() {
   const lastOfMonth  = isoFromDate(new Date(calYear, calMonth + 1, 0));
 
   const games = showGames
-    ? calGamesCache.filter(g => !g.cancelled && g.date >= firstOfMonth && g.date <= lastOfMonth)
+    ? calGamesCache.filter(g => {
+        if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") return false;
+        if (!filterGame(g)) return false;
+        return g.date >= firstOfMonth && g.date <= lastOfMonth;
+      })
     : [];
   const practices = showPractices
-    ? calPracticesCache.filter(p => p.date >= firstOfMonth && p.date <= lastOfMonth)
+    ? calPracticesCache.filter(p =>
+        filterPractice(p) && p.date >= firstOfMonth && p.date <= lastOfMonth)
     : [];
+  updateFilterCount();
 
   if (!games.length && !practices.length) {
     el.innerHTML = `<p style="color:var(--light-text)">No games or practices for ${MONTH_NAMES[calMonth]} ${calYear}.</p>`;
@@ -1496,15 +1824,20 @@ function renderListView() {
                 ? `${item.awayTeam} @ ${item.homeTeam}`
                 : (item.homeTeam || item.awayTeam || "—");
               const pendingCancelRow = calPendingCancelIds.has(item.id);
-              return `<tr${pendingCancelRow ? ' style="background:rgba(245,124,0,0.06)"' : ""}>
+              const isMuted = item.cancelled && (item.cancellationType === "rainout" || item.cancellationType === "rescheduled");
+              const cancelIcon = item.cancellationType === "rainout" ? "🌧" : item.cancellationType === "rescheduled" ? "🔄" : "";
+              const rowStyle = isMuted
+                ? 'style="opacity:0.55;background:rgba(100,100,100,0.04)"'
+                : pendingCancelRow ? 'style="background:rgba(245,124,0,0.06)"' : "";
+              return `<tr ${rowStyle}>
                 <td>${esc(fmtDate(item.date))}</td>
                 <td>${esc(fmt12(item.time))}</td>
-                <td><span style="width:10px;height:10px;background:${color};border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle"></span>${esc(item.gameType || "Regular")}</td>
+                <td><span style="width:10px;height:10px;background:${color};border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle"></span>${cancelIcon ? `<span style="margin-right:4px">${cancelIcon}</span>` : ""}${esc(item.gameType || "Regular")}</td>
                 <td>${esc(item.division || "—")}</td>
                 <td>${esc(teams_)}</td>
                 <td>${esc(item.city || "—")}</td>
                 <td>${esc(item.field || "—")}</td>
-                <td style="color:${assigned===total&&total?"#6fcf97":"#ffcc80"}">${total ? `${assigned}/${total}` : "—"}${pendingCancelRow ? ` <span title="Pending cancellation" style="color:#f57c00;font-size:0.8rem">⚠</span>` : ""}</td>
+                <td style="color:${assigned===total&&total&&!isMuted?"#6fcf97":"#ffcc80"}">${isMuted ? cancelIcon || "—" : total ? `${assigned}/${total}` : "—"}${pendingCancelRow ? ` <span title="Pending cancellation" style="color:#f57c00;font-size:0.8rem">⚠</span>` : ""}</td>
                 <td>
                   <button type="button" class="btn print-btn list-edit-btn" data-game-id="${esc(item.id)}"
                     style="padding:3px 8px;font-size:0.8rem">Edit</button>
@@ -1515,12 +1848,15 @@ function renderListView() {
                 <td>${esc(fmtDate(item.date))}</td>
                 <td>${esc(item.startTime ? fmt12(item.startTime) : "—")} – ${esc(item.endTime ? fmt12(item.endTime) : "—")}</td>
                 <td><span style="font-size:0.75rem;background:#1a2a4a;color:#8ab4f8;border:1px solid #2a4a8a;border-radius:3px;padding:1px 5px">Practice</span></td>
-                <td>—</td>
+                <td>${esc(item.division || "—")}</td>
                 <td>${esc(item.teamName || "—")}</td>
                 <td>—</td>
                 <td>${esc(item.field || "—")}</td>
                 <td>—</td>
-                <td>—</td>
+                <td>
+                  <button type="button" class="btn print-btn list-practice-edit-btn" data-practice-id="${esc(item.id)}"
+                    style="padding:3px 8px;font-size:0.8rem">Edit</button>
+                </td>
               </tr>`;
             }
           }).join("")}
@@ -1528,13 +1864,23 @@ function renderListView() {
       </table>
     </div>`;
 
-  // Wire edit buttons
+  // Wire game edit buttons
   const gameById = {};
   calGamesCache.forEach(g => { gameById[g.id] = g; });
   el.querySelectorAll(".list-edit-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const g = gameById[btn.dataset.gameId];
       if (g) openGameEditModal(g);
+    });
+  });
+
+  // Wire practice edit buttons
+  const practiceByIdList = {};
+  calPracticesCache.forEach(p => { practiceByIdList[p.id] = p; });
+  el.querySelectorAll(".list-practice-edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const p = practiceByIdList[btn.dataset.practiceId];
+      if (p) openPracticeEditModal(p);
     });
   });
 }
@@ -1563,6 +1909,19 @@ document.getElementById("calShowGames").addEventListener("change", () =>
   calView === "month" ? renderMonthView() : renderListView());
 document.getElementById("calShowPractices").addEventListener("change", () =>
   calView === "month" ? renderMonthView() : renderListView());
+
+// Filter bar
+function reRender() { calView === "month" ? renderMonthView() : renderListView(); }
+document.getElementById("calFilterDiv").addEventListener("change", e => { calFilterDivision = e.target.value; reRender(); });
+document.getElementById("calFilterCity").addEventListener("change", e => { calFilterCity = e.target.value; reRender(); });
+document.getElementById("calFilterField").addEventListener("change", e => { calFilterField = e.target.value; reRender(); });
+document.getElementById("calClearFiltersBtn").addEventListener("click", () => {
+  calFilterDivision = calFilterCity = calFilterField = "";
+  document.getElementById("calFilterDiv").value   = "";
+  document.getElementById("calFilterCity").value  = "";
+  document.getElementById("calFilterField").value = "";
+  reRender();
+});
 
 // View toggle (month / list)
 document.querySelectorAll(".cal-view-btn").forEach(btn => {
@@ -1683,6 +2042,156 @@ document.getElementById("seGameDeleteBtn").addEventListener("click", async () =>
   }
 });
 
+document.getElementById("seConvertToPracticeBtn").addEventListener("click", async () => {
+  const game = seCurrentGame;
+  if (!game) return;
+  const info = [fmtDate(game.date), game.time ? fmt12(game.time) : "", game.city, game.division]
+    .filter(Boolean).join(" · ");
+  if (!confirm(`Convert "${info}" to a practice?\n\nIt will be removed from the game list and shown on the calendar as a practice.`)) return;
+
+  const btn = document.getElementById("seConvertToPracticeBtn");
+  const msg = document.getElementById("seGameMsg");
+  btn.disabled = true;
+  msg.textContent = "Converting…";
+  msg.className = "signup-message info";
+
+  try {
+    // Add to practices collection
+    await addDoc(collection(db, "practices"), {
+      teamName:   game.homeTeam || game.awayTeam || game.teamName || game.division || "",
+      division:   game.division || "",
+      date:       game.date,
+      startTime:  game.time || "",
+      endTime:    "",
+      field:      game.field || "",
+      source:     "calendar",
+      ...(game.externalId ? { externalId: game.externalId } : {}),
+      createdAt:  serverTimestamp(),
+    });
+    // Remove from games collection
+    await deleteDoc(doc(db, "games", game.id));
+    closeGameEditModal();
+    // Reload full calendar data to pick up the new practice entry
+    await loadCalendar();
+  } catch (err) {
+    msg.textContent = "Error: " + err.message;
+    msg.className = "signup-message error";
+    btn.disabled = false;
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  PRACTICE EDIT MODAL
+// ══════════════════════════════════════════════════════════════════════════════
+
+function openPracticeEditModal(p) {
+  peCurrentPractice = p;
+  document.getElementById("peId").value        = p.id;
+  document.getElementById("peDate").value      = p.date || "";
+  document.getElementById("peDivision").value  = p.division || "";
+  document.getElementById("peStartTime").value = p.startTime || "";
+  document.getElementById("peEndTime").value   = p.endTime || "";
+  document.getElementById("peTeamName").value  = p.teamName || "";
+  document.getElementById("peField").value     = p.field || "";
+  const msg = document.getElementById("pePracticeMsg");
+  msg.textContent = ""; msg.className = "signup-message";
+  document.getElementById("peConvertToGameBtn").disabled = false;
+  document.getElementById("practiceEditModal").style.display = "flex";
+}
+
+function closePracticeEditModal() {
+  document.getElementById("practiceEditModal").style.display = "none";
+  peCurrentPractice = null;
+}
+
+document.getElementById("peCancelBtn").addEventListener("click", closePracticeEditModal);
+
+document.getElementById("peSaveBtn").addEventListener("click", async () => {
+  const p = peCurrentPractice;
+  if (!p) return;
+  const msg = document.getElementById("pePracticeMsg");
+  msg.textContent = "Saving…"; msg.className = "signup-message info";
+
+  const updates = {
+    date:      document.getElementById("peDate").value,
+    division:  document.getElementById("peDivision").value,
+    startTime: document.getElementById("peStartTime").value,
+    endTime:   document.getElementById("peEndTime").value,
+    teamName:  document.getElementById("peTeamName").value.trim(),
+    field:     document.getElementById("peField").value.trim(),
+  };
+
+  try {
+    await updateDoc(doc(db, "practices", p.id), updates);
+    closePracticeEditModal();
+    await loadCalendar();
+    if (document.getElementById("sec-practices")?.style.display !== "none") loadPractices();
+  } catch (err) {
+    msg.textContent = "Error: " + err.message;
+    msg.className = "signup-message error";
+  }
+});
+
+document.getElementById("peConvertToGameBtn").addEventListener("click", async () => {
+  const p = peCurrentPractice;
+  if (!p) return;
+  const info = [fmtDate(p.date), p.startTime ? fmt12(p.startTime) : "", p.teamName, p.division]
+    .filter(Boolean).join(" · ");
+  if (!confirm(`Convert "${info}" to a game?\n\nIt will be removed from practices and added to the game list.`)) return;
+
+  const btn = document.getElementById("peConvertToGameBtn");
+  const msg = document.getElementById("pePracticeMsg");
+  btn.disabled = true;
+  msg.textContent = "Converting…"; msg.className = "signup-message info";
+
+  try {
+    await addDoc(collection(db, "games"), {
+      date:         p.date,
+      time:         p.startTime || "",
+      division:     p.division || "",
+      field:        p.field || "",
+      homeTeam:     p.teamName || "",
+      awayTeam:     "",
+      gameType:     "Regular",
+      city:         "",
+      needsUmpires: false,
+      cancelled:    false,
+      umpireSlots:  [],
+      source:       "calendar",
+      ...(p.externalId ? { externalId: p.externalId } : {}),
+      createdAt:    serverTimestamp(),
+    });
+    await deleteDoc(doc(db, "practices", p.id));
+    closePracticeEditModal();
+    await loadCalendar();
+    if (document.getElementById("sec-practices")?.style.display !== "none") loadPractices();
+  } catch (err) {
+    msg.textContent = "Error: " + err.message;
+    msg.className = "signup-message error";
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("peDeleteBtn").addEventListener("click", async () => {
+  const p = peCurrentPractice;
+  if (!p) return;
+  const info = [fmtDate(p.date), p.teamName].filter(Boolean).join(" · ");
+  if (!confirm(`Delete practice "${info}"?\n\nThis cannot be undone.`)) return;
+
+  const msg = document.getElementById("pePracticeMsg");
+  msg.textContent = "Deleting…"; msg.className = "signup-message info";
+
+  try {
+    await deleteDoc(doc(db, "practices", p.id));
+    closePracticeEditModal();
+    await loadCalendar();
+    if (document.getElementById("sec-practices")?.style.display !== "none") loadPractices();
+  } catch (err) {
+    msg.textContent = "Error: " + err.message;
+    msg.className = "signup-message error";
+  }
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  PRACTICES SECTION
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1777,7 +2286,9 @@ function renderApprovedList(practices) {
             <td>${esc(p.field || "—")}</td>
             <td>${esc(p.coachName || "—")}</td>
             <td style="font-size:0.82rem">${esc(recurrenceLabel(p))}</td>
-            <td>
+            <td style="white-space:nowrap">
+              <button type="button" class="btn print-btn practice-edit-btn" data-id="${esc(p.id)}"
+                style="padding:3px 8px;font-size:0.8rem;margin-right:4px">Edit</button>
               <button type="button" class="btn print-btn practice-cancel-btn" data-id="${esc(p.id)}"
                 style="padding:3px 8px;font-size:0.8rem;color:#ff8a8a;border-color:#ff8a8a">Cancel</button>
             </td>
@@ -1786,6 +2297,10 @@ function renderApprovedList(practices) {
       </table>
     </div>`;
 
+  el.querySelectorAll(".practice-edit-btn").forEach(btn => {
+    const p = practices.find(x => x.id === btn.dataset.id);
+    btn.addEventListener("click", () => { if (p) openPracticeEditModal(p); });
+  });
   el.querySelectorAll(".practice-cancel-btn").forEach(btn => {
     btn.addEventListener("click", () => cancelPractice(btn.dataset.id));
   });

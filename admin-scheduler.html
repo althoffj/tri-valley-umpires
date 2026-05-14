@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Admin: Scheduler - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=12" />
+  <link rel="stylesheet" href="styles.css?v=13" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
 </head>
 <body>
@@ -29,6 +29,7 @@
       <a href="admin-incidents.html">Incidents</a>
       <a href="admin-config.html">Config</a>
       <a href="admin-analytics.html">Analytics</a>
+      <a href="admin-users.html">Users</a>
     </nav>
 
     <h2 style="margin-bottom:4px">Scheduling Assistant</h2>
@@ -36,6 +37,7 @@
     <!-- ── Section nav ───────────────────────────────────────────────────────── -->
     <div class="sched-section-nav" id="schedSecNav">
       <button class="sched-sec-btn active" data-section="teams">Teams</button>
+      <button class="sched-sec-btn" data-section="leagues">Leagues</button>
       <button class="sched-sec-btn" data-section="import">Import</button>
       <button class="sched-sec-btn" data-section="calendar">Calendar</button>
       <button class="sched-sec-btn" data-section="practices">Practices</button>
@@ -93,12 +95,18 @@
             <label for="tIcsUrl">GameChanger iCal URL <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
             <input type="url" id="tIcsUrl" placeholder="https://gc.com/..." />
           </div>
-          <div style="margin-bottom:16px">
+          <div style="margin-bottom:12px">
             <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
               <input type="checkbox" id="tNeedsUmpire" />
               Home games for this team need an umpire
               <span style="color:var(--light-text);font-size:0.85rem">(auto-applied on import)</span>
             </label>
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label for="tLeague">League <span style="font-weight:normal;color:var(--light-text)">(optional)</span></label>
+            <select id="tLeague">
+              <option value="">— No league —</option>
+            </select>
           </div>
           <div class="page-actions" style="margin-top:0">
             <button type="submit" class="btn" id="teamFormSubmitBtn">Add Team</button>
@@ -110,12 +118,91 @@
     </div>
 
     <!-- ════════════════════════════════════════════════════════════════════════
+         LEAGUES SECTION
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="sec-leagues" style="display:none">
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0">Manage the leagues your teams compete in. Each league can have a website, multiple contacts, and home field locations. Assign teams to a league in the <strong>Teams</strong> tab.</p>
+      </div>
+
+      <!-- League list -->
+      <div id="leagueList" style="margin-bottom:24px">
+        <p style="color:var(--light-text)">Loading leagues…</p>
+      </div>
+
+      <!-- Add / Edit league form -->
+      <div id="leagueFormWrap">
+        <h3 id="leagueFormTitle" style="margin-bottom:12px">Add League</h3>
+        <form id="leagueForm" class="signup-form">
+          <input type="hidden" id="leagueEditId" value="" />
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="lName">League Name</label>
+              <input type="text" id="lName" placeholder="e.g. SD VFW Baseball" required />
+            </div>
+            <div class="form-group form-group--sm">
+              <label for="lDivision">Primary Division</label>
+              <select id="lDivision">
+                <option value="">Multiple / Mixed</option>
+                <option value="10U">10U</option>
+                <option value="12U">12U</option>
+                <option value="14U">14U</option>
+                <option value="HS JV">HS JV</option>
+                <option value="HS Varsity">HS Varsity</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="lWebsite">League Website</label>
+            <input type="url" id="lWebsite" placeholder="https://sdvfwbaseball.com" />
+          </div>
+
+          <div class="form-group">
+            <label for="lNotes">Notes <span style="font-weight:normal;color:var(--light-text)">(optional — schedule quirks, playoff format, etc.)</span></label>
+            <textarea id="lNotes" rows="2" placeholder="Any notes for admins or umpires about this league…"
+              style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
+          </div>
+
+          <!-- Home Game Locations -->
+          <div style="margin-bottom:16px">
+            <label style="display:block;margin-bottom:6px">
+              Home Game Locations
+              <span style="font-weight:normal;color:var(--light-text);font-size:0.85rem">(facilities where this league normally plays)</span>
+            </label>
+            <div id="lLocationsWrap" style="display:flex;flex-wrap:wrap;gap:4px 16px">
+              <p style="color:var(--light-text);font-size:0.85rem;margin:0">Loading facilities…</p>
+            </div>
+          </div>
+
+          <!-- Contacts -->
+          <div style="margin-bottom:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <label style="margin:0">Contacts</label>
+              <button type="button" id="addLeagueContactBtn" class="btn print-btn"
+                style="font-size:0.82rem;padding:4px 12px">+ Add Contact</button>
+            </div>
+            <div id="lContactsWrap"></div>
+            <p style="color:var(--light-text);font-size:0.82rem;margin:4px 0 0" id="lContactsHint">No contacts added yet.</p>
+          </div>
+
+          <div class="page-actions" style="margin-top:0">
+            <button type="submit" class="btn" id="leagueFormSubmitBtn">Add League</button>
+            <button type="button" class="btn print-btn" id="leagueFormCancelBtn" style="display:none">Cancel</button>
+          </div>
+          <p id="leagueFormMsg" class="signup-message" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════════
          IMPORT SECTION
          ════════════════════════════════════════════════════════════════════════ -->
     <div id="sec-import" style="display:none">
       <div class="document-note" style="margin-bottom:16px">
         <p>Import games from team iCal calendar feeds or from a CSV spreadsheet. Games are checked for field-time conflicts, lighting restrictions, and division mismatches before being added to the schedule.</p>
-        <p style="margin-bottom:0">Configure calendar sources on the <a href="admin-games.html">Games</a> page. Game durations and the late-start cutoff are configured on the <a href="#" onclick="switchSectionPublic('settings');return false">Settings</a> tab.</p>
+        <p style="margin-bottom:0">Add or edit team iCal feeds on the <a href="#" onclick="switchSectionPublic('teams');return false">Teams</a> tab. Game durations and the late-start cutoff are configured on the <a href="#" onclick="switchSectionPublic('settings');return false">Settings</a> tab.</p>
       </div>
 
       <!-- Import mode toggle -->
@@ -198,9 +285,9 @@
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <!-- View toggle -->
-          <div style="display:flex;border:1px solid #444;border-radius:6px;overflow:hidden">
-            <button type="button" class="cal-view-btn active" data-view="month" style="padding:5px 12px;font-size:0.85rem;background:var(--accent);color:white;border:none;cursor:pointer">📅 Month</button>
-            <button type="button" class="cal-view-btn" data-view="list" style="padding:5px 12px;font-size:0.85rem;background:transparent;color:var(--light-text);border:none;cursor:pointer">☰ List</button>
+          <div class="cal-view-toggle">
+            <button type="button" class="cal-view-btn active" data-view="month">📅 Month</button>
+            <button type="button" class="cal-view-btn" data-view="list">☰ List</button>
           </div>
           <!-- Filters -->
           <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer;font-weight:normal">
@@ -214,6 +301,29 @@
 
       <!-- Team color legend -->
       <div id="calLegend" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;font-size:0.82rem"></div>
+
+      <!-- Filter bar -->
+      <div id="calFilterBar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center">
+        <select id="calFilterDiv" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+          <option value="">All Divisions</option>
+          <option value="10U">10U</option>
+          <option value="12U">12U</option>
+          <option value="14U">14U</option>
+          <option value="HS JV">HS JV</option>
+          <option value="HS Varsity">HS Varsity</option>
+        </select>
+        <select id="calFilterCity" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+          <option value="">All Cities</option>
+          <option value="City of Crooks">Crooks</option>
+          <option value="City of Colton">Colton</option>
+        </select>
+        <select id="calFilterField" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+          <option value="">All Fields</option>
+        </select>
+        <button type="button" class="btn print-btn" id="calClearFiltersBtn"
+          style="font-size:0.8rem;padding:4px 12px">✕ Clear</button>
+        <span id="calFilterCount" style="font-size:0.8rem;color:var(--light-text)"></span>
+      </div>
 
       <!-- Month view -->
       <div id="calMonthView" style="overflow-x:auto">
@@ -441,10 +551,62 @@
       </div>
       <div class="page-actions">
         <button type="button" class="btn" id="seGameSaveBtn">Save Changes</button>
+        <button type="button" class="btn print-btn" id="seConvertToPracticeBtn" style="color:#8ab4f8;border-color:#8ab4f8" title="Move this event to the Practices calendar">→ Practice</button>
         <button type="button" class="btn print-btn" id="seGameDeleteBtn" style="color:#ff8a8a;border-color:#ff8a8a">Delete Game</button>
         <button type="button" class="btn print-btn" id="seGameCancelBtn">Cancel</button>
       </div>
       <p id="seGameMsg" class="signup-message" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <!-- ── Practice Edit Modal ───────────────────────────────────────────────── -->
+  <div id="practiceEditModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">
+      <h2 style="margin-top:0">Edit Practice</h2>
+      <input type="hidden" id="peId" />
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="peDate">Date</label>
+          <input type="date" id="peDate" />
+        </div>
+        <div class="form-group">
+          <label for="peDivision">Division</label>
+          <select id="peDivision">
+            <option value="">— None —</option>
+            <option value="10U">10U</option>
+            <option value="12U">12U</option>
+            <option value="14U">14U</option>
+            <option value="HS JV">HS JV</option>
+            <option value="HS Varsity">HS Varsity</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="peStartTime">Start Time</label>
+          <input type="time" id="peStartTime" />
+        </div>
+        <div class="form-group">
+          <label for="peEndTime">End Time</label>
+          <input type="time" id="peEndTime" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="peTeamName">Team Name</label>
+        <input type="text" id="peTeamName" placeholder="e.g. Crooks 12U Red" />
+      </div>
+      <div class="form-group">
+        <label for="peField">Field / Location</label>
+        <input type="text" id="peField" placeholder="e.g. NH-North" />
+      </div>
+      <div class="page-actions">
+        <button type="button" class="btn" id="peSaveBtn">Save Changes</button>
+        <button type="button" class="btn print-btn" id="peConvertToGameBtn" style="color:#ffcc80;border-color:#ffcc80" title="Move this practice to the game list">→ Game</button>
+        <button type="button" class="btn print-btn" id="peDeleteBtn" style="color:#ff8a8a;border-color:#ff8a8a">Delete</button>
+        <button type="button" class="btn print-btn" id="peCancelBtn">Cancel</button>
+      </div>
+      <p id="pePracticeMsg" class="signup-message" aria-live="polite"></p>
     </div>
   </div>
 
@@ -475,9 +637,9 @@
   </div>
 
   <script type="module" src="auth.js?v=16"></script>
-  <script type="module" src="admin-scheduler.js?v=3"></script>
+  <script type="module" src="admin-scheduler.js?v=9"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=2"></script>
-  <script type="module" src="nav.js?v=1"></script>
+  <script type="module" src="nav.js?v=2"></script>
 </body>
 </html>
