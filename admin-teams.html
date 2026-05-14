@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Admin: Teams &amp; Leagues - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=16" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html">Games</a>
+      <a href="admin-scheduler.html">Scheduler</a>
+      <a href="admin-teams.html" class="admin-subnav-active">Teams</a>
+      <a href="admin-tournament.html">Tournaments</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-incidents.html">Incidents</a>
+      <a href="admin-alerts.html">Alerts</a>
+      <a href="admin-config.html">Config</a>
+      <a href="admin-analytics.html">Analytics</a>
+      <a href="admin-users.html">Users</a>
+    </nav>
+
+    <h2 style="margin-bottom:4px">Teams &amp; Leagues</h2>
+
+    <!-- ── Section nav ───────────────────────────────────────────────────────── -->
+    <div class="sched-section-nav" id="teamsSecNav">
+      <button class="sched-sec-btn active" data-section="teams">Teams</button>
+      <button class="sched-sec-btn" data-section="leagues">Leagues</button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════════
+         TEAMS SECTION
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="sec-teams">
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0">Manage teams, their iCal feeds, display colors, and whether home games automatically need umpires. These settings drive conflict detection, calendar color-coding, and import defaults.</p>
+      </div>
+
+      <!-- Team list -->
+      <div id="teamList" style="margin-bottom:16px"></div>
+
+      <!-- Add / Edit team form -->
+      <div id="teamFormWrap">
+        <h3 id="teamFormTitle" style="margin-bottom:12px">Add Team</h3>
+        <form id="teamForm" class="signup-form">
+          <input type="hidden" id="teamEditIndex" value="" />
+          <div class="form-row">
+            <div class="form-group">
+              <label for="tName">Team Name</label>
+              <input type="text" id="tName" placeholder="e.g. Crooks 12U Red" required />
+            </div>
+            <div class="form-group form-group--sm">
+              <label for="tDivision">Division</label>
+              <select id="tDivision" required>
+                <option value="">-- Select --</option>
+                <option value="10U">10U</option>
+                <option value="12U">12U</option>
+                <option value="14U">14U</option>
+                <option value="HS JV">HS JV</option>
+                <option value="HS Varsity">HS Varsity</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="tCity">City Program
+                <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — links to city schedule imports</span>
+              </label>
+              <select id="tCity">
+                <option value="">-- None --</option>
+                <option value="City of Crooks">City of Crooks</option>
+                <option value="City of Colton">City of Colton</option>
+              </select>
+            </div>
+            <div class="form-group form-group--sm">
+              <label for="tColor">Color</label>
+              <input type="color" id="tColor" value="#601929" style="height:38px;padding:2px 4px;border-radius:6px;border:1px solid #555;background:var(--field);cursor:pointer" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="tIcsUrl">GameChanger iCal URL <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+            <input type="url" id="tIcsUrl" placeholder="https://gc.com/..." />
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
+              <input type="checkbox" id="tNeedsUmpire" />
+              Home games for this team need an umpire
+              <span style="color:var(--light-text);font-size:0.85rem">(auto-applied on import)</span>
+            </label>
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label for="tLeague">Competitive League
+              <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — e.g. MinnDak, VFW (optional)</span>
+            </label>
+            <select id="tLeague">
+              <option value="">— No league —</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label for="tCoach">Head Coach
+              <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — approved coaches only (optional)</span>
+            </label>
+            <select id="tCoach">
+              <option value="">— No coach assigned —</option>
+            </select>
+          </div>
+          <div class="page-actions" style="margin-top:0">
+            <button type="submit" class="btn" id="teamFormSubmitBtn">Add Team</button>
+            <button type="button" class="btn print-btn" id="teamFormCancelBtn" style="display:none">Cancel</button>
+          </div>
+          <p id="teamFormMsg" class="signup-message" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════════
+         LEAGUES SECTION
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="sec-leagues" style="display:none">
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0">Manage the leagues your teams compete in. Each league can have a website, multiple contacts, and home field locations. Assign teams to a league in the <strong>Teams</strong> tab.</p>
+      </div>
+
+      <!-- League list -->
+      <div id="leagueList" style="margin-bottom:24px">
+        <p style="color:var(--light-text)">Loading leagues…</p>
+      </div>
+
+      <!-- Add / Edit league form -->
+      <div id="leagueFormWrap">
+        <h3 id="leagueFormTitle" style="margin-bottom:12px">Add League</h3>
+        <form id="leagueForm" class="signup-form">
+          <input type="hidden" id="leagueEditId" value="" />
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="lName">League Name</label>
+              <input type="text" id="lName" placeholder="e.g. SD VFW Baseball" required />
+            </div>
+            <div class="form-group form-group--sm">
+              <label for="lDivision">Primary Division</label>
+              <select id="lDivision">
+                <option value="">Multiple / Mixed</option>
+                <option value="10U">10U</option>
+                <option value="12U">12U</option>
+                <option value="14U">14U</option>
+                <option value="HS JV">HS JV</option>
+                <option value="HS Varsity">HS Varsity</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="lWebsite">League Website</label>
+            <input type="url" id="lWebsite" placeholder="https://sdvfwbaseball.com" />
+          </div>
+
+          <div class="form-group">
+            <label for="lNotes">Notes <span style="font-weight:normal;color:var(--light-text)">(optional — schedule quirks, playoff format, etc.)</span></label>
+            <textarea id="lNotes" rows="2" placeholder="Any notes for admins or umpires about this league…"
+              style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
+          </div>
+
+          <!-- Home Game Locations -->
+          <div style="margin-bottom:16px">
+            <label style="display:block;margin-bottom:6px">
+              Home Game Locations
+              <span style="font-weight:normal;color:var(--light-text);font-size:0.85rem">(facilities where this league normally plays)</span>
+            </label>
+            <div id="lLocationsWrap" style="display:flex;flex-wrap:wrap;gap:4px 16px">
+              <p style="color:var(--light-text);font-size:0.85rem;margin:0">Loading facilities…</p>
+            </div>
+          </div>
+
+          <!-- Contacts -->
+          <div style="margin-bottom:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <label style="margin:0">Contacts</label>
+              <button type="button" id="addLeagueContactBtn" class="btn print-btn"
+                style="font-size:0.82rem;padding:4px 12px">+ Add Contact</button>
+            </div>
+            <div id="lContactsWrap"></div>
+            <p style="color:var(--light-text);font-size:0.82rem;margin:4px 0 0" id="lContactsHint">No contacts added yet.</p>
+          </div>
+
+          <div class="page-actions" style="margin-top:0">
+            <button type="submit" class="btn" id="leagueFormSubmitBtn">Add League</button>
+            <button type="button" class="btn print-btn" id="leagueFormCancelBtn" style="display:none">Cancel</button>
+          </div>
+          <p id="leagueFormMsg" class="signup-message" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=18"></script>
+  <script type="module" src="admin-teams.js?v=1"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=3"></script>
+  <script type="module" src="nav.js?v=2"></script>
+</body>
+</html>

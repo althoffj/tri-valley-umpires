@@ -14,7 +14,7 @@ const commitFn  = httpsCallable(fns, "commitCalendarImport");
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let teams        = [];   // [{name, division, city, icsUrl, color, needsUmpireForHome}]
-let activeSection = "teams";
+let activeSection = "import";
 let importMode   = "calendar";
 
 // Import preview state
@@ -167,12 +167,11 @@ function switchSection(section) {
   document.querySelectorAll(".sched-sec-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.section === section);
   });
-  ["teams","leagues","import","calendar","practices","settings"].forEach(s => {
+  ["import","calendar","practices","settings"].forEach(s => {
     const el = document.getElementById(`sec-${s}`);
     if (el) el.style.display = s === section ? "" : "none";
   });
   // Lazy load section data
-  if (section === "leagues")   loadLeagues();
   if (section === "calendar")  loadCalendar();
   if (section === "practices") loadPractices();
   if (section === "settings")  loadSettings();
@@ -307,12 +306,11 @@ document.getElementById("sSchedulingForm").addEventListener("submit", async func
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  TEAMS SECTION
+//  TEAMS / LEAGUES DATA — read-only fetch for calendar color rendering
 // ══════════════════════════════════════════════════════════════════════════════
 
-let teamCoaches = []; // approved coaches for team-form dropdown
-
-async function loadTeams() {
+/** Lightweight fetch of teams + leagues data used by the calendar and import sections. */
+async function loadTeamsData() {
   try {
     const [teamsSnap, leaguesSnap] = await Promise.all([
       getDoc(doc(db, "config/teamCalendars")),
@@ -321,397 +319,9 @@ async function loadTeams() {
     teams   = teamsSnap.exists() ? (teamsSnap.data().teams || []) : [];
     leagues = leaguesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch {
-    teams = [];
-  }
-  // Load coaches separately — a missing composite index should not break the team list
-  try {
-    const coachesSnap = await getDocs(query(collection(db, "coaches"), where("approved", "==", true)));
-    teamCoaches = coachesSnap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  } catch {
-    teamCoaches = [];
-  }
-  renderTeamList();
-  populateLeagueSelector();
-  populateCoachSelector();
-}
-
-async function saveTeams(showMsg) {
-  await setDoc(doc(db, "config/teamCalendars"), { teams }, { merge: true });
-  if (showMsg) {
-    const msg = document.getElementById("teamFormMsg");
-    msg.textContent = "✓ Saved.";
-    msg.className = "signup-message success";
-    setTimeout(() => { msg.textContent = ""; msg.className = "signup-message"; }, 2000);
+    teams = []; leagues = [];
   }
 }
-
-function renderTeamList() {
-  const el = document.getElementById("teamList");
-  if (!el) return;
-  if (!teams.length) {
-    el.innerHTML = `<p style="color:var(--light-text);margin-bottom:12px">No teams configured yet. Add your first team below.</p>`;
-    return;
-  }
-  el.innerHTML = teams.map((t, i) => `
-    <div class="team-row">
-      <span class="team-color-swatch" style="background:${esc(t.color || "#601929")}"></span>
-      <span class="team-row-name">${esc(t.name)}</span>
-      <span class="team-row-meta">${esc(t.division || "")}${t.city ? " · " + esc(t.city) : ""}${t.coachName ? " · Coach: " + esc(t.coachName) : ""}</span>
-      ${t.needsUmpireForHome ? `<span class="team-needs-ump">⚾ Needs umpire</span>` : ""}
-      ${t.leagueName ? `<span style="font-size:0.75rem;color:#8ab4f8;background:rgba(91,141,217,0.12);border:1px solid rgba(91,141,217,0.3);border-radius:4px;padding:1px 6px">🏆 ${esc(t.leagueName)}</span>` : ""}
-      ${t.icsUrl ? `<span style="color:var(--light-text);font-size:0.78rem">📅 iCal linked</span>` : ""}
-      <div style="margin-left:auto;display:flex;gap:6px">
-        <button type="button" class="btn print-btn team-edit-btn" data-idx="${i}" style="padding:4px 10px;font-size:0.82rem">Edit</button>
-        <button type="button" class="btn print-btn team-delete-btn" data-idx="${i}" style="padding:4px 10px;font-size:0.82rem;color:#ff8a8a;border-color:#ff8a8a">Delete</button>
-      </div>
-    </div>`).join("");
-
-  el.querySelectorAll(".team-edit-btn").forEach(btn => {
-    btn.addEventListener("click", () => startEditTeam(parseInt(btn.dataset.idx)));
-  });
-  el.querySelectorAll(".team-delete-btn").forEach(btn => {
-    btn.addEventListener("click", () => deleteTeam(parseInt(btn.dataset.idx)));
-  });
-}
-
-function startEditTeam(idx) {
-  const t = teams[idx];
-  document.getElementById("teamEditIndex").value = idx;
-  document.getElementById("tName").value         = t.name || "";
-  document.getElementById("tDivision").value     = t.division || "";
-  document.getElementById("tCity").value         = t.city || "";
-  document.getElementById("tColor").value        = t.color || "#601929";
-  document.getElementById("tIcsUrl").value       = t.icsUrl || "";
-  document.getElementById("tNeedsUmpire").checked = !!t.needsUmpireForHome;
-  const leagueSel = document.getElementById("tLeague");
-  if (leagueSel) leagueSel.value = t.leagueId || "";
-  populateCoachSelector(t.coachId || "");
-  document.getElementById("teamFormTitle").textContent = "Edit Team";
-  document.getElementById("teamFormSubmitBtn").textContent = "Save Changes";
-  document.getElementById("teamFormCancelBtn").style.display = "";
-  document.getElementById("tName").focus();
-  document.getElementById("teamFormWrap").scrollIntoView({ behavior: "smooth" });
-}
-
-function cancelEditTeam() {
-  document.getElementById("teamEditIndex").value = "";
-  document.getElementById("teamForm").reset();
-  document.getElementById("tColor").value = "#601929";
-  document.getElementById("teamFormTitle").textContent = "Add Team";
-  document.getElementById("teamFormSubmitBtn").textContent = "Add Team";
-  document.getElementById("teamFormCancelBtn").style.display = "none";
-  document.getElementById("teamFormMsg").textContent = "";
-  document.getElementById("teamFormMsg").className = "signup-message";
-}
-
-async function deleteTeam(idx) {
-  if (!confirm(`Delete team "${teams[idx].name}"?`)) return;
-  teams.splice(idx, 1);
-  renderTeamList();
-  await saveTeams(false);
-}
-
-document.getElementById("teamFormCancelBtn").addEventListener("click", cancelEditTeam);
-
-document.getElementById("teamForm").addEventListener("submit", async e => {
-  e.preventDefault();
-  const msg = document.getElementById("teamFormMsg");
-  const leagueId  = document.getElementById("tLeague")?.value || "";
-  const leagueObj = leagues.find(l => l.id === leagueId);
-  const coachId   = document.getElementById("tCoach")?.value || "";
-  const coachObj  = teamCoaches.find(c => c.id === coachId);
-  const teamData = {
-    name:               document.getElementById("tName").value.trim(),
-    division:           document.getElementById("tDivision").value,
-    city:               document.getElementById("tCity").value,
-    color:              document.getElementById("tColor").value,
-    icsUrl:             document.getElementById("tIcsUrl").value.trim(),
-    needsUmpireForHome: document.getElementById("tNeedsUmpire").checked,
-    leagueId,
-    leagueName:         leagueObj?.name || "",
-    coachId,
-    coachName:          coachObj?.name || "",
-    coachEmail:         coachObj?.email || "",
-    coachPhone:         coachObj?.phone || "",
-  };
-  if (!teamData.name) return;
-
-  const editIdx = document.getElementById("teamEditIndex").value;
-  if (editIdx !== "") {
-    teams[parseInt(editIdx)] = teamData;
-  } else {
-    teams.push(teamData);
-  }
-
-  try {
-    msg.textContent = "Saving…";
-    msg.className   = "signup-message info";
-    await saveTeams(false);
-    msg.textContent = "✓ Team saved.";
-    msg.className   = "signup-message success";
-    cancelEditTeam();
-    renderTeamList();
-    setTimeout(() => { msg.textContent = ""; msg.className = "signup-message"; }, 2000);
-  } catch (err) {
-    msg.textContent = "Error: " + err.message;
-    msg.className   = "signup-message error";
-  }
-});
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  LEAGUES SECTION
-// ══════════════════════════════════════════════════════════════════════════════
-
-async function loadLeagues() {
-  try {
-    const [leaguesSnap, facSnap] = await Promise.all([
-      getDocs(query(collection(db, "leagues"), orderBy("name"))),
-      getDocs(collection(db, "facilities")),
-    ]);
-    leagues              = leaguesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    facilitiesForLeagues = facSnap.docs.map(d => ({ id: d.id, name: d.data().name || "", address: d.data().address || "" }));
-  } catch (err) {
-    leagues = []; facilitiesForLeagues = [];
-    console.error("loadLeagues:", err);
-  }
-  renderLeagueList();
-  populateLeagueLocations();
-  populateLeagueSelector();
-}
-
-function populateLeagueSelector() {
-  const sel = document.getElementById("tLeague");
-  if (!sel) return;
-  const current = sel.value;
-  sel.innerHTML = '<option value="">— No league —</option>' +
-    leagues.map(l =>
-      `<option value="${esc(l.id)}"${l.id === current ? " selected" : ""}>` +
-      `${esc(l.name)}${l.division ? " (" + esc(l.division) + ")" : ""}</option>`
-    ).join("");
-}
-
-function populateCoachSelector(selectedId = "") {
-  const sel = document.getElementById("tCoach");
-  if (!sel) return;
-  sel.innerHTML = '<option value="">— No coach assigned —</option>' +
-    teamCoaches.map(c =>
-      `<option value="${esc(c.id)}"${c.id === selectedId ? " selected" : ""}>${esc(c.name)}${c.teamName ? " (" + esc(c.teamName) + ")" : ""}</option>`
-    ).join("");
-}
-
-function populateLeagueLocations(checkedIds = []) {
-  const wrap = document.getElementById("lLocationsWrap");
-  if (!wrap) return;
-  if (!facilitiesForLeagues.length) {
-    wrap.innerHTML = `<p style="color:var(--light-text);font-size:0.85rem;margin:0">No facilities configured yet — add some in the <a href="admin-facilities.html" style="color:#8ab4f8">Facilities</a> page first.</p>`;
-    return;
-  }
-  wrap.innerHTML = facilitiesForLeagues.map(f =>
-    `<label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;padding:3px 0;min-width:180px">
-       <input type="checkbox" class="league-location-cb" value="${esc(f.id)}" data-name="${esc(f.name)}"${checkedIds.includes(f.id) ? " checked" : ""} />
-       <span>${esc(f.name)}${f.address ? `<span style="color:var(--light-text);font-size:0.8rem;margin-left:4px">${esc(f.address)}</span>` : ""}</span>
-     </label>`
-  ).join("");
-}
-
-function renderLeagueList() {
-  const el = document.getElementById("leagueList");
-  if (!el) return;
-  if (!leagues.length) {
-    el.innerHTML = `<p style="color:var(--light-text)">No leagues configured yet. Add your first league below.</p>`;
-    return;
-  }
-  el.innerHTML = leagues.map(l => {
-    const divBadge = l.division
-      ? `<span style="font-size:0.75rem;background:rgba(96,25,41,0.3);border:1px solid #601929;border-radius:4px;padding:1px 6px;color:#ffb0b0">${esc(l.division)}</span>`
-      : "";
-    const websiteLink = l.websiteUrl
-      ? `<a href="${esc(l.websiteUrl)}" target="_blank" rel="noopener" style="font-size:0.85rem;color:#8ab4f8">${esc(l.websiteUrl)}</a>`
-      : "";
-    const locations = (l.homeLocations || []).map(loc => esc(loc.facilityName)).join(" · ");
-    const contacts = (l.contacts || []).map(c => `
-      <div style="display:flex;gap:12px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid #2a2a2a;font-size:0.85rem;align-items:baseline">
-        <div>
-          <strong>${esc(c.name)}</strong>
-          ${c.role ? `<span style="color:var(--light-text);margin-left:6px;font-size:0.8rem">${esc(c.role)}</span>` : ""}
-        </div>
-        ${c.email ? `<a href="mailto:${esc(c.email)}" style="color:#8ab4f8">${esc(c.email)}</a>` : ""}
-        ${c.phone ? `<a href="tel:${esc(c.phone.replace(/\D/g,""))}" style="color:var(--text)">${esc(c.phone)}</a>` : ""}
-      </div>`).join("");
-    return `
-      <div class="team-row" style="flex-direction:column;align-items:stretch;gap:0;padding:16px;margin-bottom:12px" id="leagueCard_${esc(l.id)}">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-              <strong style="font-size:1rem">🏆 ${esc(l.name)}</strong>
-              ${divBadge}
-            </div>
-            ${websiteLink ? `<div style="margin-bottom:4px">${websiteLink}</div>` : ""}
-            ${locations   ? `<div style="font-size:0.82rem;color:var(--light-text);margin-bottom:4px">🏟 Home at: ${locations}</div>` : ""}
-            ${l.notes     ? `<div style="font-size:0.85rem;color:#ccc;margin-top:2px">${esc(l.notes)}</div>` : ""}
-          </div>
-          <div style="display:flex;gap:6px;flex-shrink:0">
-            <button class="btn print-btn league-edit-btn" data-id="${esc(l.id)}"
-              style="font-size:0.82rem;padding:5px 10px">Edit</button>
-            <button class="btn league-delete-btn" data-id="${esc(l.id)}"
-              style="font-size:0.82rem;padding:5px 10px;background:#5a1a1a">Delete</button>
-          </div>
-        </div>
-        ${contacts ? `
-          <div style="margin-top:12px">
-            <div style="font-size:0.75rem;font-weight:700;color:var(--light-text);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px">Contacts</div>
-            ${contacts}
-          </div>` : ""}
-      </div>`;
-  }).join("");
-
-  el.querySelectorAll(".league-edit-btn").forEach(btn =>
-    btn.addEventListener("click", () => startEditLeague(btn.dataset.id)));
-  el.querySelectorAll(".league-delete-btn").forEach(btn =>
-    btn.addEventListener("click", () => deleteLeague(btn.dataset.id)));
-}
-
-function addLeagueContactRow(contact = {}) {
-  const wrap = document.getElementById("lContactsWrap");
-  if (!wrap) return;
-  document.getElementById("lContactsHint").style.display = "none";
-  const row = document.createElement("div");
-  row.className = "league-contact-row";
-  row.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;padding:10px;background:rgba(255,255,255,0.03);border:1px solid #333;border-radius:6px;align-items:flex-start";
-  const inp = (cls, type, ph, val) =>
-    `<input class="${cls}" type="${type}" placeholder="${ph}" value="${esc(val || "")}"
-      style="flex:1;min-width:130px;padding:7px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.88rem" />`;
-  row.innerHTML =
-    inp("lc-name",  "text",  "Name *",               contact.name  || "") +
-    inp("lc-role",  "text",  "Role (e.g. Director)",  contact.role  || "") +
-    inp("lc-email", "email", "Email",                 contact.email || "") +
-    inp("lc-phone", "tel",   "Phone",                 contact.phone || "") +
-    `<button type="button" class="btn print-btn remove-contact-row-btn"
-       style="flex-shrink:0;padding:7px 10px;font-size:0.85rem;align-self:flex-start">✕</button>`;
-  row.querySelector(".remove-contact-row-btn").addEventListener("click", () => {
-    row.remove();
-    if (!document.querySelectorAll("#lContactsWrap .league-contact-row").length)
-      document.getElementById("lContactsHint").style.display = "";
-  });
-  wrap.appendChild(row);
-}
-
-function getLeagueContactRows() {
-  return [...document.querySelectorAll("#lContactsWrap .league-contact-row")]
-    .map(row => ({
-      name:  row.querySelector(".lc-name")?.value.trim()  || "",
-      role:  row.querySelector(".lc-role")?.value.trim()  || "",
-      email: row.querySelector(".lc-email")?.value.trim() || "",
-      phone: row.querySelector(".lc-phone")?.value.trim() || "",
-    }))
-    .filter(c => c.name || c.email || c.phone);
-}
-
-function resetLeagueForm() {
-  document.getElementById("leagueEditId").value      = "";
-  document.getElementById("leagueForm").reset();
-  document.getElementById("lContactsWrap").innerHTML = "";
-  document.getElementById("lContactsHint").style.display = "";
-  document.getElementById("leagueFormTitle").textContent      = "Add League";
-  document.getElementById("leagueFormSubmitBtn").textContent  = "Add League";
-  document.getElementById("leagueFormCancelBtn").style.display = "none";
-  document.getElementById("leagueFormMsg").textContent = "";
-  document.getElementById("leagueFormMsg").className   = "signup-message";
-  populateLeagueLocations();
-}
-
-function startEditLeague(id) {
-  const l = leagues.find(x => x.id === id);
-  if (!l) return;
-  document.getElementById("leagueEditId").value = id;
-  document.getElementById("lName").value         = l.name      || "";
-  document.getElementById("lDivision").value     = l.division  || "";
-  document.getElementById("lWebsite").value      = l.websiteUrl || "";
-  document.getElementById("lNotes").value        = l.notes     || "";
-  // Contacts
-  document.getElementById("lContactsWrap").innerHTML = "";
-  (l.contacts || []).forEach(c => addLeagueContactRow(c));
-  document.getElementById("lContactsHint").style.display =
-    (l.contacts || []).length ? "none" : "";
-  // Home locations
-  const checkedIds = (l.homeLocations || []).map(loc => loc.facilityId);
-  populateLeagueLocations(checkedIds);
-  document.getElementById("leagueFormTitle").textContent     = "Edit League";
-  document.getElementById("leagueFormSubmitBtn").textContent = "Save Changes";
-  document.getElementById("leagueFormCancelBtn").style.display = "";
-  document.getElementById("leagueFormWrap").scrollIntoView({ behavior: "smooth" });
-}
-
-async function deleteLeague(id) {
-  const l = leagues.find(x => x.id === id);
-  if (!l || !confirm(`Delete league "${l.name}"?\n\nTeams assigned to this league will be unlinked.`)) return;
-  try {
-    await deleteDoc(doc(db, "leagues", id));
-    // Unlink teams that referenced this league
-    const anyLinked = teams.some(t => t.leagueId === id);
-    if (anyLinked) {
-      teams.forEach(t => { if (t.leagueId === id) { t.leagueId = ""; t.leagueName = ""; } });
-      await saveTeams(false);
-      renderTeamList();
-    }
-    leagues = leagues.filter(x => x.id !== id);
-    renderLeagueList();
-    populateLeagueSelector();
-  } catch (err) {
-    alert("Delete failed: " + err.message);
-  }
-}
-
-document.getElementById("addLeagueContactBtn").addEventListener("click", () => addLeagueContactRow());
-document.getElementById("leagueFormCancelBtn").addEventListener("click", resetLeagueForm);
-
-document.getElementById("leagueForm").addEventListener("submit", async e => {
-  e.preventDefault();
-  const msg     = document.getElementById("leagueFormMsg");
-  const editId  = document.getElementById("leagueEditId").value;
-  const contacts = getLeagueContactRows();
-  const homeLocations = [...document.querySelectorAll("#lLocationsWrap .league-location-cb:checked")]
-    .map(cb => ({ facilityId: cb.value, facilityName: cb.dataset.name }));
-  const data = {
-    name:          document.getElementById("lName").value.trim(),
-    division:      document.getElementById("lDivision").value,
-    websiteUrl:    document.getElementById("lWebsite").value.trim(),
-    notes:         document.getElementById("lNotes").value.trim(),
-    contacts,
-    homeLocations,
-  };
-  if (!data.name) return;
-  msg.textContent = "Saving…";
-  msg.className   = "signup-message info";
-  try {
-    if (editId) {
-      await setDoc(doc(db, "leagues", editId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
-      const idx = leagues.findIndex(l => l.id === editId);
-      if (idx >= 0) leagues[idx] = { id: editId, ...data };
-      // Update denormalized leagueName on affected teams
-      const nameChanged = teams.some(t => t.leagueId === editId && t.leagueName !== data.name);
-      if (nameChanged) {
-        teams.forEach(t => { if (t.leagueId === editId) t.leagueName = data.name; });
-        await saveTeams(false);
-        renderTeamList();
-      }
-    } else {
-      const ref = await addDoc(collection(db, "leagues"), { ...data, createdAt: serverTimestamp() });
-      leagues.push({ id: ref.id, ...data });
-    }
-    msg.textContent = "✓ League saved.";
-    msg.className   = "signup-message success";
-    resetLeagueForm();
-    renderLeagueList();
-    populateLeagueSelector();
-    setTimeout(() => { msg.textContent = ""; msg.className = "signup-message"; }, 2500);
-  } catch (err) {
-    msg.textContent = "Error: " + err.message;
-    msg.className   = "signup-message error";
-  }
-});
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  IMPORT — shared preview helpers
@@ -2496,7 +2106,8 @@ authReadyPromise.then(async () => {
   document.getElementById("adminContent").style.display = "";
   document.getElementById("noAccess").style.display     = "none";
 
-  // Load teams first (needed by all sections)
-  await loadTeams();
-  // Teams section is default active — already rendered by loadTeams()
+  // Load teams/leagues data needed by calendar color rendering and import
+  await loadTeamsData();
+  // Show import section by default
+  switchSection("import");
 });

@@ -23,6 +23,7 @@
       <a href="admin.html">Overview</a>
       <a href="admin-games.html">Games</a>
       <a href="admin-scheduler.html" class="admin-subnav-active">Scheduler</a>
+      <a href="admin-teams.html">Teams</a>
       <a href="admin-tournament.html">Tournaments</a>
       <a href="admin-payroll.html">Payroll</a>
       <a href="admin-facilities.html">Facilities</a>
@@ -37,176 +38,10 @@
 
     <!-- ── Section nav ───────────────────────────────────────────────────────── -->
     <div class="sched-section-nav" id="schedSecNav">
-      <button class="sched-sec-btn active" data-section="teams">Teams</button>
-      <button class="sched-sec-btn" data-section="leagues">Leagues</button>
-      <button class="sched-sec-btn" data-section="import">Import</button>
+      <button class="sched-sec-btn active" data-section="import">Import</button>
       <button class="sched-sec-btn" data-section="calendar">Calendar</button>
       <button class="sched-sec-btn" data-section="practices">Practices</button>
       <button class="sched-sec-btn" data-section="settings">Settings</button>
-    </div>
-
-    <!-- ════════════════════════════════════════════════════════════════════════
-         TEAMS SECTION
-         ════════════════════════════════════════════════════════════════════════ -->
-    <div id="sec-teams">
-      <div class="document-note" style="margin-bottom:16px">
-        <p style="margin:0">Manage teams, their iCal feeds, display colors, and whether home games automatically need umpires. These settings drive conflict detection, calendar color-coding, and import defaults.</p>
-      </div>
-
-      <!-- Team list -->
-      <div id="teamList" style="margin-bottom:16px"></div>
-
-      <!-- Add / Edit team form -->
-      <div id="teamFormWrap">
-        <h3 id="teamFormTitle" style="margin-bottom:12px">Add Team</h3>
-        <form id="teamForm" class="signup-form">
-          <input type="hidden" id="teamEditIndex" value="" />
-          <div class="form-row">
-            <div class="form-group">
-              <label for="tName">Team Name</label>
-              <input type="text" id="tName" placeholder="e.g. Crooks 12U Red" required />
-            </div>
-            <div class="form-group form-group--sm">
-              <label for="tDivision">Division</label>
-              <select id="tDivision" required>
-                <option value="">-- Select --</option>
-                <option value="10U">10U</option>
-                <option value="12U">12U</option>
-                <option value="14U">14U</option>
-                <option value="HS JV">HS JV</option>
-                <option value="HS Varsity">HS Varsity</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="tCity">City Program
-                <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — links to city schedule imports</span>
-              </label>
-              <select id="tCity">
-                <option value="">-- None --</option>
-                <option value="City of Crooks">City of Crooks</option>
-                <option value="City of Colton">City of Colton</option>
-              </select>
-            </div>
-            <div class="form-group form-group--sm">
-              <label for="tColor">Color</label>
-              <input type="color" id="tColor" value="#601929" style="height:38px;padding:2px 4px;border-radius:6px;border:1px solid #555;background:var(--field);cursor:pointer" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="tIcsUrl">GameChanger iCal URL <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
-            <input type="url" id="tIcsUrl" placeholder="https://gc.com/..." />
-          </div>
-          <div style="margin-bottom:12px">
-            <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
-              <input type="checkbox" id="tNeedsUmpire" />
-              Home games for this team need an umpire
-              <span style="color:var(--light-text);font-size:0.85rem">(auto-applied on import)</span>
-            </label>
-          </div>
-          <div class="form-group" style="margin-bottom:16px">
-            <label for="tLeague">Competitive League
-              <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — e.g. MinnDak, VFW (optional)</span>
-            </label>
-            <select id="tLeague">
-              <option value="">— No league —</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin-bottom:16px">
-            <label for="tCoach">Head Coach
-              <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — approved coaches only (optional)</span>
-            </label>
-            <select id="tCoach">
-              <option value="">— No coach assigned —</option>
-            </select>
-          </div>
-          <div class="page-actions" style="margin-top:0">
-            <button type="submit" class="btn" id="teamFormSubmitBtn">Add Team</button>
-            <button type="button" class="btn print-btn" id="teamFormCancelBtn" style="display:none">Cancel</button>
-          </div>
-          <p id="teamFormMsg" class="signup-message" aria-live="polite"></p>
-        </form>
-      </div>
-    </div>
-
-    <!-- ════════════════════════════════════════════════════════════════════════
-         LEAGUES SECTION
-         ════════════════════════════════════════════════════════════════════════ -->
-    <div id="sec-leagues" style="display:none">
-      <div class="document-note" style="margin-bottom:16px">
-        <p style="margin:0">Manage the leagues your teams compete in. Each league can have a website, multiple contacts, and home field locations. Assign teams to a league in the <strong>Teams</strong> tab.</p>
-      </div>
-
-      <!-- League list -->
-      <div id="leagueList" style="margin-bottom:24px">
-        <p style="color:var(--light-text)">Loading leagues…</p>
-      </div>
-
-      <!-- Add / Edit league form -->
-      <div id="leagueFormWrap">
-        <h3 id="leagueFormTitle" style="margin-bottom:12px">Add League</h3>
-        <form id="leagueForm" class="signup-form">
-          <input type="hidden" id="leagueEditId" value="" />
-
-          <div class="form-row">
-            <div class="form-group">
-              <label for="lName">League Name</label>
-              <input type="text" id="lName" placeholder="e.g. SD VFW Baseball" required />
-            </div>
-            <div class="form-group form-group--sm">
-              <label for="lDivision">Primary Division</label>
-              <select id="lDivision">
-                <option value="">Multiple / Mixed</option>
-                <option value="10U">10U</option>
-                <option value="12U">12U</option>
-                <option value="14U">14U</option>
-                <option value="HS JV">HS JV</option>
-                <option value="HS Varsity">HS Varsity</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label for="lWebsite">League Website</label>
-            <input type="url" id="lWebsite" placeholder="https://sdvfwbaseball.com" />
-          </div>
-
-          <div class="form-group">
-            <label for="lNotes">Notes <span style="font-weight:normal;color:var(--light-text)">(optional — schedule quirks, playoff format, etc.)</span></label>
-            <textarea id="lNotes" rows="2" placeholder="Any notes for admins or umpires about this league…"
-              style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
-          </div>
-
-          <!-- Home Game Locations -->
-          <div style="margin-bottom:16px">
-            <label style="display:block;margin-bottom:6px">
-              Home Game Locations
-              <span style="font-weight:normal;color:var(--light-text);font-size:0.85rem">(facilities where this league normally plays)</span>
-            </label>
-            <div id="lLocationsWrap" style="display:flex;flex-wrap:wrap;gap:4px 16px">
-              <p style="color:var(--light-text);font-size:0.85rem;margin:0">Loading facilities…</p>
-            </div>
-          </div>
-
-          <!-- Contacts -->
-          <div style="margin-bottom:16px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <label style="margin:0">Contacts</label>
-              <button type="button" id="addLeagueContactBtn" class="btn print-btn"
-                style="font-size:0.82rem;padding:4px 12px">+ Add Contact</button>
-            </div>
-            <div id="lContactsWrap"></div>
-            <p style="color:var(--light-text);font-size:0.82rem;margin:4px 0 0" id="lContactsHint">No contacts added yet.</p>
-          </div>
-
-          <div class="page-actions" style="margin-top:0">
-            <button type="submit" class="btn" id="leagueFormSubmitBtn">Add League</button>
-            <button type="button" class="btn print-btn" id="leagueFormCancelBtn" style="display:none">Cancel</button>
-          </div>
-          <p id="leagueFormMsg" class="signup-message" aria-live="polite"></p>
-        </form>
-      </div>
     </div>
 
     <!-- ════════════════════════════════════════════════════════════════════════
@@ -215,7 +50,7 @@
     <div id="sec-import" style="display:none">
       <div class="document-note" style="margin-bottom:16px">
         <p>Import games from team iCal calendar feeds or from a CSV spreadsheet. Games are checked for field-time conflicts, lighting restrictions, and division mismatches before being added to the schedule.</p>
-        <p style="margin-bottom:0">Add or edit team iCal feeds on the <a href="#" onclick="switchSectionPublic('teams');return false">Teams</a> tab. Game durations and the late-start cutoff are configured on the <a href="#" onclick="switchSectionPublic('settings');return false">Settings</a> tab.</p>
+        <p style="margin-bottom:0">Add or edit team iCal feeds on the <a href="admin-teams.html">Teams</a> page. Game durations and the late-start cutoff are configured on the <a href="#" onclick="switchSectionPublic('settings');return false">Settings</a> tab.</p>
       </div>
 
       <!-- Import mode toggle -->
