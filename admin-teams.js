@@ -43,17 +43,21 @@ document.querySelectorAll(".sched-sec-btn").forEach(btn => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function loadTeams() {
+  // Fetch teams independently so leagues/coaches failures never wipe team data
   try {
-    const [teamsSnap, leaguesSnap] = await Promise.all([
-      getDoc(doc(db, "config/teamCalendars")),
-      getDocs(query(collection(db, "leagues"), orderBy("name"))),
-    ]);
-    teams   = teamsSnap.exists() ? (teamsSnap.data().teams || []) : [];
-    leagues = leaguesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const teamsSnap = await getDoc(doc(db, "config/teamCalendars"));
+    teams = teamsSnap.exists() ? (teamsSnap.data().teams || []) : [];
   } catch {
     teams = [];
   }
-  // Load coaches separately — a missing composite index should not break the team list
+  // Leagues fetch — failure is isolated
+  try {
+    const leaguesSnap = await getDocs(query(collection(db, "leagues"), orderBy("name")));
+    leagues = leaguesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch {
+    leagues = [];
+  }
+  // Coaches fetch — a missing composite index should not break the team list
   try {
     const coachesSnap = await getDocs(query(collection(db, "coaches"), where("approved", "==", true)));
     teamCoaches = coachesSnap.docs
