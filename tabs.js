@@ -10,8 +10,10 @@ const activePage = (() => {
   return "home";
 })();
 
-function a(id, href, label, active) {
-  return `<a href="${href}" class="mobile-tab${active ? " active" : ""}" id="${id}"><span>${label}</span></a>`;
+function a(id, href, icon, label, active) {
+  return `<a href="${href}" class="mobile-tab${active ? " active" : ""}" id="${id}">
+    <span class="tab-icon">${icon}</span><span class="tab-label">${label}</span>
+  </a>`;
 }
 
 function injectTabBar() {
@@ -21,12 +23,20 @@ function injectTabBar() {
   bar.className = "mobile-tabs";
   bar.setAttribute("aria-label", "Mobile navigation");
   bar.innerHTML = `
-    ${a("mt-home",  "index.html",    "Home",  activePage === "home")}
-    ${a("mt-games", "schedule.html", "Games", activePage === "games")}
-    <a href="fields.html"   class="mobile-tab${activePage === "fields"   ? " active" : ""}" id="mt-fields"   style="display:none"><span>Fields</span></a>
-    <a href="incident.html" class="mobile-tab${activePage === "reports"  ? " active" : ""}" id="mt-reports"  style="display:none"><span>Reports</span></a>
-    <a href="admin.html"    class="mobile-tab${activePage === "admin"    ? " active" : ""}" id="mt-admin"    style="display:none"><span>Admin</span></a>
-    <button type="button" class="mobile-tab" id="mt-account"><span>Account</span></button>`;
+    ${a("mt-home",  "index.html",    "🏠", "Home",    activePage === "home")}
+    ${a("mt-games", "schedule.html", "⚾", "Games",   activePage === "games")}
+    <a href="fields.html"   class="mobile-tab${activePage === "fields"  ? " active" : ""}" id="mt-fields"  style="display:none">
+      <span class="tab-icon">🏟</span><span class="tab-label">Fields</span>
+    </a>
+    <a href="incident.html" class="mobile-tab${activePage === "reports" ? " active" : ""}" id="mt-reports" style="display:none">
+      <span class="tab-icon">📋</span><span class="tab-label">Reports</span>
+    </a>
+    <a href="admin.html"    class="mobile-tab${activePage === "admin"   ? " active" : ""}" id="mt-admin"   style="display:none">
+      <span class="tab-icon">⚙️</span><span class="tab-label">Admin</span>
+    </a>
+    <button type="button" class="mobile-tab" id="mt-account">
+      <span class="tab-icon">👤</span><span class="tab-label">Account</span>
+    </button>`;
   document.body.appendChild(bar);
   document.getElementById("mt-account")?.addEventListener("click", () => {
     document.getElementById("hamburgerBtn")?.click();

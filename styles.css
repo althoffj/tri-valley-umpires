@@ -35,20 +35,28 @@ body {
 
 .hamburger-btn {
   position: absolute;
-  right: 16px;
+  right: 14px;
   top: 50%;
   transform: translateY(-50%);
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.3);
   color: #fff;
-  font-size: 1.1rem;
-  padding: 7px 13px;
-  border-radius: 6px;
+  font-size: 1.25rem;
+  padding: 10px 16px;
+  border-radius: 8px;
   cursor: pointer;
   line-height: 1;
   z-index: 10;
+  min-width: 48px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
 }
-.hamburger-btn:hover { background: rgba(255,255,255,0.1); }
+.hamburger-btn:hover,
+.hamburger-btn:active { background: rgba(255,255,255,0.18); }
 
 /* Auth dropdown slide-in panel */
 .auth-overlay {
@@ -1297,7 +1305,7 @@ th {
 
 @media (max-width: 640px) {
   body {
-    padding-bottom: 72px;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
   }
 
   .mobile-tabs {
@@ -1306,12 +1314,12 @@ th {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 60px;
+    height: 64px;
     background: #111;
-    border-top: 1px solid #2a2a2a;
+    border-top: 1px solid #333;
     z-index: 900;
-    safe-area-inset-bottom: env(safe-area-inset-bottom);
     padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.5);
   }
 }
 
@@ -1321,29 +1329,45 @@ th {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   text-decoration: none;
-  color: #666;
-  font-size: 0.62rem;
+  color: #777;
+  font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 6px 2px;
+  letter-spacing: 0.05em;
+  padding: 8px 4px;
   cursor: pointer;
   background: none;
   border: none;
-  border-top: 2px solid transparent;
-  transition: color 0.12s, border-color 0.12s;
+  border-top: 3px solid transparent;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
   line-height: 1;
   -webkit-tap-highlight-color: transparent;
+  min-width: 44px;
+}
+
+.mobile-tab:active {
+  background: rgba(255,255,255,0.06);
 }
 
 .mobile-tab:hover {
-  color: #aaa;
+  color: #bbb;
 }
 
 .mobile-tab.active {
-  color: #d4737c;
+  color: #e8909a;
   border-top-color: var(--accent);
+}
+
+.tab-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+  display: block;
+}
+
+.tab-label {
+  display: block;
 }
 
 /* ── Analytics dashboard ───────────────────────────────────────── */
@@ -1526,6 +1550,32 @@ nav > a.active {
 @media (max-width: 640px) {
   nav#mainNav {
     display: none;
+  }
+}
+
+/* Tablet nav — larger tap targets (641px–900px) */
+@media (min-width: 641px) and (max-width: 900px) {
+  nav#mainNav {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  nav#mainNav > a {
+    padding: 12px 16px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .nav-trigger {
+    padding: 12px 16px;
+    min-height: 44px;
+    font-size: 0.95rem;
+  }
+
+  .nav-dropdown a {
+    padding: 14px 18px;
+    font-size: 0.95rem;
   }
 }
 
