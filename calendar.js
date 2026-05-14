@@ -1,6 +1,6 @@
 // calendar.js — Public umpire calendar: month + list views, filters, practices
 import { db, auth } from "./firebase.js";
-import { isApproved, getCurrentUser } from "./auth.js";
+import { isApproved, isAdmin, getCurrentUser } from "./auth.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   collection, getDocs, getDoc, query, orderBy, doc
@@ -46,6 +46,13 @@ function fmtTime(t) {
   if (!t) return "";
   const [h, m] = t.split(":").map(Number);
   return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"}`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-").map(Number);
+  const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(y, m-1, d).getDay()];
+  return `${dow}, ${m}/${d}/${y}`;
 }
 
 function esc(v) {
@@ -193,8 +200,9 @@ function renderMonth() {
       const total     = (g.umpireSlots||[]).length;
       const awayLabel = isAway ? `<div style="font-size:0.62rem;color:#f59e42">↗ Away</div>` : "";
       html += `<div class="cal-card${mine ? " cal-card-mine" : ""}${isRef ? " cal-card-ref" : ""}"
-        style="border-left-color:${color}${isMuted ? ";opacity:0.5;border-style:dashed" : ""}${isRef ? ";opacity:0.7" : ""}"
-        title="${isMuted ? (g.cancellationType==="rainout"?"Rain Out":"Rescheduled")+" · " : ""}${isAway ? "Away · " : ""}${esc(g.city||"")} ${esc(g.division||"")} · ${g.field||""}">
+        data-game-id="${esc(g.id)}"
+        style="border-left-color:${color}${isMuted ? ";opacity:0.5;border-style:dashed" : ""}${isRef ? ";opacity:0.7" : ""};cursor:pointer"
+        title="Click for details">
         <div style="font-size:0.7rem;color:var(--light-text)">${isMuted ? mutedIcon+" " : ""}${g.time ? fmtTime(g.time).replace(":00","") : ""} ${esc(g.division||"")}</div>
         <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(g.city||"Game")}</div>
         ${awayLabel}${mine ? `<div style="font-size:0.65rem;color:#b8f2c4">★ Yours</div>` : ""}
@@ -210,8 +218,10 @@ function renderMonth() {
     }
 
     practicesToShow.forEach(p => {
-      html += `<div class="cal-card practice" style="border-left-color:#5b8dd9"
-        title="Practice: ${esc(p.teamName||"")} · ${p.field||""}">
+      html += `<div class="cal-card practice"
+        data-practice-id="${esc(p.id)}"
+        style="border-left-color:#5b8dd9;cursor:pointer"
+        title="Click for details">
         <div style="font-size:0.7rem;color:#8ab4f8">${p.startTime ? fmtTime(p.startTime).replace(":00","") : "Practice"}</div>
         <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:0.78rem">${esc(p.teamName||"Practice")}</div>
       </div>`;
@@ -286,7 +296,8 @@ function renderList() {
       const assigned  = (g.umpireSlots||[]).filter(s => s.assignedUid).length;
       const total     = (g.umpireSlots||[]).length;
 
-      html += `<div class="cal-list-item${isMuted ? " cal-cancelled-muted" : ""}${isCancel ? " cal-cancelled-muted" : ""}${isRef ? " cal-ref-item" : ""}">
+      html += `<div class="cal-list-item${isMuted ? " cal-cancelled-muted" : ""}${isCancel ? " cal-cancelled-muted" : ""}${isRef ? " cal-ref-item" : ""}"
+        data-game-id="${esc(g.id)}" style="cursor:pointer">
         <div class="cal-list-time">${g.time ? fmtTime(g.time) : "—"}</div>
         <div class="cal-list-body">
           <div class="cal-list-primary">
@@ -310,7 +321,7 @@ function renderList() {
 
     dPractices.sort((a,b) => (a.startTime||"").localeCompare(b.startTime||""));
     dPractices.forEach(p => {
-      html += `<div class="cal-list-item">
+      html += `<div class="cal-list-item" data-practice-id="${esc(p.id)}" style="cursor:pointer">
         <div class="cal-list-time">${p.startTime ? fmtTime(p.startTime) : "—"}</div>
         <div class="cal-list-body">
           <div class="cal-list-primary">
@@ -366,6 +377,122 @@ function updateMyGamesBtn() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+
+// ── Detail modal ──────────────────────────────────────────────────────────────
+
+function openDetailModal(html) {
+  const content = document.getElementById("calDetailContent");
+  const modal   = document.getElementById("calDetailModal");
+  if (!content || !modal) return;
+  content.innerHTML = html;
+  modal.style.display = "flex";
+  document.body.style.overflow = "hidden";
+}
+
+function closeDetailModal() {
+  const modal = document.getElementById("calDetailModal");
+  if (modal) modal.style.display = "none";
+  document.body.style.overflow = "";
+}
+
+function openGameDetail(gameId) {
+  const g = allGames.find(x => x.id === gameId);
+  if (!g) return;
+
+  const admin    = isAdmin();
+  const approved = isApproved() || admin;
+  const mine     = isMyGame(g);
+  const isAway   = g.isAway === true;
+  const isMuted  = g.cancelled && (g.cancellationType === "rainout" || g.cancellationType === "rescheduled");
+  const isCancel = g.cancelled && !isMuted;
+  const teams    = g.homeTeam && g.awayTeam
+    ? (isAway ? `${esc(g.awayTeam)} <span style="color:var(--light-text)">@</span> ${esc(g.homeTeam)}`
+              : `${esc(g.homeTeam)} <span style="color:var(--light-text)">vs</span> ${esc(g.awayTeam)}`)
+    : esc(g.homeTeam || g.awayTeam || "");
+
+  let statusBadge;
+  if (isCancel)      statusBadge = `<span class="badge" style="background:#5a1a1a;color:#ffb4b4">⛔ Cancelled</span>`;
+  else if (isMuted)  statusBadge = `<span class="badge" style="background:#3a2a00;color:#ffcc80">${g.cancellationType === "rainout" ? "🌧 Rain Out" : "🔄 Rescheduled"}</span>`;
+  else if (g.date >= todayISO()) statusBadge = `<span class="badge" style="background:#17351f;color:#b8f2c4">Upcoming</span>`;
+  else               statusBadge = `<span class="badge" style="background:#2a2a2a;color:#aaa">Past</span>`;
+
+  const slots = g.umpireSlots || [];
+  const slotsHtml = slots.length ? `
+    <div style="margin-top:14px;border-top:1px solid #333;padding-top:12px">
+      <div style="font-size:0.78rem;color:var(--light-text);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Umpire Slots</div>
+      ${slots.map(s => {
+        const cls = s.type === "Plate" ? "plate" : s.type === "Field" ? "field" : "extra";
+        const who = s.assignedUid
+          ? (approved
+              ? `<span style="color:#b8f2c4">→ ${esc(s.assignedName || "Assigned")}</span>`
+              : `<span style="color:#b8f2c4">Filled</span>`)
+          : `<span style="color:#ffcc80">Open</span>`;
+        const pay = (admin && s.payRate) ? `<span style="color:var(--light-text);font-size:0.78rem;margin-left:auto">$${s.payRate}</span>` : "";
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span class="badge badge-${cls}">${esc(s.type)}</span>${who}${pay}
+        </div>`;
+      }).join("")}
+    </div>` : "";
+
+  const row = (label, val) => val
+    ? `<div style="display:flex;gap:12px;margin-bottom:7px">
+        <span style="color:var(--light-text);font-size:0.82rem;min-width:72px;padding-top:1px">${label}</span>
+        <span>${val}</span>
+       </div>`
+    : "";
+
+  const html = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px">
+      <div>
+        <h3 style="margin:0 0 6px;font-size:1.1rem">${esc(g.division || "Game")}</h3>
+        ${statusBadge}${mine ? ` <span style="font-size:0.78rem;color:#b8f2c4">★ Your game</span>` : ""}
+      </div>
+      ${admin ? `<a href="admin-games.html" class="btn print-btn" style="font-size:0.8rem;padding:5px 12px;white-space:nowrap;flex-shrink:0">Edit →</a>` : ""}
+    </div>
+    ${row("Date",    fmtDate(g.date))}
+    ${row("Time",    g.time ? fmtTime(g.time) : "")}
+    ${row("Program", g.city)}
+    ${teams ? row("Teams", teams) : ""}
+    ${row("Field",   g.field)}
+    ${slotsHtml}`;
+
+  openDetailModal(html);
+}
+
+function openPracticeDetail(practiceId) {
+  const p = allPractices.find(x => x.id === practiceId);
+  if (!p) return;
+
+  const admin = isAdmin();
+
+  const row = (label, val) => val
+    ? `<div style="display:flex;gap:12px;margin-bottom:7px">
+        <span style="color:var(--light-text);font-size:0.82rem;min-width:72px;padding-top:1px">${label}</span>
+        <span>${val}</span>
+       </div>`
+    : "";
+
+  const timeRange = p.startTime
+    ? fmtTime(p.startTime) + (p.endTime ? ` – ${fmtTime(p.endTime)}` : "")
+    : "";
+
+  const html = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px">
+      <div>
+        <h3 style="margin:0 0 6px;font-size:1.1rem">Practice</h3>
+        <span class="cal-list-badge practice" style="font-size:0.8rem">Practice</span>
+      </div>
+      ${admin ? `<a href="admin-scheduler.html" class="btn print-btn" style="font-size:0.8rem;padding:5px 12px;white-space:nowrap;flex-shrink:0">Manage →</a>` : ""}
+    </div>
+    ${row("Team",     p.teamName)}
+    ${row("Date",     fmtDate(p.date))}
+    ${row("Time",     timeRange)}
+    ${row("Division", p.division)}
+    ${row("Field",    p.field)}
+    ${p.notes ? `<div style="margin-top:10px;padding:10px;background:#1a1a2a;border-radius:6px;font-size:0.88rem;color:var(--light-text)">${esc(p.notes)}</div>` : ""}`;
+
+  openDetailModal(html);
+}
 
 async function loadData() {
   try {
@@ -488,6 +615,27 @@ document.getElementById("calFilterReset")?.addEventListener("click", () => {
   updateMyGamesBtn();
   updateFilterCount();
   render();
+});
+
+// ── Delegated click handlers for game/practice detail modal ──────────────────
+
+function handleCalClick(e) {
+  const gameCard     = e.target.closest("[data-game-id]");
+  const practiceCard = e.target.closest("[data-practice-id]");
+  if (gameCard)     openGameDetail(gameCard.dataset.gameId);
+  if (practiceCard) openPracticeDetail(practiceCard.dataset.practiceId);
+}
+
+document.getElementById("calMonthView")?.addEventListener("click", handleCalClick);
+document.getElementById("calListView")?.addEventListener("click",  handleCalClick);
+
+// Modal close: × button, backdrop click, Escape key
+document.getElementById("calDetailClose")?.addEventListener("click", closeDetailModal);
+document.getElementById("calDetailModal")?.addEventListener("click", e => {
+  if (e.target === e.currentTarget) closeDetailModal();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeDetailModal();
 });
 
 onAuthStateChanged(auth, user => {

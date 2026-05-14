@@ -80,8 +80,16 @@
     </p>
   </div>
 
+  <!-- Detail modal -->
+  <div id="calDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:1000;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--container);border-radius:12px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;position:relative">
+      <button id="calDetailClose" style="position:absolute;top:10px;right:14px;background:none;border:none;color:var(--light-text);font-size:1.5rem;cursor:pointer;line-height:1;padding:4px" aria-label="Close">×</button>
+      <div id="calDetailContent"></div>
+    </div>
+  </div>
+
   <script type="module" src="auth.js?v=17"></script>
-  <script type="module" src="calendar.js?v=12"></script>
+  <script type="module" src="calendar.js?v=13"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=3"></script>
   <script type="module" src="nav.js?v=2"></script>
