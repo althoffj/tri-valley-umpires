@@ -696,7 +696,8 @@ function renderGameRows() {
   const container = document.getElementById("gameSchedule");
   if (!container) return;
 
-  const visible = games.filter(gameMatchesFilter);
+  // Exclude games with no umpire slots configured — they have nothing for umpires to sign up for
+  const visible = games.filter(g => getSlots(g).length > 0).filter(gameMatchesFilter);
 
   if (visible.length === 0) {
     container.innerHTML = `<div class="document-note"><p style="margin:0;text-align:center;color:var(--light-text)">No games match this filter.</p></div>`;
