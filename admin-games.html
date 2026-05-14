@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Admin: Games - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=15" />
+  <link rel="stylesheet" href="styles.css?v=16" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
 </head>
 <body>
@@ -139,9 +139,33 @@
 
     <!-- ── Game List ──────────────────────────────────────────────────────── -->
     <h2>All Games</h2>
-    <div class="page-actions">
+
+    <!-- Status + date range row -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
       <button type="button" class="btn filter-btn filter-active" data-filter="upcoming">Upcoming</button>
       <button type="button" class="btn print-btn filter-btn" data-filter="all">All</button>
+      <div style="display:flex;gap:6px;align-items:center;margin-left:8px">
+        <label style="font-size:0.82rem;color:var(--light-text);white-space:nowrap">From</label>
+        <input type="date" id="gfFrom" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.82rem" />
+        <label style="font-size:0.82rem;color:var(--light-text);white-space:nowrap">To</label>
+        <input type="date" id="gfTo" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.82rem" />
+      </div>
+      <button type="button" class="btn print-btn" id="gfResetBtn" style="font-size:0.82rem;padding:5px 12px">Reset Filters</button>
+      <span id="gfCount" style="font-size:0.8rem;color:var(--light-text)"></span>
+    </div>
+
+    <!-- Dropdown filters row -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <select id="gfLeague"   class="gf-select"><option value="">All Programs</option></select>
+      <select id="gfDivision" class="gf-select"><option value="">All Divisions</option></select>
+      <select id="gfTeam"     class="gf-select"><option value="">All Teams</option></select>
+      <select id="gfFacility" class="gf-select"><option value="">All Facilities</option></select>
+      <select id="gfField"    class="gf-select"><option value="">All Fields</option></select>
+      <select id="gfUmpire"   class="gf-select">
+        <option value="">All Games</option>
+        <option value="needs">Needs Umpire</option>
+        <option value="ref">Reference (no umpire)</option>
+      </select>
     </div>
     <div class="schedule-section">
       <table>
@@ -340,7 +364,7 @@
   </div>
 
   <script type="module" src="auth.js?v=17"></script>
-  <script type="module" src="admin-games.js?v=18"></script>
+  <script type="module" src="admin-games.js?v=19"></script>
   <script type="module" src="/pwa.js?v=2"></script>
   <script type="module" src="/tabs.js?v=3"></script>
   <script type="module" src="nav.js?v=2"></script>

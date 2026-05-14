@@ -1370,6 +1370,17 @@ th {
   display: block;
 }
 
+/* ── Admin games filter selects ─────────────────────────────────────────── */
+.gf-select {
+  padding: 5px 8px;
+  background: var(--field);
+  color: var(--text);
+  border: 1px solid #555;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  min-width: 130px;
+}
+
 /* ── Analytics dashboard ───────────────────────────────────────── */
 .analytics-cards {
   display: grid;

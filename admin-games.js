@@ -20,10 +20,20 @@ import {
   runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-let allGames      = [];
-let gameFilter    = "upcoming";
-let currentRates  = { plate: 0, field: 0, extra: 0 };
+let allGames       = [];
+let gameFilter     = "upcoming";
+let currentRates   = { plate: 0, field: 0, extra: 0 };
 let facilitiesData = []; // [{ id, name, fields:[{name,notes}] }]
+
+// Active filter state
+let gfFrom     = "";
+let gfTo       = "";
+let gfLeague   = "";
+let gfDivision = "";
+let gfTeam     = "";
+let gfFacility = "";
+let gfField    = "";
+let gfUmpire   = "";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -162,25 +172,96 @@ async function loadGames() {
   }
 }
 
+function applyGameFilters() {
+  const today = todayISO();
+  return allGames.filter(g => {
+    // Status filter
+    if (gameFilter === "upcoming" && (g.cancelled || g.date < today)) return false;
+    // Date range
+    if (gfFrom && g.date < gfFrom) return false;
+    if (gfTo   && g.date > gfTo)   return false;
+    // League/city program
+    if (gfLeague && (g.city || "") !== gfLeague) return false;
+    // Division
+    if (gfDivision && (g.division || "") !== gfDivision) return false;
+    // Team — match teamName, homeTeam, or awayTeam
+    if (gfTeam) {
+      const haystack = [g.teamName, g.homeTeam, g.awayTeam].map(v => (v||"").toLowerCase());
+      if (!haystack.includes(gfTeam.toLowerCase())) return false;
+    }
+    // Facility
+    if (gfFacility && (g.facilityId || "") !== gfFacility) return false;
+    // Field
+    if (gfField && (g.field || "") !== gfField) return false;
+    // Umpire need
+    if (gfUmpire === "needs" && !(g.needsUmpires && !g.cancelled)) return false;
+    if (gfUmpire === "ref"   && g.needsUmpires !== false)           return false;
+    return true;
+  });
+}
+
+function buildFilterDropdowns() {
+  const leagues   = [...new Set(allGames.map(g => g.city   || "").filter(Boolean))].sort();
+  const divisions = [...new Set(allGames.map(g => g.division || "").filter(Boolean))].sort();
+  const teams     = [...new Set(
+    allGames.flatMap(g => [g.teamName, g.homeTeam, g.awayTeam].filter(Boolean))
+  )].sort();
+  const facilities = facilitiesData.map(f => ({ id: f.id, name: f.name }));
+  const fields    = [...new Set(allGames.map(g => g.field || "").filter(Boolean))].sort();
+
+  const populate = (selId, items, valKey, labelKey) => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    const cur = sel.value;
+    const first = sel.options[0].outerHTML;
+    sel.innerHTML = first + items.map(it =>
+      `<option value="${esc(valKey ? it[valKey] : it)}">${esc(labelKey ? it[labelKey] : it)}</option>`
+    ).join("");
+    sel.value = cur; // restore selection if still valid
+  };
+
+  populate("gfLeague",   leagues,    null,  null);
+  populate("gfDivision", divisions,  null,  null);
+  populate("gfTeam",     teams,      null,  null);
+  populate("gfFacility", facilities, "id",  "name");
+  populate("gfField",    fields,     null,  null);
+}
+
 function renderAdminGames() {
   const tbody = document.getElementById("adminGameBody");
-  const today = todayISO();
-  const visible = allGames.filter(g =>
-    gameFilter === "all" || (!g.cancelled && g.date >= today)
-  );
+  buildFilterDropdowns();
+  const visible = applyGameFilters();
+
+  const countEl = document.getElementById("gfCount");
+  if (countEl) countEl.textContent = `${visible.length} game${visible.length !== 1 ? "s" : ""}`;
 
   if (visible.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--light-text);text-align:center;padding:20px">No games.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--light-text);text-align:center;padding:20px">No games match the current filters.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = visible.map(g => {
     const slots = g.umpireSlots || [];
-    const teams = (g.homeTeam && g.awayTeam)
-      ? (g.isAway
-          ? `<div style="font-size:0.8rem;color:var(--light-text)"><span style="font-size:0.7rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px">AWAY</span>${esc(g.awayTeam)} @ ${esc(g.homeTeam)}</div>`
-          : `<div style="font-size:0.8rem;color:var(--light-text)">${esc(g.homeTeam)} vs ${esc(g.awayTeam)}</div>`)
+
+    // Home/Away indicator + teams line
+    const hasTeams = g.homeTeam || g.awayTeam;
+    let locationBadge = "";
+    if (hasTeams) {
+      if (g.isAway === true) {
+        locationBadge = `<span style="font-size:0.7rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px">AWAY</span>`;
+      } else if (g.isAway === false || g.needsUmpires === true) {
+        locationBadge = `<span style="font-size:0.7rem;background:rgba(22,101,52,0.4);color:#86efac;border:1px solid #166534;border-radius:4px;padding:1px 5px;margin-right:4px">HOME</span>`;
+      }
+    }
+    const teamsLine = hasTeams
+      ? `<div style="font-size:0.8rem;color:var(--light-text)">${locationBadge}${esc(g.homeTeam||"")}${g.homeTeam && g.awayTeam ? (g.isAway ? " @ " : " vs ") : ""}${esc(g.awayTeam||"")}</div>`
       : "";
+
+    // League badge (shown when city/program is set)
+    const leagueBadge = g.city
+      ? `<div style="font-size:0.72rem;color:#8ab4f8;margin-top:2px">${esc(g.city)}</div>`
+      : "";
+
     const canAssign = isAdmin() && !g.cancelled;
     const slotHtml = slots.length
       ? slots.map((s, i) => `
@@ -203,7 +284,6 @@ function renderAdminGames() {
     const notesHtml = g.notes
       ? `<div style="color:#ffe066;font-size:0.78rem;margin-top:4px" title="Admin notes">📋 ${esc(g.notes)}</div>` : "";
 
-    // Show Notify button when game has open slots
     const openSlotCount = !g.cancelled ? (g.umpireSlots || []).filter(s => !s.assignedUid).length : 0;
     const notifyBtn = openSlotCount > 0
       ? `<button class="btn print-btn notify-slots-btn" style="margin-bottom:4px;display:block;width:100%;font-size:0.8rem"
@@ -215,11 +295,12 @@ function renderAdminGames() {
        : g.cancellationType === "rescheduled" ? ";background:rgba(255,204,0,0.04)"
        : "")
       : "";
+
     return `
     <tr style="${g.cancelled ? "opacity:0.6" : ""}${g.possibleChange ? ";background:rgba(255,204,0,0.06)" : ""}${cancelTint}">
       <td>${esc(fmtDate(g.date))}</td>
       <td>${esc(fmtTime(g.time))}</td>
-      <td>${esc(g.city || "—")}${teams}</td>
+      <td>${teamsLine}${leagueBadge}</td>
       <td>${esc(g.division || "—")}</td>
       <td>${esc(g.type || "—")}</td>
       <td>${esc(g.field || "—")}${linkedBadge}</td>
@@ -930,6 +1011,28 @@ async function denyCancellation(requestId) {
 
 // Wire approve/deny via event delegation (add to existing document listener below)
 
+// ── Game filter controls ──────────────────────────────────────────────────────
+
+function wireGameFilters() {
+  const onChange = () => renderAdminGames();
+
+  document.getElementById("gfFrom")?.addEventListener("change",   e => { gfFrom     = e.target.value; onChange(); });
+  document.getElementById("gfTo")?.addEventListener("change",     e => { gfTo       = e.target.value; onChange(); });
+  document.getElementById("gfLeague")?.addEventListener("change", e => { gfLeague   = e.target.value; onChange(); });
+  document.getElementById("gfDivision")?.addEventListener("change",e => { gfDivision = e.target.value; onChange(); });
+  document.getElementById("gfTeam")?.addEventListener("change",   e => { gfTeam     = e.target.value; onChange(); });
+  document.getElementById("gfFacility")?.addEventListener("change",e => { gfFacility = e.target.value; onChange(); });
+  document.getElementById("gfField")?.addEventListener("change",  e => { gfField    = e.target.value; onChange(); });
+  document.getElementById("gfUmpire")?.addEventListener("change", e => { gfUmpire   = e.target.value; onChange(); });
+
+  document.getElementById("gfResetBtn")?.addEventListener("click", () => {
+    gfFrom = gfTo = gfLeague = gfDivision = gfTeam = gfFacility = gfField = gfUmpire = "";
+    ["gfFrom","gfTo","gfLeague","gfDivision","gfTeam","gfFacility","gfField","gfUmpire"]
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+    renderAdminGames();
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 authReadyPromise.then(() => {
@@ -945,4 +1048,5 @@ authReadyPromise.then(() => {
   loadGames();
   loadFacilitiesIntoSelects();
   loadPendingCancellations();
+  wireGameFilters();
 });
