@@ -965,6 +965,137 @@ async function exportRosterCSV() {
 
 document.getElementById("exportRosterBtn")?.addEventListener("click", exportRosterCSV);
 
+// ── Quick Stats ───────────────────────────────────────────────────────────────
+
+async function loadAdminQuickStats() {
+  const cardsEl  = document.getElementById("adminStatCards");
+  const todayEl  = document.getElementById("adminTodayGames");
+  if (!cardsEl) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const weekEnd = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  try {
+    // Load upcoming games (today through next 7 days) + all games for payroll
+    const [upcomingSnap, allGamesSnap] = await Promise.all([
+      getDocs(query(collection(db, "games"),
+        where("date", ">=", today),
+        where("date", "<=", weekEnd),
+        where("needsUmpires", "==", true),
+        orderBy("date"), orderBy("time"))),
+      getDocs(query(collection(db, "games"),
+        where("needsUmpires", "==", true))),
+    ]);
+
+    const upcoming = upcomingSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(g => !g.cancelled);
+    const todayGames = upcoming.filter(g => g.date === today);
+
+    // Today coverage
+    let todayOpen = 0, todayCovered = 0;
+    todayGames.forEach(g => {
+      (g.umpireSlots || []).forEach(s => {
+        if (s.assignedUid) todayCovered++;
+        else todayOpen++;
+      });
+    });
+
+    // This week open slots (excluding today — already shown separately)
+    let weekOpen = 0;
+    upcoming.filter(g => g.date > today).forEach(g => {
+      (g.umpireSlots || []).forEach(s => { if (!s.assignedUid) weekOpen++; });
+    });
+
+    // Outstanding payroll
+    let outstanding = 0;
+    allGamesSnap.docs.forEach(d => {
+      const g = d.data();
+      if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") return;
+      (g.umpireSlots || []).forEach(s => {
+        if (s.assignedUid && !s.paid) {
+          outstanding += Number(s.payRate ?? g.payRate ?? 0);
+        }
+      });
+    });
+
+    // Render stat cards
+    const todayColor = todayOpen > 0 ? "#f0a500" : todayGames.length > 0 ? "#b8f2c4" : "var(--text)";
+    const weekColor  = weekOpen  > 0 ? "#f0a500" : "var(--text)";
+    const payColor   = outstanding > 0 ? "#f0a500" : "var(--text)";
+
+    cardsEl.innerHTML = [
+      { label: "Today's Games", value: todayGames.length,
+        sub: todayGames.length === 0 ? "None scheduled"
+           : todayOpen > 0 ? `${todayOpen} slot${todayOpen !== 1 ? "s" : ""} open`
+           : "All covered ✓",
+        color: todayColor },
+      { label: "Open This Week", value: weekOpen,
+        sub: weekOpen === 0 ? "All filled ✓" : `Next 7 days`,
+        color: weekColor,
+        link: "admin-games.html" },
+      { label: "Outstanding Pay", value: `$${outstanding.toFixed(2)}`,
+        sub: outstanding === 0 ? "All paid up" : "Unpaid umpires",
+        color: payColor,
+        link: "admin-payroll.html" },
+    ].map(c => `
+      <div class="analytics-card" style="${c.link ? "cursor:pointer" : ""}"
+           ${c.link ? `onclick="location.href='${c.link}'"` : ""}>
+        <div class="analytics-card-value" style="color:${c.color}">${c.value}</div>
+        <div class="analytics-card-label">${c.label}</div>
+        <div style="font-size:0.72rem;color:var(--light-text);margin-top:2px">${c.sub}</div>
+      </div>`).join("");
+
+    // Render today's game list
+    if (todayGames.length === 0) {
+      todayEl.innerHTML = "";
+      return;
+    }
+
+    const rows = todayGames.map(g => {
+      const time = g.time ? fmtTime12(g.time) : "—";
+      const slots = (g.umpireSlots || []).map(s => {
+        const who = s.assignedName
+          ? `<span style="color:#b8f2c4">${esc(s.assignedName)}</span>`
+          : `<span style="color:#f0a500">Open</span>`;
+        const cls = s.type === "Plate" ? "plate" : s.type === "Field" ? "field" : "extra";
+        return `<span class="badge badge-${cls}" style="font-size:0.7rem">${esc(s.type)}</span> ${who}`;
+      }).join(" &nbsp; ");
+      return `<tr>
+        <td style="white-space:nowrap">${esc(time)}</td>
+        <td>${esc(g.division || "")}</td>
+        <td>${esc(g.field || "")}</td>
+        <td>${slots}</td>
+      </tr>`;
+    }).join("");
+
+    todayEl.innerHTML = `
+      <div style="font-size:0.8rem;color:var(--light-text);font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Today's Games</div>
+      <div class="schedule-section" style="margin-top:0">
+        <table style="font-size:0.88rem">
+          <thead><tr>
+            <th>Time</th><th>Division</th><th>Field</th><th>Umpires</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch (err) {
+    console.error("Quick stats error:", err);
+    cardsEl.innerHTML = `<p style="color:var(--light-text);font-size:0.85rem">Could not load stats.</p>`;
+  }
+}
+
+function fmtTime12(t) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hr   = h % 12 || 12;
+  return `${hr}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 authReadyPromise.then(async () => {
@@ -978,6 +1109,7 @@ authReadyPromise.then(async () => {
 
   await loadCurrentAdminDoc();
 
+  loadAdminQuickStats();
   loadPending();
   loadRoster();
 
