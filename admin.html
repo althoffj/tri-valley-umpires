@@ -27,6 +27,7 @@
       <a href="admin-payroll.html">Payroll</a>
       <a href="admin-facilities.html">Facilities</a>
       <a href="admin-incidents.html">Incidents</a>
+      <a href="admin-alerts.html">Alerts</a>
       <a href="admin-config.html">Config</a>
       <a href="admin-analytics.html">Analytics</a>
       <a href="admin-users.html">Users</a>
@@ -70,6 +71,12 @@
           <div><div style="font-weight:600">Analytics</div><div style="font-size:0.8rem;color:var(--light-text)">Season stats</div></div>
         </div>
       </a>
+      <a href="admin-alerts.html" style="text-decoration:none">
+        <div style="background:var(--container);border:1px solid #444;border-radius:10px;padding:16px 18px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.4rem">🔔</span>
+          <div><div style="font-weight:600">Alerts</div><div style="font-size:0.8rem;color:var(--light-text)">Announcements &amp; notifications</div></div>
+        </div>
+      </a>
     </div>
 
     <!-- ── Quick Stats ──────────────────────────────────────────────────────── -->
@@ -84,27 +91,6 @@
     <h2>⏳ Pending Approvals</h2>
     <p id="pendingNote" class="schedule-source"></p>
     <div id="pendingList" style="margin-bottom:28px"></div>
-
-    <!-- ── Announcements (super admins only) ────────────────────────────── -->
-    <div id="announcementsSection" style="display:none">
-      <h2>Announcements</h2>
-      <div class="document-note">
-        <p>Post announcements visible to all approved umpires on the home page. Active announcements appear at the top of the home page. Mark inactive to hide without deleting.</p>
-      </div>
-      <form id="addAnnouncementForm" class="signup-form" style="margin-bottom:24px">
-        <label for="announcementTitle">Title</label>
-        <input type="text" id="announcementTitle" placeholder="Important update" maxlength="100" required />
-        <label for="announcementBody">Message</label>
-        <textarea id="announcementBody" rows="3" placeholder="Details visible to all approved umpires…" maxlength="500" required style="resize:vertical;min-height:80px"></textarea>
-        <div class="page-actions" style="margin-top:12px">
-          <button type="submit" class="btn">Post Announcement</button>
-        </div>
-        <p id="announcementPostMsg" class="signup-message" aria-live="polite"></p>
-      </form>
-      <div id="announcementsList">
-        <p style="color:var(--light-text)">Loading announcements…</p>
-      </div>
-    </div>
 
   </div>
 
@@ -124,7 +110,7 @@
   </div>
 
   <script type="module" src="auth.js?v=17"></script>
-  <script type="module" src="admin.js?v=18"></script>
+  <script type="module" src="admin.js?v=19"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=3"></script>
   <script type="module" src="nav.js?v=2"></script>

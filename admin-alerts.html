@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Admin: Alerts - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=16" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+  <style>
+    .webhook-check-label { display:flex;align-items:center;gap:6px;font-size:0.88rem;cursor:pointer;user-select:none }
+    .webhook-card { background:var(--field);border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px }
+    .webhook-card-info { flex:1;min-width:0 }
+    .webhook-card-label { font-weight:600;margin-bottom:3px }
+    .webhook-card-url { font-size:0.78rem;color:var(--light-text);word-break:break-all }
+    .webhook-card-tags { display:flex;flex-wrap:wrap;gap:4px;margin-top:6px }
+    .webhook-tag { font-size:0.72rem;padding:2px 7px;border-radius:4px;background:#1e2a3a;color:#8ab4f8 }
+    .webhook-tag.div-tag { background:#1a2e1a;color:#86efac }
+    .webhook-tag.inactive { background:#3a1a1a;color:#ffb4b4 }
+    .al-ann-row { background:var(--field);border-radius:8px;padding:14px 16px;margin-bottom:10px }
+    .al-ann-row-header { display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:6px }
+    .al-ann-row-title { font-weight:600;color:white }
+    .al-ann-row-meta { display:flex;gap:6px;align-items:center;flex-wrap:wrap }
+    .al-ann-row-body { font-size:0.88rem;color:var(--light-text);margin-bottom:10px;white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical }
+    .al-ann-dates { font-size:0.78rem;color:var(--light-text);display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px }
+    .al-ann-dates span strong { color:var(--text) }
+    .al-ann-delete-btn { background:#7a1c1c }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html">Games</a>
+      <a href="admin-scheduler.html">Scheduler</a>
+      <a href="admin-tournament.html">Tournaments</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-incidents.html">Incidents</a>
+      <a href="admin-alerts.html" class="admin-subnav-active">Alerts</a>
+      <a href="admin-config.html">Config</a>
+      <a href="admin-analytics.html">Analytics</a>
+      <a href="admin-users.html">Users</a>
+    </nav>
+
+    <!-- ── Tab Bar ─────────────────────────────────────────────────────────── -->
+    <div class="cal-view-toggle" style="margin-bottom:24px">
+      <button class="cal-view-btn al-tab-btn active" data-pane="alPaneAnnouncements">Announcements</button>
+      <button class="cal-view-btn al-tab-btn" data-pane="alPaneBroadcast">Broadcast</button>
+      <button class="cal-view-btn al-tab-btn" data-pane="alPaneSlack">Slack</button>
+    </div>
+
+    <!-- ── Tab 1: Announcements ────────────────────────────────────────────── -->
+    <div id="alPaneAnnouncements" class="al-tab-pane">
+      <div class="document-note" style="margin-bottom:20px">
+        <p>Post announcements visible to all approved umpires on the home page. Active announcements appear at the top of the home page. Mark inactive to hide without deleting.</p>
+      </div>
+
+      <form id="alAddAnnouncementForm" class="signup-form" style="margin-bottom:28px">
+        <label for="alAnnouncementTitle">Title</label>
+        <input type="text" id="alAnnouncementTitle" placeholder="Important update" maxlength="100" required />
+
+        <label for="alAnnouncementBody">Message</label>
+        <textarea id="alAnnouncementBody" rows="3" placeholder="Details visible to all approved umpires…" maxlength="500" required style="resize:vertical;min-height:80px"></textarea>
+
+        <div class="page-actions" style="margin-top:12px">
+          <button type="submit" class="btn">Post Announcement</button>
+        </div>
+        <p id="alAnnouncementPostMsg" class="signup-message" aria-live="polite"></p>
+      </form>
+
+      <h3 style="margin:0 0 12px">All Announcements</h3>
+      <div id="alAnnouncementsList">
+        <p style="color:var(--light-text)">Loading announcements…</p>
+      </div>
+    </div>
+
+    <!-- ── Tab 2: Broadcast ────────────────────────────────────────────────── -->
+    <div id="alPaneBroadcast" class="al-tab-pane" style="display:none">
+
+      <!-- Push Notifications -->
+      <h2>Send Push Notification</h2>
+      <div class="document-note">
+        <p>Send a push notification to all umpires who have enabled notifications in their browser. Notifications appear even when the site is not open. If a Slack webhook is configured, the same message will also be posted there.</p>
+      </div>
+      <form id="alNotifForm" class="signup-form" style="margin-bottom:32px">
+        <label for="alNotifTitle">Title</label>
+        <input type="text" id="alNotifTitle" placeholder="New game added" maxlength="80" required />
+
+        <label for="alNotifBody">Message</label>
+        <input type="text" id="alNotifBody" placeholder="A new game has been added to the schedule. Check it out!" maxlength="200" required />
+
+        <label for="alSlackBroadcast">Also post to Slack webhook (optional)</label>
+        <input type="url" id="alSlackBroadcast" placeholder="https://hooks.slack.com/services/…" />
+
+        <div class="page-actions" style="margin-top:16px">
+          <button type="submit" class="btn" id="alSendNotifBtn">Send Notification</button>
+        </div>
+        <p id="alNotifMessage" class="signup-message" aria-live="polite"></p>
+      </form>
+
+      <!-- Email All Umpires -->
+      <h2>Email All Umpires</h2>
+      <div class="document-note">
+        <p>Sends an email to every approved, active umpire. Use for announcements, schedule updates, or anything that needs to reach the full roster. Emails are sent individually so replies come back to you.</p>
+      </div>
+      <form id="alEmailAllForm" class="signup-form">
+        <label for="alEmailSubject">Subject</label>
+        <input type="text" id="alEmailSubject" placeholder="2026 Season Update" maxlength="150" required />
+
+        <label for="alEmailBody">Message</label>
+        <textarea id="alEmailBody" rows="6" placeholder="Hi everyone,&#10;&#10;Just a quick note…" maxlength="4000" required style="resize:vertical"></textarea>
+
+        <div class="page-actions" style="margin-top:16px">
+          <button type="submit" class="btn" id="alSendEmailBtn">Send Email to All Umpires</button>
+        </div>
+        <p id="alEmailMessage" class="signup-message" aria-live="polite"></p>
+      </form>
+    </div>
+
+    <!-- ── Tab 3: Slack ────────────────────────────────────────────────────── -->
+    <div id="alPaneSlack" class="al-tab-pane" style="display:none">
+
+      <h2>Slack Webhooks</h2>
+      <div class="document-note">
+        <p>Configure Slack channels to receive notifications. Each webhook can subscribe to specific event types and optionally filter by division. Create webhooks in Slack: <strong>Apps → Incoming Webhooks → Add New Webhook to Workspace</strong>.</p>
+      </div>
+
+      <div id="slackWebhookList" style="margin-bottom:16px">
+        <p style="color:var(--light-text)">Loading…</p>
+      </div>
+      <div class="page-actions" style="margin-bottom:24px">
+        <button type="button" class="btn" id="addWebhookBtn">+ Add Webhook</button>
+      </div>
+
+      <!-- Inline add/edit form (hidden until needed) -->
+      <div id="webhookEditPanel" style="display:none;background:var(--field);border-radius:10px;padding:20px;margin-bottom:24px">
+        <h3 id="webhookEditTitle" style="margin-top:0">Add Webhook</h3>
+        <input type="hidden" id="webhookEditId" />
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="webhookLabel">Label</label>
+            <input type="text" id="webhookLabel" placeholder="e.g. Jeff (Admin)" maxlength="60" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="webhookUrl">Webhook URL</label>
+          <input type="url" id="webhookUrl" placeholder="https://hooks.slack.com/services/…" />
+        </div>
+
+        <label style="display:block;margin-bottom:8px;font-weight:600">Receive notifications for:</label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;margin-bottom:16px" id="webhookEventsGrid">
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="gameChanges" /> Game changes (new, updated, cancelled)</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="slotChanges" /> Slot signups &amp; cancellations</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="dayOfReminders" /> Day-of reminders (7 AM)</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="dailySummary" /> Daily game summary (7 AM)</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="openSlots" /> Open slot alerts</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="cancellationRequests" /> Cancellation requests</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="incidentReports" /> Incident reports</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="tournamentSwaps" /> Tournament field swaps</label>
+        </div>
+
+        <label style="display:block;margin-bottom:8px;font-weight:600">Division filter <span style="font-weight:normal;color:var(--light-text)">(leave all unchecked for all divisions)</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px" id="webhookDivisionsGrid">
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="10U" /> 10U</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="12U" /> 12U</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="14U" /> 14U</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="HS JV" /> HS JV</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="HS Varsity" /> HS Varsity</label>
+        </div>
+
+        <label class="webhook-check-label" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="webhookActive" checked /> Active
+        </label>
+
+        <div class="page-actions">
+          <button type="button" class="btn" id="webhookSaveBtn">Save Webhook</button>
+          <button type="button" class="btn print-btn" id="webhookCancelBtn">Cancel</button>
+          <button type="button" class="btn" id="webhookDeleteBtn" style="display:none;background:#7a1c1c;margin-left:auto">Delete Webhook</button>
+        </div>
+        <p id="webhookEditMessage" class="signup-message" aria-live="polite"></p>
+      </div>
+
+      <!-- Manual triggers -->
+      <h3 style="margin:0 0 8px">Manual Triggers</h3>
+      <p style="color:var(--light-text);font-size:0.9rem;margin:0 0 12px">Send today's Slack messages immediately — useful for testing.</p>
+      <div class="page-actions">
+        <button type="button" class="btn print-btn" id="triggerRemindersBtn">Send Day-of Reminders Now</button>
+        <button type="button" class="btn print-btn" id="triggerSummaryBtn">Send Daily Summary Now</button>
+      </div>
+      <p id="slackTriggerMessage" class="signup-message" aria-live="polite"></p>
+    </div>
+
+  </div>
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | Jeff Althoff: 605-380-0229
+      | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=17"></script>
+  <script type="module" src="admin-alerts.js?v=1"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=3"></script>
+  <script type="module" src="nav.js?v=2"></script>
+</body>
+</html>
