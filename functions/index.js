@@ -1479,6 +1479,11 @@ async function dayOfRemindersCore(db) {
     ].filter(Boolean));
     sent++;
   }
+
+  if (sent === 0 && hooks.jeff) {
+    await postSlack(hooks.jeff, `📋 *${fmtDateSlack(today)}* — No games scheduled today.`);
+  }
+
   return { sent };
 }
 
