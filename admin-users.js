@@ -355,6 +355,134 @@ document.getElementById("exportRosterBtn")?.addEventListener("click", exportRost
 document.getElementById("rosterSearch")?.addEventListener("input",    renderRoster);
 document.getElementById("rosterFilterStatus")?.addEventListener("change", renderRoster);
 
+// ── Create Umpire ─────────────────────────────────────────────────────────────
+
+const createUmpireAccountFn = httpsCallable(getFunctions(app), "createUmpireAccount");
+
+function openCreateUmpireModal() {
+  ["cuFirstName","cuLastName","cuEmail","cuPhone"].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = "";
+  });
+  setMsg("createUmpireMsg", "", "info");
+  document.getElementById("createUmpireModal").style.display = "flex";
+}
+
+function closeCreateUmpireModal() {
+  document.getElementById("createUmpireModal").style.display = "none";
+}
+
+document.getElementById("addUmpireBtn")?.addEventListener("click", openCreateUmpireModal);
+document.getElementById("cancelCreateUmpireBtn")?.addEventListener("click", closeCreateUmpireModal);
+document.getElementById("createUmpireModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("createUmpireModal")) closeCreateUmpireModal();
+});
+
+document.getElementById("saveCreateUmpireBtn")?.addEventListener("click", async () => {
+  const firstName = document.getElementById("cuFirstName").value.trim();
+  const lastName  = document.getElementById("cuLastName").value.trim();
+  const email     = document.getElementById("cuEmail").value.trim();
+  const phone     = document.getElementById("cuPhone").value.trim();
+  if (!firstName || !lastName || !email) {
+    setMsg("createUmpireMsg", "First name, last name, and email are required.", "error"); return;
+  }
+  const btn = document.getElementById("saveCreateUmpireBtn");
+  btn.disabled = true;
+  setMsg("createUmpireMsg", "Creating account…", "info");
+  try {
+    const result = await createUmpireAccountFn({ firstName, lastName, email, phone });
+    const { isNew } = result.data;
+    setMsg("createUmpireMsg",
+      isNew ? `✓ Account created. A password-setup email has been sent to ${email}.`
+            : `✓ Existing user linked as umpire.`,
+      "success");
+    await loadRoster();
+    setTimeout(closeCreateUmpireModal, 2000);
+  } catch (err) {
+    setMsg("createUmpireMsg", err.message || "Failed to create account.", "error");
+  } finally { btn.disabled = false; }
+});
+
+// ── Create Coach ──────────────────────────────────────────────────────────────
+
+const createCoachAccountFn = httpsCallable(getFunctions(app), "createCoachAccount");
+
+function openCreateCoachModal() {
+  ["ccFirstName","ccLastName","ccEmail","ccPhone","ccTeam","ccCity"].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = "";
+  });
+  const divEl = document.getElementById("ccDivision"); if (divEl) divEl.value = "";
+  setMsg("createCoachMsg", "", "info");
+  document.getElementById("createCoachModal").style.display = "flex";
+}
+
+function closeCreateCoachModal() {
+  document.getElementById("createCoachModal").style.display = "none";
+}
+
+document.getElementById("addCoachBtn")?.addEventListener("click", openCreateCoachModal);
+document.getElementById("cancelCreateCoachBtn")?.addEventListener("click", closeCreateCoachModal);
+document.getElementById("createCoachModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("createCoachModal")) closeCreateCoachModal();
+});
+
+document.getElementById("saveCreateCoachBtn")?.addEventListener("click", async () => {
+  const firstName = document.getElementById("ccFirstName").value.trim();
+  const lastName  = document.getElementById("ccLastName").value.trim();
+  const email     = document.getElementById("ccEmail").value.trim();
+  const phone     = document.getElementById("ccTeam") ? document.getElementById("ccPhone").value.trim() : "";
+  const teamName  = document.getElementById("ccTeam").value.trim();
+  const division  = document.getElementById("ccDivision").value;
+  const city      = document.getElementById("ccCity").value.trim();
+  if (!firstName || !lastName || !email) {
+    setMsg("createCoachMsg", "First name, last name, and email are required.", "error"); return;
+  }
+  const btn = document.getElementById("saveCreateCoachBtn");
+  btn.disabled = true;
+  setMsg("createCoachMsg", "Creating account…", "info");
+  try {
+    const result = await createCoachAccountFn({ firstName, lastName, email, phone, teamName, division, city });
+    const { isNew } = result.data;
+    setMsg("createCoachMsg",
+      isNew ? `✓ Account created. A password-setup email has been sent to ${email}.`
+            : `✓ Existing user linked as coach.`,
+      "success");
+    await loadCoachRoster();
+    setTimeout(closeCreateCoachModal, 2000);
+  } catch (err) {
+    setMsg("createCoachMsg", err.message || "Failed to create account.", "error");
+  } finally { btn.disabled = false; }
+});
+
+// ── Export Coach CSV ──────────────────────────────────────────────────────────
+
+async function exportCoachCSV() {
+  const btn = document.getElementById("exportCoachBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Exporting…"; }
+  try {
+    const snap = await getDocs(query(collection(db, "coaches"), orderBy("name")));
+    const headers = ["UID","Name","Email","Phone","Team","Division","City","Approved","Active"];
+    const rows = [headers.map(csvCell).join(",")];
+    snap.docs.forEach(d => {
+      const c = d.data();
+      rows.push([
+        d.id, c.name||"", c.email||"", c.phone||"",
+        c.teamName||"", c.division||"", c.city||"",
+        c.approved?"Yes":"No", c.active===false?"No":"Yes"
+      ].map(csvCell).join(","));
+    });
+    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement("a"), {
+      href: url, download: `coach-directory-${new Date().toISOString().slice(0,10)}.csv`
+    });
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  } catch (err) { alert("Export failed: " + err.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = "⬇ Export CSV"; } }
+}
+
+document.getElementById("exportCoachBtn")?.addEventListener("click", exportCoachCSV);
+
 // ── Admin Users Management ────────────────────────────────────────────────────
 
 const ROLE_DEFS = [

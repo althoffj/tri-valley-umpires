@@ -1850,6 +1850,161 @@ exports.createAdminUser = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PASS]
   return { uid, isNew, resetLink };
 });
 
+// ── Create umpire account (admin) ────────────────────────────────────────────
+// Creates a Firebase Auth user + approved umpires/{uid} doc. Sends a password
+// setup email to the new umpire so they can sign in.
+
+exports.createUmpireAccount = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PASS] }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db        = getFirestore();
+  const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { firstName, lastName, email, phone } = request.data;
+  if (!email || !firstName || !lastName)
+    throw new HttpsError("invalid-argument", "firstName, lastName, and email are required.");
+
+  const adminAuth = getAuth();
+  let uid; let isNew = false; let resetLink = null;
+  try {
+    const existing = await adminAuth.getUserByEmail(email.toLowerCase().trim());
+    uid = existing.uid;
+  } catch (err) {
+    if (err.code !== "auth/user-not-found") throw new HttpsError("internal", err.message);
+    const created = await adminAuth.createUser({
+      email:        email.toLowerCase().trim(),
+      displayName:  `${firstName} ${lastName}`,
+      emailVerified: false,
+    });
+    uid = created.uid; isNew = true;
+  }
+
+  // Don't overwrite an existing umpire profile
+  const umpRef = db.doc(`umpires/${uid}`);
+  const existing = await umpRef.get();
+  if (existing.exists) throw new HttpsError("already-exists", "An umpire profile already exists for this email.");
+
+  await umpRef.set({
+    firstName, lastName,
+    name:  `${firstName} ${lastName}`,
+    email: email.toLowerCase().trim(),
+    phone: phone || "",
+    approved: true,
+    active:   true,
+    createdAt: new Date().toISOString(),
+    createdBy: request.auth.uid,
+  });
+
+  if (isNew) {
+    try {
+      resetLink = await adminAuth.generatePasswordResetLink(
+        email.toLowerCase().trim(),
+        { url: "https://tri-valley-baseball-umpires.web.app/index.html" }
+      );
+    } catch (_) {}
+  }
+
+  // Welcome email (non-fatal)
+  try {
+    const APP_URL = "https://tri-valley-baseball-umpires.web.app";
+    const transport = buildTransport();
+    await transport.sendMail({
+      from:    `"Tri-Valley Umpires" <${process.env.GMAIL_USER}>`,
+      to:      email.toLowerCase().trim(),
+      subject: "Your Tri-Valley Umpire account is ready",
+      html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e8e8f0;padding:32px;border-radius:12px">
+        <h2 style="color:#7ec8f7;margin-top:0">Welcome to Tri-Valley Baseball Umpires!</h2>
+        <p>Hi ${firstName},</p>
+        <p>An administrator has created an umpire account for you on the Tri-Valley Baseball Umpires platform. Your account is already approved and ready to use.</p>
+        ${resetLink
+          ? `<p><a href="${resetLink}" style="background:#601929;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block">Set Your Password</a></p>
+             <p style="color:#aaa;font-size:0.85rem">This link expires in 24 hours. After setting your password you can sign in at <a href="${APP_URL}" style="color:#7ec8f7">${APP_URL}</a>.</p>`
+          : `<p>Sign in at <a href="${APP_URL}" style="color:#7ec8f7">${APP_URL}</a> using your email address. If you haven't set a password, use the Forgot Password link.</p>`}
+      </div>`,
+    });
+  } catch (mailErr) { console.error("Umpire welcome email failed:", mailErr.message); }
+
+  return { uid, isNew, resetLink };
+});
+
+// ── Create coach account (admin) ──────────────────────────────────────────────
+// Creates a Firebase Auth user + approved coaches/{uid} doc. Sends a password
+// setup email to the new coach.
+
+exports.createCoachAccount = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PASS] }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db        = getFirestore();
+  const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { firstName, lastName, email, phone, teamName, division, city } = request.data;
+  if (!email || !firstName || !lastName)
+    throw new HttpsError("invalid-argument", "firstName, lastName, and email are required.");
+
+  const adminAuth = getAuth();
+  let uid; let isNew = false; let resetLink = null;
+  try {
+    const existing = await adminAuth.getUserByEmail(email.toLowerCase().trim());
+    uid = existing.uid;
+  } catch (err) {
+    if (err.code !== "auth/user-not-found") throw new HttpsError("internal", err.message);
+    const created = await adminAuth.createUser({
+      email:        email.toLowerCase().trim(),
+      displayName:  `${firstName} ${lastName}`,
+      emailVerified: false,
+    });
+    uid = created.uid; isNew = true;
+  }
+
+  const coachRef = db.doc(`coaches/${uid}`);
+  const existing = await coachRef.get();
+  if (existing.exists) throw new HttpsError("already-exists", "A coach profile already exists for this email.");
+
+  await coachRef.set({
+    name:     `${firstName} ${lastName}`,
+    email:    email.toLowerCase().trim(),
+    phone:    phone    || "",
+    teamName: teamName || "",
+    division: division || "",
+    city:     city     || "",
+    approved: true,
+    active:   true,
+    role:     "coach",
+    createdAt: new Date().toISOString(),
+    createdBy: request.auth.uid,
+  });
+
+  if (isNew) {
+    try {
+      resetLink = await adminAuth.generatePasswordResetLink(
+        email.toLowerCase().trim(),
+        { url: "https://tri-valley-baseball-umpires.web.app/coach-portal.html" }
+      );
+    } catch (_) {}
+  }
+
+  try {
+    const APP_URL = "https://tri-valley-baseball-umpires.web.app";
+    const transport = buildTransport();
+    await transport.sendMail({
+      from:    `"Tri-Valley Umpires" <${process.env.GMAIL_USER}>`,
+      to:      email.toLowerCase().trim(),
+      subject: "Your Tri-Valley Coach Portal account is ready",
+      html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e8e8f0;padding:32px;border-radius:12px">
+        <h2 style="color:#7ec8f7;margin-top:0">Welcome to the Tri-Valley Coach Portal!</h2>
+        <p>Hi ${firstName},</p>
+        <p>An administrator has created a coach account for you${teamName ? ` for <strong>${teamName}</strong>` : ""}. Your account is active and ready to use.</p>
+        ${resetLink
+          ? `<p><a href="${resetLink}" style="background:#601929;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block">Set Your Password</a></p>
+             <p style="color:#aaa;font-size:0.85rem">This link expires in 24 hours. After setting your password you can sign in at <a href="${APP_URL}/coach-portal.html" style="color:#7ec8f7">the Coach Portal</a>.</p>`
+          : `<p>Sign in at <a href="${APP_URL}/coach-portal.html" style="color:#7ec8f7">the Coach Portal</a> using your email address.</p>`}
+      </div>`,
+    });
+  } catch (mailErr) { console.error("Coach welcome email failed:", mailErr.message); }
+
+  return { uid, isNew, resetLink };
+});
+
 // ── Delete umpire account (super admin only) ──────────────────────────────────
 // Permanently removes the Firestore umpire profile AND the Firebase Auth account.
 

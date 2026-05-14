@@ -310,19 +310,24 @@ document.getElementById("sSchedulingForm").addEventListener("submit", async func
 //  TEAMS SECTION
 // ══════════════════════════════════════════════════════════════════════════════
 
+let teamCoaches = []; // approved coaches for team-form dropdown
+
 async function loadTeams() {
   try {
-    const [teamsSnap, leaguesSnap] = await Promise.all([
+    const [teamsSnap, leaguesSnap, coachesSnap] = await Promise.all([
       getDoc(doc(db, "config/teamCalendars")),
       getDocs(query(collection(db, "leagues"), orderBy("name"))),
+      getDocs(query(collection(db, "coaches"), where("approved", "==", true), orderBy("name"))),
     ]);
-    teams   = teamsSnap.exists() ? (teamsSnap.data().teams || []) : [];
-    leagues = leaguesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    teams        = teamsSnap.exists() ? (teamsSnap.data().teams || []) : [];
+    leagues      = leaguesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    teamCoaches  = coachesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch {
     teams = [];
   }
   renderTeamList();
   populateLeagueSelector();
+  populateCoachSelector();
 }
 
 async function saveTeams(showMsg) {
@@ -346,7 +351,7 @@ function renderTeamList() {
     <div class="team-row">
       <span class="team-color-swatch" style="background:${esc(t.color || "#601929")}"></span>
       <span class="team-row-name">${esc(t.name)}</span>
-      <span class="team-row-meta">${esc(t.division || "")}${t.city ? " · " + esc(t.city) : ""}</span>
+      <span class="team-row-meta">${esc(t.division || "")}${t.city ? " · " + esc(t.city) : ""}${t.coachName ? " · Coach: " + esc(t.coachName) : ""}</span>
       ${t.needsUmpireForHome ? `<span class="team-needs-ump">⚾ Needs umpire</span>` : ""}
       ${t.leagueName ? `<span style="font-size:0.75rem;color:#8ab4f8;background:rgba(91,141,217,0.12);border:1px solid rgba(91,141,217,0.3);border-radius:4px;padding:1px 6px">🏆 ${esc(t.leagueName)}</span>` : ""}
       ${t.icsUrl ? `<span style="color:var(--light-text);font-size:0.78rem">📅 iCal linked</span>` : ""}
@@ -375,6 +380,7 @@ function startEditTeam(idx) {
   document.getElementById("tNeedsUmpire").checked = !!t.needsUmpireForHome;
   const leagueSel = document.getElementById("tLeague");
   if (leagueSel) leagueSel.value = t.leagueId || "";
+  populateCoachSelector(t.coachId || "");
   document.getElementById("teamFormTitle").textContent = "Edit Team";
   document.getElementById("teamFormSubmitBtn").textContent = "Save Changes";
   document.getElementById("teamFormCancelBtn").style.display = "";
@@ -407,6 +413,8 @@ document.getElementById("teamForm").addEventListener("submit", async e => {
   const msg = document.getElementById("teamFormMsg");
   const leagueId  = document.getElementById("tLeague")?.value || "";
   const leagueObj = leagues.find(l => l.id === leagueId);
+  const coachId   = document.getElementById("tCoach")?.value || "";
+  const coachObj  = teamCoaches.find(c => c.id === coachId);
   const teamData = {
     name:               document.getElementById("tName").value.trim(),
     division:           document.getElementById("tDivision").value,
@@ -416,6 +424,10 @@ document.getElementById("teamForm").addEventListener("submit", async e => {
     needsUmpireForHome: document.getElementById("tNeedsUmpire").checked,
     leagueId,
     leagueName:         leagueObj?.name || "",
+    coachId,
+    coachName:          coachObj?.name || "",
+    coachEmail:         coachObj?.email || "",
+    coachPhone:         coachObj?.phone || "",
   };
   if (!teamData.name) return;
 
@@ -470,6 +482,15 @@ function populateLeagueSelector() {
     leagues.map(l =>
       `<option value="${esc(l.id)}"${l.id === current ? " selected" : ""}>` +
       `${esc(l.name)}${l.division ? " (" + esc(l.division) + ")" : ""}</option>`
+    ).join("");
+}
+
+function populateCoachSelector(selectedId = "") {
+  const sel = document.getElementById("tCoach");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— No coach assigned —</option>' +
+    teamCoaches.map(c =>
+      `<option value="${esc(c.id)}"${c.id === selectedId ? " selected" : ""}>${esc(c.name)}${c.teamName ? " (" + esc(c.teamName) + ")" : ""}</option>`
     ).join("");
 }
 

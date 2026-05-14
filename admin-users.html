@@ -52,8 +52,11 @@
         <div id="pendingList" style="margin-bottom:28px"></div>
       </div>
 
-      <!-- Roster -->
-      <h2>Umpire Directory</h2>
+      <!-- Add Umpire -->
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <h2 style="margin:0">Umpire Directory</h2>
+        <button type="button" class="btn" id="addUmpireBtn" style="font-size:0.88rem;padding:7px 14px">+ Add Umpire</button>
+      </div>
       <div class="document-note" style="margin-bottom:16px">
         <p style="margin:0">All umpire accounts. Approved umpires can sign up for games. Inactive umpires are hidden from game signups but their records are retained. Super admins can edit account details, manage parent/guardian info for minors, and permanently delete accounts.</p>
       </div>
@@ -105,7 +108,13 @@
       </div>
 
       <!-- Coach directory -->
-      <h2>Coach Directory</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <h2 style="margin:0">Coach Directory</h2>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn" id="addCoachBtn" style="font-size:0.88rem;padding:7px 14px">+ Add Coach</button>
+          <button type="button" class="btn print-btn" id="exportCoachBtn" style="font-size:0.85rem;padding:5px 12px">⬇ Export CSV</button>
+        </div>
+      </div>
       <div class="document-note" style="margin-bottom:16px">
         <p style="margin:0">All coach accounts. Approved coaches can access the Coach Portal to view schedules, submit requests, and file reports. Deactivating a coach prevents sign-in but retains their record.</p>
       </div>
@@ -317,6 +326,78 @@
       <div class="page-actions" style="margin-top:20px">
         <button type="button" class="btn" id="savePermBtn">Save Permissions</button>
         <button type="button" class="btn print-btn" id="cancelPermBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Create Umpire Modal ────────────────────────────────────────────────── -->
+  <div id="createUmpireModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto">
+      <h2 style="margin-top:0">Add Umpire</h2>
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0;font-size:0.88rem">Creates a Firebase account and an approved umpire profile. A password-setup email is sent to the umpire so they can sign in.</p>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="cuFirstName">First Name *</label>
+          <input type="text" id="cuFirstName" required autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="cuLastName">Last Name *</label>
+          <input type="text" id="cuLastName" required autocomplete="off" />
+        </div>
+      </div>
+      <label for="cuEmail">Email *</label>
+      <input type="email" id="cuEmail" required autocomplete="off" />
+      <label for="cuPhone">Phone</label>
+      <input type="tel" id="cuPhone" placeholder="(605) 555-1234" autocomplete="off" />
+      <p id="createUmpireMsg" class="signup-message" aria-live="polite" style="margin-top:12px"></p>
+      <div class="page-actions" style="margin-top:20px">
+        <button type="button" class="btn" id="saveCreateUmpireBtn">Create Umpire</button>
+        <button type="button" class="btn print-btn" id="cancelCreateUmpireBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Create Coach Modal ──────────────────────────────────────────────────── -->
+  <div id="createCoachModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto">
+      <h2 style="margin-top:0">Add Coach</h2>
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0;font-size:0.88rem">Creates a Firebase account and an approved coach profile. A password-setup email is sent so they can sign in to the Coach Portal.</p>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="ccFirstName">First Name *</label>
+          <input type="text" id="ccFirstName" required autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="ccLastName">Last Name *</label>
+          <input type="text" id="ccLastName" required autocomplete="off" />
+        </div>
+      </div>
+      <label for="ccEmail">Email *</label>
+      <input type="email" id="ccEmail" required autocomplete="off" />
+      <label for="ccPhone">Phone</label>
+      <input type="tel" id="ccPhone" placeholder="(605) 555-1234" autocomplete="off" />
+      <label for="ccTeam">Team Name</label>
+      <input type="text" id="ccTeam" placeholder="e.g. Crooks 12U" autocomplete="off" />
+      <label for="ccDivision">Division</label>
+      <select id="ccDivision">
+        <option value="">-- Select --</option>
+        <option value="8U">8U</option>
+        <option value="10U">10U</option>
+        <option value="12U">12U</option>
+        <option value="14U">14U</option>
+        <option value="HS JV">HS JV</option>
+        <option value="HS Varsity">HS Varsity</option>
+      </select>
+      <label for="ccCity">City / Program</label>
+      <input type="text" id="ccCity" placeholder="e.g. Crooks" autocomplete="off" />
+      <p id="createCoachMsg" class="signup-message" aria-live="polite" style="margin-top:12px"></p>
+      <div class="page-actions" style="margin-top:20px">
+        <button type="button" class="btn" id="saveCreateCoachBtn">Create Coach</button>
+        <button type="button" class="btn print-btn" id="cancelCreateCoachBtn">Cancel</button>
       </div>
     </div>
   </div>
