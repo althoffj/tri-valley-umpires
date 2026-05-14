@@ -45,7 +45,7 @@ function isSuperAdmin() {
 
 // ── Section switching ─────────────────────────────────────────────────────────
 
-const SECTIONS = ["umpires", "admins"];
+const SECTIONS = ["umpires", "coaches", "admins"];
 
 function switchSection(name) {
   SECTIONS.forEach(s => {
@@ -55,7 +55,8 @@ function switchSection(name) {
     if (btn) btn.classList.toggle("active", s === name);
   });
 
-  if (name === "umpires" && !rosterLoaded) { loadRoster(); loadPending(); }
+  if (name === "umpires" && !rosterLoaded)  { loadRoster(); loadPending(); }
+  if (name === "coaches" && !coachesLoaded) { loadCoachRoster(); loadCoachPending(); coachesLoaded = true; }
   if (name === "admins"  && isSuperAdmin() && !adminsLoaded) {
     loadAdminUsers();
     renderAddPermCards();
@@ -67,8 +68,9 @@ document.querySelectorAll(".sched-sec-btn[data-section]").forEach(btn => {
   btn.addEventListener("click", () => switchSection(btn.dataset.section));
 });
 
-let rosterLoaded = false;
-let adminsLoaded = false;
+let rosterLoaded  = false;
+let coachesLoaded = false;
+let adminsLoaded  = false;
 
 // ── Pending Approvals ─────────────────────────────────────────────────────────
 
@@ -708,6 +710,243 @@ async function saveAccountEdits() {
   }
 }
 
+// ── Coaches ───────────────────────────────────────────────────────────────────
+
+let allCoaches = [];
+
+async function loadCoachPending() {
+  const noteEl = document.getElementById("coachPendingNote");
+  const listEl = document.getElementById("coachPendingList");
+  const sectEl = document.getElementById("coachPendingSection");
+  if (!listEl) return;
+  try {
+    const snap = await getDocs(query(
+      collection(db, "coaches"),
+      where("approved", "==", false)
+    ));
+    if (snap.empty) {
+      if (noteEl) noteEl.textContent = "No pending coach approvals.";
+      if (listEl) listEl.innerHTML   = "";
+      if (sectEl) sectEl.style.display = "none";
+      return;
+    }
+    if (sectEl) sectEl.style.display = "";
+    if (noteEl) noteEl.textContent = `${snap.size} coach${snap.size !== 1 ? "es" : ""} awaiting approval.`;
+    listEl.innerHTML = snap.docs.map(d => {
+      const c = { id: d.id, ...d.data() };
+      return `<div class="document-note" style="margin-bottom:12px">
+        <strong>${esc(c.name || "")}</strong>
+        <span style="color:var(--light-text);font-size:0.85rem;margin-left:8px">${esc(c.email || "")}</span>
+        ${c.phone ? `<span style="color:var(--light-text);font-size:0.85rem;margin-left:8px">${esc(c.phone)}</span>` : ""}
+        <br><span style="font-size:0.82rem;color:#aaa">${esc(c.teamName || "")} · ${esc(c.division || "")} · ${esc(c.city || "")}</span>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn approve-coach-pending-btn" data-uid="${esc(c.id)}" data-name="${esc(c.name || "")}">✓ Approve</button>
+          <button class="btn print-btn deny-coach-pending-btn" data-uid="${esc(c.id)}" data-name="${esc(c.name || "")}"
+            style="color:#ff8a8a;border-color:#ff8a8a">✗ Deny</button>
+        </div>
+        <p class="signup-message" id="coachPendingMsg_${esc(c.id)}" aria-live="polite"></p>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    if (noteEl) noteEl.textContent = "Failed to load pending coaches.";
+    console.error(err);
+  }
+}
+
+async function approveCoachPending(uid, name) {
+  try {
+    await updateDoc(doc(db, "coaches", uid), { approved: true, approvedAt: serverTimestamp() });
+    setMsg(`coachPendingMsg_${uid}`, "Approved!", "success");
+    setTimeout(() => { loadCoachPending(); loadCoachRoster(); }, 1000);
+  } catch (err) {
+    setMsg(`coachPendingMsg_${uid}`, err.message, "error");
+  }
+}
+
+async function denyCoachPending(uid, name) {
+  if (!confirm(`Deny and remove coach application for ${name}? This cannot be undone.`)) return;
+  try {
+    await deleteDoc(doc(db, "coaches", uid));
+    setMsg(`coachPendingMsg_${uid}`, "Removed.", "warning");
+    setTimeout(loadCoachPending, 800);
+  } catch (err) {
+    setMsg(`coachPendingMsg_${uid}`, err.message, "error");
+  }
+}
+
+async function loadCoachRoster() {
+  const tbody = document.getElementById("coachBody");
+  try {
+    const snap = await getDocs(query(collection(db, "coaches"), orderBy("name")));
+    allCoaches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderCoachRoster();
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="color:#ffb4b4">Failed to load coaches: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+function renderCoachRoster() {
+  const tbody   = document.getElementById("coachBody");
+  const countEl = document.getElementById("coachCount");
+  if (!tbody) return;
+
+  const search   = (document.getElementById("coachSearch")?.value || "").toLowerCase();
+  const statusF  = document.getElementById("coachFilterStatus")?.value || "";
+  const divF     = document.getElementById("coachFilterDivision")?.value || "";
+
+  const filtered = allCoaches.filter(c => {
+    if (statusF === "approved" && !(c.approved && c.active !== false))  return false;
+    if (statusF === "pending"  && c.approved !== false)                 return false;
+    if (statusF === "inactive" && c.active !== false)                   return false;
+    if (divF && c.division !== divF)                                    return false;
+    if (search) {
+      const hay = `${c.name||""} ${c.email||""} ${c.teamName||""}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  if (countEl) countEl.textContent = `${filtered.length} of ${allCoaches.length} coach${allCoaches.length !== 1 ? "es" : ""}`;
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--light-text);text-align:center">No coaches match.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(c => {
+    const isInactive = c.active === false;
+    const isPending  = c.approved === false;
+    let statusBadge;
+    if (isInactive)    statusBadge = `<span class="badge" style="background:#3a2a0a;color:#ffcc66">Inactive</span>`;
+    else if (isPending) statusBadge = `<span class="badge" style="background:#1a2a3a;color:#7ec8f7">Pending</span>`;
+    else               statusBadge = `<span class="badge" style="background:#17351f;color:#b8f2c4">Approved</span>`;
+
+    const actions = [];
+    actions.push(`<button class="btn print-btn edit-coach-btn"
+      data-uid="${esc(c.id)}"
+      data-name="${esc(c.name||"")}"
+      data-email="${esc(c.email||"")}"
+      data-phone="${esc(c.phone||"")}"
+      data-team="${esc(c.teamName||"")}"
+      data-division="${esc(c.division||"")}"
+      data-city="${esc(c.city||"")}"
+      data-approved="${c.approved ? "1" : "0"}"
+      style="font-size:0.78rem;padding:3px 10px">Edit</button>`);
+
+    if (!isPending && !isInactive) {
+      actions.push(`<button class="btn print-btn deactivate-coach-btn" data-uid="${esc(c.id)}" data-name="${esc(c.name||"")}"
+        style="font-size:0.78rem;padding:3px 10px">Deactivate</button>`);
+    } else if (isInactive) {
+      actions.push(`<button class="btn reactivate-coach-btn" data-uid="${esc(c.id)}" data-name="${esc(c.name||"")}"
+        style="font-size:0.78rem;padding:3px 10px">Reactivate</button>`);
+    }
+    actions.push(`<button class="btn delete-coach-btn" data-uid="${esc(c.id)}" data-name="${esc(c.name||"")}"
+      style="font-size:0.78rem;padding:3px 10px;background:#5a1a1a">Delete</button>`);
+
+    return `<tr style="${isInactive ? "opacity:0.55" : ""}">
+      <td><strong>${esc(c.name||"")}</strong></td>
+      <td>${esc(c.teamName||"—")}</td>
+      <td>${esc(c.division||"—")}</td>
+      <td>${esc(c.city||"—")}</td>
+      <td style="font-size:0.85rem">${esc(c.email||"")}<br><span style="color:var(--light-text)">${esc(c.phone||"")}</span></td>
+      <td>${statusBadge}</td>
+      <td><div style="display:flex;gap:4px;flex-wrap:wrap">${actions.join("")}</div></td>
+    </tr>`;
+  }).join("");
+}
+
+// Coach filters
+document.getElementById("coachSearch")?.addEventListener("input", renderCoachRoster);
+document.getElementById("coachFilterStatus")?.addEventListener("change", renderCoachRoster);
+document.getElementById("coachFilterDivision")?.addEventListener("change", renderCoachRoster);
+
+// Edit coach modal
+let editingCoachUid = null;
+
+function openEditCoachModal(data) {
+  editingCoachUid = data.uid;
+  const [firstName, ...rest] = (data.name || "").split(" ");
+  document.getElementById("editCoachUid").value         = data.uid;
+  document.getElementById("editCoachFirstName").value   = firstName || "";
+  document.getElementById("editCoachLastName").value    = rest.join(" ") || "";
+  document.getElementById("editCoachEmail").value       = data.email || "";
+  document.getElementById("editCoachPhone").value       = data.phone || "";
+  document.getElementById("editCoachTeam").value        = data.team  || "";
+  document.getElementById("editCoachDivision").value    = data.division || "";
+  document.getElementById("editCoachCity").value        = data.city  || "";
+  document.getElementById("editCoachApproved").checked  = data.approved === "1";
+  document.getElementById("editCoachMsg").textContent   = "";
+  const modal = document.getElementById("editCoachModal");
+  modal.style.display = "flex";
+}
+
+function closeEditCoachModal() {
+  document.getElementById("editCoachModal").style.display = "none";
+  editingCoachUid = null;
+}
+
+async function saveCoachEdits() {
+  const uid  = editingCoachUid;
+  if (!uid) return;
+  const btn  = document.getElementById("saveCoachBtn");
+  const msg  = document.getElementById("editCoachMsg");
+  btn.disabled = true;
+  msg.textContent = "Saving…"; msg.className = "signup-message info";
+  const first    = document.getElementById("editCoachFirstName").value.trim();
+  const last     = document.getElementById("editCoachLastName").value.trim();
+  const approved = document.getElementById("editCoachApproved").checked;
+  try {
+    const updates = {
+      name:     [first, last].filter(Boolean).join(" "),
+      phone:    document.getElementById("editCoachPhone").value.trim(),
+      teamName: document.getElementById("editCoachTeam").value.trim(),
+      division: document.getElementById("editCoachDivision").value,
+      city:     document.getElementById("editCoachCity").value.trim(),
+      approved,
+    };
+    if (approved) updates.approvedAt = serverTimestamp();
+    await updateDoc(doc(db, "coaches", uid), updates);
+    msg.textContent = "Saved!"; msg.className = "signup-message success";
+    await loadCoachRoster();
+    setTimeout(closeEditCoachModal, 1000);
+  } catch (err) {
+    msg.textContent = err.message; msg.className = "signup-message error";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deactivateCoach(uid, name) {
+  if (!confirm(`Deactivate ${name}? They will no longer be able to sign in.`)) return;
+  try {
+    await updateDoc(doc(db, "coaches", uid), { active: false });
+    loadCoachRoster();
+  } catch (err) { alert(err.message); }
+}
+
+async function reactivateCoach(uid, name) {
+  if (!confirm(`Reactivate ${name}?`)) return;
+  try {
+    await updateDoc(doc(db, "coaches", uid), { active: true });
+    loadCoachRoster();
+  } catch (err) { alert(err.message); }
+}
+
+async function deleteCoach(uid, name) {
+  if (!confirm(`Permanently delete coach account for ${name}? This cannot be undone.`)) return;
+  try {
+    await deleteDoc(doc(db, "coaches", uid));
+    loadCoachRoster();
+    loadCoachPending();
+  } catch (err) { alert(err.message); }
+}
+
+document.getElementById("saveCoachBtn")?.addEventListener("click", saveCoachEdits);
+document.getElementById("cancelCoachBtn")?.addEventListener("click", closeEditCoachModal);
+document.getElementById("editCoachModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("editCoachModal")) closeEditCoachModal();
+});
+
 // ── Event delegation ──────────────────────────────────────────────────────────
 
 document.addEventListener("click", e => {
@@ -737,6 +976,24 @@ document.addEventListener("click", e => {
 
   const editAccBtn    = e.target.closest(".edit-account-btn");
   if (editAccBtn)    { openEditAccountModal(editAccBtn.dataset); return; }
+
+  const appCoachBtn = e.target.closest(".approve-coach-pending-btn");
+  if (appCoachBtn)  { approveCoachPending(appCoachBtn.dataset.uid, appCoachBtn.dataset.name); return; }
+
+  const denyCoachBtn = e.target.closest(".deny-coach-pending-btn");
+  if (denyCoachBtn) { denyCoachPending(denyCoachBtn.dataset.uid, denyCoachBtn.dataset.name); return; }
+
+  const editCoachBtn = e.target.closest(".edit-coach-btn");
+  if (editCoachBtn) { openEditCoachModal(editCoachBtn.dataset); return; }
+
+  const deactCoachBtn = e.target.closest(".deactivate-coach-btn");
+  if (deactCoachBtn){ deactivateCoach(deactCoachBtn.dataset.uid, deactCoachBtn.dataset.name); return; }
+
+  const reactCoachBtn = e.target.closest(".reactivate-coach-btn");
+  if (reactCoachBtn){ reactivateCoach(reactCoachBtn.dataset.uid, reactCoachBtn.dataset.name); return; }
+
+  const delCoachBtn  = e.target.closest(".delete-coach-btn");
+  if (delCoachBtn)  { deleteCoach(delCoachBtn.dataset.uid, delCoachBtn.dataset.name); return; }
 
   if (e.target.id === "savePermBtn")     { savePermissions(); return; }
   if (e.target.id === "cancelPermBtn")   { document.getElementById("editPermModal").style.display = "none"; return; }
