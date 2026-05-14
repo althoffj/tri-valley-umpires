@@ -57,6 +57,8 @@ async function loadPayroll() {
     payrollRows = [];
     snap.forEach(d => {
       const g = { id: d.id, ...d.data() };
+      // Skip hard-cancelled games — umpires don't get paid for those
+      if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") return;
       (g.umpireSlots ?? []).forEach(slot => {
         if (!slot.assignedUid) return;
         payrollRows.push({
