@@ -1,7 +1,7 @@
 // admin-alerts.js — Announcements, Broadcast (push + email), and Slack webhooks
 import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin, getCurrentUser } from "./auth.js";
-import { esc, setMsg, showToast } from "./utils.js";
+import { esc, setMsg, showToast, showConfirm } from "./utils.js";
 
 import {
   collection,
@@ -136,7 +136,7 @@ async function toggleAnnouncement(id, currentlyActive) {
 
 async function deleteAnnouncement(id) {
   if (!isSuperAdmin()) return;
-  if (!confirm("Delete this announcement? This cannot be undone.")) return;
+  if (!await showConfirm("Delete this announcement? This cannot be undone.")) return;
   try {
     await deleteDoc(doc(db, "announcements", id));
     await loadAnnouncements();
@@ -220,7 +220,7 @@ document.getElementById("alEmailAllForm")?.addEventListener("submit", async func
   const subject = document.getElementById("alEmailSubject").value.trim();
   const body    = document.getElementById("alEmailBody").value.trim();
 
-  if (!confirm(`Send this email to all active umpires?\n\nSubject: ${subject}`)) return;
+  if (!await showConfirm(`Send this email to all active umpires?\n\nSubject: ${subject}`)) return;
 
   btn.disabled = true;
   setMsg("alEmailMessage", "Sending…", "info");

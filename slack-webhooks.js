@@ -6,7 +6,7 @@
 //   #webhookSaveBtn, #webhookCancelBtn,
 //   #slackTriggerMessage, #triggerRemindersBtn, #triggerSummaryBtn
 import { db, app } from "./firebase.js";
-import { esc, setMsg } from "./utils.js";
+import { esc, setMsg, showConfirm } from "./utils.js";
 import {
   doc,
   getDoc,
@@ -198,7 +198,7 @@ export function initSlackWebhooks() {
   document.getElementById("webhookDeleteBtn")?.addEventListener("click", async () => {
     const id = document.getElementById("webhookEditId").value;
     const w  = webhooks.find(x => x.id === id);
-    if (!w || !confirm(`Delete webhook "${w.label}"?`)) return;
+    if (!w || !await showConfirm(`Delete webhook "${w.label}"?`)) return;
     webhooks = webhooks.filter(x => x.id !== id);
     setMsg("webhookEditMessage", "Deleting…", "info");
     try {

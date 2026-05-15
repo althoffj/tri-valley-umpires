@@ -6,7 +6,7 @@ import {
   query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
-import { esc, fmtDate, fmtTime, setMsg, showToast } from "./utils.js";
+import { esc, fmtDate, fmtTime, setMsg, showToast, showConfirm } from "./utils.js";
 
 const fns         = getFunctions();
 const notifySwap  = httpsCallable(fns, "notifyTournamentSwap");
@@ -335,7 +335,7 @@ async function applyDelay(tid, minutes) {
 async function resetDelay(tid) {
   const t = allTournaments.find(x => x.id === tid);
   if (!t || !t.originalTimes || !Object.keys(t.originalTimes).length) return;
-  if (!confirm("Restore all linked games to their original start times?")) return;
+  if (!await showConfirm("Restore all linked games to their original start times?")) return;
 
   const linked = allGames.filter(g => g.tournamentId === tid);
   setMsg(`delayMsg_${tid}`, "Resetting…", "info");
@@ -377,7 +377,7 @@ async function swapUmpires(tid, gid1, gid2) {
   const label1 = `${fmtTime(g1.time)} ${g1.field ? "· " + g1.field : ""}`.trim();
   const label2 = `${fmtTime(g2.time)} ${g2.field ? "· " + g2.field : ""}`.trim();
 
-  if (!confirm(`Swap all umpire assignments between:\n\n  ${label1}\n  ${label2}\n\nAffected umpires will receive a push notification. Proceed?`)) return;
+  if (!await showConfirm(`Swap all umpire assignments between:\n\n  ${label1}\n  ${label2}\n\nAffected umpires will receive a push notification. Proceed?`)) return;
 
   setMsg(`swapMsg_${tid}`, "Swapping…", "info");
 
@@ -432,7 +432,7 @@ async function linkGame(tid, gameId) {
 }
 
 async function unlinkGame(gameId, tid) {
-  if (!confirm("Remove this game from the tournament? The game itself will not be deleted.")) return;
+  if (!await showConfirm("Remove this game from the tournament? The game itself will not be deleted.")) return;
   try {
     await updateDoc(doc(db, "games", gameId), { tournamentId: null });
     const g = allGames.find(x => x.id === gameId);
@@ -454,7 +454,7 @@ async function deleteTournament(tid) {
   const msg = `Delete tournament "${t.name}"?${linked.length
     ? `\n\n${linked.length} linked game${linked.length !== 1 ? "s" : ""} will be unlinked (not deleted).`
     : ""}`;
-  if (!confirm(msg)) return;
+  if (!await showConfirm(msg)) return;
 
   try {
     // Unlink all games first

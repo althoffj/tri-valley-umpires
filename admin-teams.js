@@ -1,7 +1,7 @@
 // admin-teams.js — Teams & Leagues management
 import { db }                             from "./firebase.js";
 import { authReadyPromise, isAdmin }      from "./auth.js";
-import { esc, showToast } from "./utils.js";
+import { esc, showToast, showConfirm } from "./utils.js";
 
 import {
   collection, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
@@ -139,7 +139,7 @@ function cancelEditTeam() {
 }
 
 async function deleteTeam(idx) {
-  if (!confirm(`Delete team "${teams[idx].name}"?`)) return;
+  if (!await showConfirm(`Delete team "${teams[idx].name}"?`)) return;
   teams.splice(idx, 1);
   renderTeamList();
   await saveTeams(false);
@@ -378,7 +378,7 @@ function startEditLeague(id) {
 
 async function deleteLeague(id) {
   const l = leagues.find(x => x.id === id);
-  if (!l || !confirm(`Delete league "${l.name}"?\n\nTeams assigned to this league will be unlinked.`)) return;
+  if (!l || !await showConfirm(`Delete league "${l.name}"?\n\nTeams assigned to this league will be unlinked.`)) return;
   try {
     await deleteDoc(doc(db, "leagues", id));
     // Unlink teams that referenced this league

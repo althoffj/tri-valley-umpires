@@ -1,7 +1,7 @@
 // admin-games.js — Game management: sync, add, list, edit modal, team calendars
 import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin } from "./auth.js";
-import { esc, fmtDate, fmtTime, todayISO, setMsg, showToast } from "./utils.js";
+import { esc, fmtDate, fmtTime, todayISO, setMsg, showToast, showConfirm } from "./utils.js";
 
 import {
   getFunctions,
@@ -404,7 +404,7 @@ document.getElementById("cancelGameModal").addEventListener("click", e => {
 });
 
 async function unassignSlot(gameId, slotType) {
-  if (!confirm(`Remove the umpire from the ${slotType} slot?`)) return;
+  if (!await showConfirm(`Remove the umpire from the ${slotType} slot?`)) return;
   try {
     const gameRef = doc(db, "games", gameId);
     let updatedSlots;
@@ -431,7 +431,7 @@ async function notifyOpenSlots(gameId) {
   if (open.length === 0) { showToast("No open slots on this game."); return; }
   const slotTypes = open.map(s => s.type).join(", ");
   const label = `${fmtDate(game.date)} at ${fmtTime(game.time)} — ${[game.league, game.city].filter(Boolean).join(" · ")} ${game.division || ""}${game.field ? " · " + game.field : ""}`;
-  if (!confirm(`Send Slack + push notification to all umpires about open slots?\n\n${label}\nOpen: ${slotTypes}`)) return;
+  if (!await showConfirm(`Send Slack + push notification to all umpires about open slots?\n\n${label}\nOpen: ${slotTypes}`)) return;
 
   try {
     const functions  = getFunctions(app, "us-central1");
@@ -447,7 +447,7 @@ async function notifyOpenSlots(gameId) {
 async function deleteGame(gameId) {
   const game = allGames.find(g => g.id === gameId);
   if (!game) return;
-  if (!confirm(`Permanently delete the game on ${fmtDate(game.date)} at ${[game.league, game.city].filter(Boolean).join(" · ") || ""}?\nThis cannot be undone.`)) return;
+  if (!await showConfirm(`Permanently delete the game on ${fmtDate(game.date)} at ${[game.league, game.city].filter(Boolean).join(" · ") || ""}?\nThis cannot be undone.`)) return;
   try {
     await deleteDoc(doc(db, "games", gameId));
     allGames = allGames.filter(g => g.id !== gameId);
@@ -983,7 +983,7 @@ function renderPendingCancellations() {
 }
 
 async function approveCancellation(requestId, gameId, slotType, uid) {
-  if (!confirm("Approve this cancellation? The umpire will be removed from the slot.")) return;
+  if (!await showConfirm("Approve this cancellation? The umpire will be removed from the slot.")) return;
   try {
     // Use a transaction so needsUmpires is set atomically with the slot change
     const gameRef = doc(db, "games", gameId);
@@ -1019,7 +1019,7 @@ async function approveCancellation(requestId, gameId, slotType, uid) {
 }
 
 async function denyCancellation(requestId) {
-  if (!confirm("Deny this cancellation request? The umpire will remain assigned.")) return;
+  if (!await showConfirm("Deny this cancellation request? The umpire will remain assigned.")) return;
   try {
     await updateDoc(doc(db, "cancellationRequests", requestId), {
       status:     "denied",

@@ -1,7 +1,7 @@
 // admin.js — Overview: pending approvals, roster, admin user management
 import { app, db } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin, getCurrentUser } from "./auth.js";
-import { esc, fmtTime, setMsg, csvCell, showToast } from "./utils.js";
+import { esc, fmtTime, setMsg, csvCell, showToast, showConfirm } from "./utils.js";
 
 import {
   getFunctions,
@@ -98,7 +98,7 @@ async function approveUmpire(uid) {
 }
 
 async function denyUmpire(uid, name) {
-  if (!confirm(`Deny ${name}'s account?`)) return;
+  if (!await showConfirm(`Deny ${name}'s account?`)) return;
   try {
     await updateDoc(doc(db, "umpires", uid), { approved: false, denied: true });
     setMsg(`pendingMsg_${uid}`, "Marked as denied.", "warning");
@@ -209,7 +209,7 @@ async function loadRoster() {
 }
 
 async function revokeUmpire(uid, name) {
-  if (!confirm(`Revoke approval for ${name}?`)) return;
+  if (!await showConfirm(`Revoke approval for ${name}?`)) return;
   try {
     await updateDoc(doc(db, "umpires", uid), { approved: false });
     loadRoster();
@@ -219,7 +219,7 @@ async function revokeUmpire(uid, name) {
 }
 
 async function setUmpireInactive(uid, name) {
-  if (!confirm(`Set ${name} as inactive? They will no longer be able to sign up for games. You can reactivate them at any time.`)) return;
+  if (!await showConfirm(`Set ${name} as inactive? They will no longer be able to sign up for games. You can reactivate them at any time.`)) return;
   try {
     await updateDoc(doc(db, "umpires", uid), { active: false });
     loadRoster();
@@ -229,7 +229,7 @@ async function setUmpireInactive(uid, name) {
 }
 
 async function reactivateUmpire(uid, name) {
-  if (!confirm(`Reactivate ${name}? They will be able to sign up for games again.`)) return;
+  if (!await showConfirm(`Reactivate ${name}? They will be able to sign up for games again.`)) return;
   try {
     await updateDoc(doc(db, "umpires", uid), { active: true });
     loadRoster();
@@ -239,8 +239,8 @@ async function reactivateUmpire(uid, name) {
 }
 
 async function deleteUmpireAccount(uid, name) {
-  if (!confirm(`PERMANENTLY DELETE ${name}'s account?\n\nThis removes their profile and Firebase sign-in credentials. This cannot be undone.`)) return;
-  if (!confirm(`Are you sure? This is permanent and cannot be reversed.`)) return;
+  if (!await showConfirm(`PERMANENTLY DELETE ${name}'s account?\n\nThis removes their profile and Firebase sign-in credentials. This cannot be undone.`)) return;
+  if (!await showConfirm(`Are you sure? This is permanent and cannot be reversed.`)) return;
   try {
     const fns      = getFunctions(app, "us-central1");
     const deleteFn = httpsCallable(fns, "deleteUmpireAccount");
@@ -551,7 +551,7 @@ async function savePermissions() {
 }
 
 async function removeAdmin(uid) {
-  if (!confirm("Remove this admin? They will lose all admin access.")) return;
+  if (!await showConfirm("Remove this admin? They will lose all admin access.")) return;
   try {
     await deleteDoc(doc(db, "admins", uid));
     await loadAdminUsers();
@@ -676,7 +676,7 @@ async function loadCoachPending() {
 }
 
 async function approveCoach(uid, name) {
-  if (!confirm(`Approve coach ${name}?`)) return;
+  if (!await showConfirm(`Approve coach ${name}?`)) return;
   try {
     await updateDoc(doc(db, "coaches", uid), { approved: true, approvedAt: serverTimestamp() });
     await loadCoachPending();
@@ -684,7 +684,7 @@ async function approveCoach(uid, name) {
 }
 
 async function denyCoach(uid, name) {
-  if (!confirm(`Deny and delete coach application for ${name}? This cannot be undone.`)) return;
+  if (!await showConfirm(`Deny and delete coach application for ${name}? This cannot be undone.`)) return;
   try {
     await deleteDoc(doc(db, "coaches", uid));
     await loadCoachPending();

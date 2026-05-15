@@ -2,7 +2,7 @@
 import { db, app }                       from "./firebase.js";
 import { authReadyPromise, isAdmin }      from "./auth.js";
 import { getFunctions, httpsCallable }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
-import { esc, fmtDate, fmtTime, fmtTime as fmt12, todayISO, showToast } from "./utils.js";
+import { esc, fmtDate, fmtTime, fmtTime as fmt12, todayISO, showToast, showConfirm } from "./utils.js";
 
 import {
   collection, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
@@ -963,7 +963,7 @@ document.getElementById("commitBtn").addEventListener("click", async () => {
     msg.className   = "signup-message error";
     return;
   }
-  if (!confirm(`Import ${approved.length} approved game${approved.length !== 1 ? "s" : ""} into the schedule?`)) return;
+  if (!await showConfirm(`Import ${approved.length} approved game${approved.length !== 1 ? "s" : ""} into the schedule?`)) return;
 
   btn.disabled    = true;
   msg.textContent = "Importing…";
@@ -1111,7 +1111,7 @@ async function doSchedAssign(uid, name) {
 }
 
 async function unassignSchedSlot(gameId, slotType) {
-  if (!confirm(`Remove the umpire from the ${slotType} slot?`)) return;
+  if (!await showConfirm(`Remove the umpire from the ${slotType} slot?`)) return;
   try {
     const gameRef = doc(db, "games", gameId);
     const snap    = await getDoc(gameRef);
@@ -1658,7 +1658,7 @@ document.getElementById("seGameSaveBtn").addEventListener("click", async () => {
 document.getElementById("seGameDeleteBtn").addEventListener("click", async () => {
   const id = document.getElementById("seGameId").value;
   if (!id) return;
-  if (!confirm("Delete this game? This cannot be undone.")) return;
+  if (!await showConfirm("Delete this game? This cannot be undone.")) return;
 
   const msg = document.getElementById("seGameMsg");
   msg.textContent = "Deleting…";
@@ -1681,7 +1681,7 @@ document.getElementById("seConvertToPracticeBtn").addEventListener("click", asyn
   if (!game) return;
   const info = [fmtDate(game.date), game.time ? fmt12(game.time) : "", game.city, game.division]
     .filter(Boolean).join(" · ");
-  if (!confirm(`Convert "${info}" to a practice?\n\nIt will be removed from the game list and shown on the calendar as a practice.`)) return;
+  if (!await showConfirm(`Convert "${info}" to a practice?\n\nIt will be removed from the game list and shown on the calendar as a practice.`)) return;
 
   const btn = document.getElementById("seConvertToPracticeBtn");
   const msg = document.getElementById("seGameMsg");
@@ -1771,7 +1771,7 @@ document.getElementById("peConvertToGameBtn").addEventListener("click", async ()
   if (!p) return;
   const info = [fmtDate(p.date), p.startTime ? fmt12(p.startTime) : "", p.teamName, p.division]
     .filter(Boolean).join(" · ");
-  if (!confirm(`Convert "${info}" to a game?\n\nIt will be removed from practices and added to the game list.`)) return;
+  if (!await showConfirm(`Convert "${info}" to a game?\n\nIt will be removed from practices and added to the game list.`)) return;
 
   const btn = document.getElementById("peConvertToGameBtn");
   const msg = document.getElementById("pePracticeMsg");
@@ -1810,7 +1810,7 @@ document.getElementById("peDeleteBtn").addEventListener("click", async () => {
   const p = peCurrentPractice;
   if (!p) return;
   const info = [fmtDate(p.date), p.teamName].filter(Boolean).join(" · ");
-  if (!confirm(`Delete practice "${info}"?\n\nThis cannot be undone.`)) return;
+  if (!await showConfirm(`Delete practice "${info}"?\n\nThis cannot be undone.`)) return;
 
   const msg = document.getElementById("pePracticeMsg");
   msg.textContent = "Deleting…"; msg.className = "signup-message info";
@@ -2000,7 +2000,7 @@ async function approvePracticeRequest(id) {
 }
 
 async function denyPracticeRequest(id) {
-  if (!confirm("Deny this practice request?")) return;
+  if (!await showConfirm("Deny this practice request?")) return;
   const msg = document.getElementById(`practiceMsg_${id}`);
   if (msg) { msg.textContent = "Denying…"; msg.className = "signup-message info"; }
   try {
@@ -2012,7 +2012,7 @@ async function denyPracticeRequest(id) {
 }
 
 async function cancelPractice(id) {
-  if (!confirm("Cancel this approved practice?")) return;
+  if (!await showConfirm("Cancel this approved practice?")) return;
   try {
     await deleteDoc(doc(db, "practices", id));
     await loadPractices();

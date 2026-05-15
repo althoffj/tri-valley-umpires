@@ -2,7 +2,7 @@
 
 import { app, db } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin, getCurrentUser } from "./auth.js";
-import { esc, setMsg, csvCell, showToast } from "./utils.js";
+import { esc, setMsg, csvCell, showToast, showConfirm } from "./utils.js";
 
 import {
   getFunctions,
@@ -106,7 +106,7 @@ async function approveUmpire(uid) {
 }
 
 async function denyUmpire(uid, name) {
-  if (!confirm(`Deny ${name}?`)) return;
+  if (!await showConfirm(`Deny ${name}?`)) return;
   try {
     await updateDoc(doc(db, "umpires", uid), { denied: true });
     setMsg(`pendingMsg_${uid}`, "Marked as denied.", "warning");
@@ -273,23 +273,23 @@ function renderRoster() {
 
 // Roster action handlers
 async function revokeUmpire(uid, name) {
-  if (!confirm(`Revoke approval for ${name}?`)) return;
+  if (!await showConfirm(`Revoke approval for ${name}?`)) return;
   try { await updateDoc(doc(db, "umpires", uid), { approved: false }); loadRoster(); }
   catch (err) { showToast(err.message); }
 }
 async function setUmpireInactive(uid, name) {
-  if (!confirm(`Set ${name} as inactive? They can no longer sign up for games. You can reactivate them at any time.`)) return;
+  if (!await showConfirm(`Set ${name} as inactive? They can no longer sign up for games. You can reactivate them at any time.`)) return;
   try { await updateDoc(doc(db, "umpires", uid), { active: false }); loadRoster(); }
   catch (err) { showToast(err.message); }
 }
 async function reactivateUmpire(uid, name) {
-  if (!confirm(`Reactivate ${name}?`)) return;
+  if (!await showConfirm(`Reactivate ${name}?`)) return;
   try { await updateDoc(doc(db, "umpires", uid), { active: true }); loadRoster(); }
   catch (err) { showToast(err.message); }
 }
 async function deleteUmpireAccount(uid, name) {
-  if (!confirm(`PERMANENTLY DELETE ${name}'s account?\n\nThis removes their profile and Firebase sign-in credentials. This cannot be undone.`)) return;
-  if (!confirm(`Final confirmation: permanently delete ${name}?`)) return;
+  if (!await showConfirm(`PERMANENTLY DELETE ${name}'s account?\n\nThis removes their profile and Firebase sign-in credentials. This cannot be undone.`)) return;
+  if (!await showConfirm(`Final confirmation: permanently delete ${name}?`)) return;
   try {
     const fns = getFunctions(app, "us-central1");
     await httpsCallable(fns, "deleteUmpireAccount")({ uid });
@@ -658,7 +658,7 @@ async function savePermissions() {
 }
 
 async function removeAdmin(uid) {
-  if (!confirm("Remove this admin? They will lose all admin access immediately.")) return;
+  if (!await showConfirm("Remove this admin? They will lose all admin access immediately.")) return;
   try { await deleteDoc(doc(db, "admins", uid)); await loadAdminUsers(); }
   catch (err) { showToast(err.message); }
 }
@@ -874,7 +874,7 @@ async function approveCoachPending(uid, name) {
 }
 
 async function denyCoachPending(uid, name) {
-  if (!confirm(`Deny and remove coach application for ${name}? This cannot be undone.`)) return;
+  if (!await showConfirm(`Deny and remove coach application for ${name}? This cannot be undone.`)) return;
   try {
     await deleteDoc(doc(db, "coaches", uid));
     setMsg(`coachPendingMsg_${uid}`, "Removed.", "warning");
@@ -1027,7 +1027,7 @@ async function saveCoachEdits() {
 }
 
 async function deactivateCoach(uid, name) {
-  if (!confirm(`Deactivate ${name}? They will no longer be able to sign in.`)) return;
+  if (!await showConfirm(`Deactivate ${name}? They will no longer be able to sign in.`)) return;
   try {
     await updateDoc(doc(db, "coaches", uid), { active: false });
     loadCoachRoster();
@@ -1035,7 +1035,7 @@ async function deactivateCoach(uid, name) {
 }
 
 async function reactivateCoach(uid, name) {
-  if (!confirm(`Reactivate ${name}?`)) return;
+  if (!await showConfirm(`Reactivate ${name}?`)) return;
   try {
     await updateDoc(doc(db, "coaches", uid), { active: true });
     loadCoachRoster();
@@ -1043,7 +1043,7 @@ async function reactivateCoach(uid, name) {
 }
 
 async function deleteCoach(uid, name) {
-  if (!confirm(`Permanently delete coach account for ${name}? This cannot be undone.`)) return;
+  if (!await showConfirm(`Permanently delete coach account for ${name}? This cannot be undone.`)) return;
   try {
     await deleteDoc(doc(db, "coaches", uid));
     loadCoachRoster();

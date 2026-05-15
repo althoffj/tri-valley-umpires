@@ -1,7 +1,7 @@
 // admin-facilities.js — Facilities CRUD with per-facility fields management
 import { db } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
-import { esc, setMsg, showToast } from "./utils.js";
+import { esc, setMsg, showToast, showConfirm } from "./utils.js";
 
 import {
   collection,
@@ -505,6 +505,16 @@ function renderFacilityCard(id, data, shedCode = "") {
         </div>
         <div class="form-row">
           <div class="form-group">
+            <label for="editFacilityLat_${esc(id)}" title="Overrides org-level weather coordinates for this facility">Weather Lat <span style="color:var(--light-text);font-size:0.8rem">(optional)</span></label>
+            <input type="number" step="any" id="editFacilityLat_${esc(id)}" value="${esc(data.weatherLat ?? "")}" placeholder="e.g. 43.6503" />
+          </div>
+          <div class="form-group">
+            <label for="editFacilityLon_${esc(id)}" title="Overrides org-level weather coordinates for this facility">Weather Lon <span style="color:var(--light-text);font-size:0.8rem">(optional)</span></label>
+            <input type="number" step="any" id="editFacilityLon_${esc(id)}" value="${esc(data.weatherLon ?? "")}" placeholder="e.g. -96.8108" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
             <label for="editFacilityNotes_${esc(id)}">Facility Notes</label>
             <input type="text" id="editFacilityNotes_${esc(id)}" value="${esc(data.notes || "")}" placeholder="General notes about this facility" />
           </div>
@@ -621,12 +631,14 @@ document.getElementById("saveAddFacilityBtn").addEventListener("click", async ()
 // ── Facility CRUD helpers ─────────────────────────────────────────────────────
 
 async function saveFacilityEdit(facilityId) {
-  const name      = document.getElementById(`editFacilityName_${facilityId}`)?.value.trim();
-  const address   = document.getElementById(`editFacilityAddress_${facilityId}`)?.value.trim();
-  const mapsUrl   = document.getElementById(`editFacilityMaps_${facilityId}`)?.value.trim();
-  const notes     = document.getElementById(`editFacilityNotes_${facilityId}`)?.value.trim() || "";
-  const issues    = document.getElementById(`editFacilityIssues_${facilityId}`)?.value.trim() || "";
-  const shedCode  = document.getElementById(`editFacilityShedCode_${facilityId}`)?.value.trim() || "";
+  const name       = document.getElementById(`editFacilityName_${facilityId}`)?.value.trim();
+  const address    = document.getElementById(`editFacilityAddress_${facilityId}`)?.value.trim();
+  const mapsUrl    = document.getElementById(`editFacilityMaps_${facilityId}`)?.value.trim();
+  const notes      = document.getElementById(`editFacilityNotes_${facilityId}`)?.value.trim() || "";
+  const issues     = document.getElementById(`editFacilityIssues_${facilityId}`)?.value.trim() || "";
+  const shedCode   = document.getElementById(`editFacilityShedCode_${facilityId}`)?.value.trim() || "";
+  const weatherLat = parseFloat(document.getElementById(`editFacilityLat_${facilityId}`)?.value) || null;
+  const weatherLon = parseFloat(document.getElementById(`editFacilityLon_${facilityId}`)?.value) || null;
 
   if (!name) {
     const msgEl = document.getElementById(`editFacilityMsg_${facilityId}`);
@@ -638,7 +650,9 @@ async function saveFacilityEdit(facilityId) {
     await Promise.all([
       updateDoc(doc(db, "facilities", facilityId), {
         name, address: address || "", googleMapsUrl: mapsUrl || "",
-        notes, activeIssues: issues
+        notes, activeIssues: issues,
+        ...(weatherLat != null ? { weatherLat } : {}),
+        ...(weatherLon != null ? { weatherLon } : {}),
       }),
       setDoc(doc(db, "facilityCodes", facilityId), { shedCode })
     ]);
@@ -650,7 +664,7 @@ async function saveFacilityEdit(facilityId) {
 }
 
 async function deleteFacility(facilityId) {
-  if (!confirm("Permanently delete this facility and all its fields?")) return;
+  if (!await showConfirm("Permanently delete this facility and all its fields?")) return;
   try {
     await deleteDoc(doc(db, "facilities", facilityId));
     await loadFacilities();
@@ -786,7 +800,7 @@ async function saveEditField(facilityId) {
 }
 
 async function deleteField(facilityId, fieldIndex) {
-  if (!confirm("Delete this field?")) return;
+  if (!await showConfirm("Delete this field?")) return;
   try {
     const ref  = doc(db, "facilities", facilityId);
     const snap = await getDoc(ref);

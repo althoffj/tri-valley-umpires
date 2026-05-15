@@ -1,7 +1,7 @@
 // schedule.js — Firestore-based schedule with multi-slot signups, badges, and pay tracking
 import { getOrgSettings } from "./org.js";
 import { db, auth } from "./firebase.js";
-import { esc, fmtDate, fmtTime, todayISO, showToast } from "./utils.js";
+import { esc, fmtDate, fmtTime, todayISO, showToast, showConfirm } from "./utils.js";
 
 import {
   authReadyPromise,
@@ -333,7 +333,7 @@ async function showPartnerInfo(uid, name, anchorBtn) {
 // Admin: remove an umpire from a slot
 async function adminUnassignSlot(gameId, slotType, targetUid) {
   if (!isAdmin()) return;
-  if (!confirm(`Remove ${slotType} umpire from this game?`)) return;
+  if (!await showConfirm(`Remove ${slotType} umpire from this game?`)) return;
   const btn = document.querySelector(`.admin-unassign-btn[data-game-id="${gameId}"][data-slot-type="${slotType}"][data-target-uid="${targetUid}"]`);
   if (btn) { btn.disabled = true; btn.textContent = "…"; }
   try {
@@ -388,7 +388,7 @@ async function adminNoShow(gameId, slotType, targetUid) {
 // Admin: cancel a game from the gameday bar
 async function adminCancelGame(gameId) {
   if (!isAdmin()) return;
-  if (!confirm("Cancel this game? This cannot be undone from the game day bar.")) return;
+  if (!await showConfirm("Cancel this game? This cannot be undone from the game day bar.")) return;
   const btn = document.querySelector(`.admin-cancel-game-btn[data-game-id="${gameId}"]`);
   if (btn) { btn.disabled = true; btn.textContent = "Cancelling…"; }
   try {
@@ -1023,7 +1023,7 @@ async function cancelSlot(gameId, slotType) {
 
   if (isLate) {
     // Within the late-cancel window — route through admin approval
-    if (!confirm(`Request to cancel your ${slotType} signup? An admin must approve before you are removed.`)) return;
+    if (!await showConfirm(`Request to cancel your ${slotType} signup? An admin must approve before you are removed.`)) return;
     try {
       const ref = await addDoc(collection(db, "cancellationRequests"), {
         gameId,
@@ -1045,7 +1045,7 @@ async function cancelSlot(gameId, slotType) {
     }
   } else {
     // Outside the window — self-service cancel
-    if (!confirm(`Cancel your ${slotType} signup for this game? This cannot be undone.`)) return;
+    if (!await showConfirm(`Cancel your ${slotType} signup for this game? This cannot be undone.`)) return;
     try {
       const gameRef = doc(db, "games", gameId);
       let updatedSlots;
@@ -1076,7 +1076,7 @@ async function withdrawCancellation(gameId, slotType) {
   const key = `${gameId}|${slotType}`;
   const requestId = pendingCancels[key];
   if (!requestId) return;
-  if (!confirm("Withdraw your cancellation request? You will remain assigned to this game.")) return;
+  if (!await showConfirm("Withdraw your cancellation request? You will remain assigned to this game.")) return;
 
   try {
     await updateDoc(doc(db, "cancellationRequests", requestId), { status: "withdrawn" });

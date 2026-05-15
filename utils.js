@@ -52,6 +52,68 @@ export function setMsg(id, text, type = "info") {
 }
 
 /**
+ * Show a styled in-page confirmation dialog.
+ * Returns a Promise that resolves to true (confirmed) or false (cancelled).
+ * Replaces browser confirm() with consistent app styling.
+ * @param {string} msg
+ * @returns {Promise<boolean>}
+ */
+export function showConfirm(msg) {
+  return new Promise(resolve => {
+    const overlay = document.createElement("div");
+    overlay.style.cssText = [
+      "position:fixed", "inset:0", "background:rgba(0,0,0,0.6)",
+      "z-index:99998", "display:flex", "align-items:center", "justify-content:center"
+    ].join(";");
+
+    const box = document.createElement("div");
+    box.style.cssText = [
+      "background:#1e1e2e", "color:#e8e8f0", "padding:28px 32px",
+      "border-radius:12px", "max-width:420px", "width:90%",
+      "box-shadow:0 8px 32px rgba(0,0,0,0.5)", "font-family:inherit"
+    ].join(";");
+
+    const text = document.createElement("p");
+    text.style.cssText = "margin:0 0 24px;font-size:0.95rem;line-height:1.5;white-space:pre-wrap";
+    text.textContent = msg;
+
+    const actions = document.createElement("div");
+    actions.style.cssText = "display:flex;gap:12px;justify-content:flex-end";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.className   = "btn";
+    cancelBtn.style.cssText = "padding:8px 20px";
+
+    const okBtn = document.createElement("button");
+    okBtn.textContent  = "Confirm";
+    okBtn.className    = "btn print-btn";
+    okBtn.style.cssText = "padding:8px 20px";
+
+    function close(result) {
+      overlay.remove();
+      document.removeEventListener("keydown", onKey);
+      resolve(result);
+    }
+    function onKey(e) {
+      if (e.key === "Escape") close(false);
+      if (e.key === "Enter")  close(true);
+    }
+
+    cancelBtn.addEventListener("click", () => close(false));
+    okBtn.addEventListener("click",     () => close(true));
+    overlay.addEventListener("click",   e => { if (e.target === overlay) close(false); });
+    document.addEventListener("keydown", onKey);
+
+    actions.append(cancelBtn, okBtn);
+    box.append(text, actions);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    okBtn.focus();
+  });
+}
+
+/**
  * Show a brief, non-blocking toast notification.
  * Creates a shared toast element on first call; auto-hides after 4 s.
  * @param {string} msg  - Message to display

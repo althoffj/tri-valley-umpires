@@ -2,7 +2,7 @@
 import { db } from "./firebase.js";
 import { authReadyPromise, isApproved, isAdmin } from "./auth.js";
 import { esc } from "./utils.js";
-import { getTimezone } from "./org.js";
+import { getOrgSettings, getTimezone } from "./org.js";
 
 import {
   collection,
@@ -14,11 +14,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── Weather ───────────────────────────────────────────────────────────────────
-
-const CITY_COORDS = {
-  "Crooks": { lat: 43.6503, lon: -96.8108 },
-  "Colton": { lat: 43.7877, lon: -97.0002 }
-};
 
 const WMO_LABELS = {
   0: "Clear", 1: "Mainly Clear", 2: "Partly Cloudy", 3: "Overcast",
@@ -42,12 +37,17 @@ const WMO_ICONS = {
   95: "⛈️", 96: "⛈️", 99: "⛈️"
 };
 
-async function fetchCurrentWeather(facilityName, address) {
-  const text    = `${facilityName} ${address || ""}`.toLowerCase();
-  const cityKey = Object.keys(CITY_COORDS).find(c => text.includes(c.toLowerCase()));
-  if (!cityKey) return null;
+async function fetchCurrentWeather(facility) {
+  // Use per-facility coords when available; fall back to org-level coords
+  let lat = parseFloat(facility.weatherLat);
+  let lon = parseFloat(facility.weatherLon);
+  if (!lat || !lon) {
+    const org = await getOrgSettings();
+    lat = org.weatherLat;
+    lon = org.weatherLon;
+  }
+  if (!lat || !lon) return null;
 
-  const { lat, lon } = CITY_COORDS[cityKey];
   try {
     const url  = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&current=temperature_2m,weather_code,wind_speed_10m` +
@@ -250,7 +250,7 @@ async function loadFacilities() {
     const facilities = facSnap.docs.map(d => ({ id: d.id, ...d.data(), shedCode: shedCodes[d.id] || "" }));
 
     const weatherResults = await Promise.all(
-      facilities.map(f => fetchCurrentWeather(f.name, f.address || ""))
+      facilities.map(f => fetchCurrentWeather(f))
     );
 
     container.innerHTML = facilities

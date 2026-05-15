@@ -1,7 +1,7 @@
 // admin-config.js — Organization settings, Slack webhooks, push notifications
 import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin } from "./auth.js";
-import { esc, setMsg } from "./utils.js";
+import { esc, setMsg, showConfirm } from "./utils.js";
 import { getOrgSettings, ORG_DEFAULTS } from "./org.js";
 
 import {
@@ -175,7 +175,7 @@ document.getElementById("emailAllForm").addEventListener("submit", async functio
   const subject = document.getElementById("emailAllSubject").value.trim();
   const body    = document.getElementById("emailAllBody").value.trim();
 
-  if (!confirm(`Send this email to all active umpires?\n\nSubject: ${subject}`)) return;
+  if (!await showConfirm(`Send this email to all active umpires?\n\nSubject: ${subject}`)) return;
 
   btn.disabled = true;
   setMsg("emailAllMessage", "Sending…", "info");
