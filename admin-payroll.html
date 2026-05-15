@@ -15,7 +15,7 @@
     <h1>Admin Panel</h1>
   </div>
 
-<nav id="mainNav" aria-label="Main navigation"></nav>
+  <nav id="mainNav" aria-label="Main navigation"></nav>
 
   <div class="container" id="adminContent" style="display:none">
 
@@ -34,25 +34,35 @@
       <a href="admin-users.html">Users</a>
     </nav>
 
-    <!-- ── Payroll Summary ───────────────────────────────────────────────── -->
-    <h2>Payroll Summary</h2>
-    <div class="document-note">
-      <p>All games where an umpire slot is filled. Mark slots paid when payment has been issued. Totals update automatically.</p>
+    <h2 style="margin-bottom:4px">Payroll</h2>
+    <div class="document-note" style="margin-bottom:16px">
+      <p style="margin:0">All filled umpire slots. Mark slots paid when payment has been issued. Pay rates are configured in <a href="admin-config.html" style="color:#8ab4f8">Config → Pay Rates</a>.</p>
     </div>
-    <div class="page-actions" style="margin-bottom:12px">
-      <div class="form-group form-group--sm" style="flex:0 0 160px">
+
+    <!-- ── Filters ──────────────────────────────────────────────────────────── -->
+    <div class="page-actions" style="margin-bottom:8px;flex-wrap:wrap;gap:8px">
+      <div class="form-group form-group--sm" style="flex:0 0 150px">
         <label for="payrollFrom" style="margin-top:0">From</label>
         <input type="date" id="payrollFrom" style="padding:7px 10px;font-size:0.875rem" />
       </div>
-      <div class="form-group form-group--sm" style="flex:0 0 160px">
+      <div class="form-group form-group--sm" style="flex:0 0 150px">
         <label for="payrollTo" style="margin-top:0">To</label>
         <input type="date" id="payrollTo" style="padding:7px 10px;font-size:0.875rem" />
       </div>
       <button type="button" class="btn" id="payrollFilterBtn" style="align-self:flex-end">Filter</button>
-      <button type="button" class="btn print-btn" id="payrollResetBtn" style="align-self:flex-end">Show All</button>
-      <button type="button" class="btn print-btn" id="exportCsvBtn" style="align-self:flex-end;margin-left:auto">Export CSV</button>
+      <button type="button" class="btn print-btn" id="payrollThisYearBtn" style="align-self:flex-end">This Year</button>
+      <button type="button" class="btn print-btn" id="payrollLastYearBtn" style="align-self:flex-end">Last Year</button>
+      <button type="button" class="btn print-btn" id="payrollResetBtn" style="align-self:flex-end">All Time</button>
+      <button type="button" class="btn print-btn" id="exportCsvBtn" style="align-self:flex-end;margin-left:auto">⬇ Export CSV</button>
     </div>
-    <p id="payrollTotals" class="schedule-source" style="margin-top:0;font-weight:bold"></p>
+
+    <!-- ── Totals banner ────────────────────────────────────────────────────── -->
+    <p id="payrollTotals" style="font-size:0.92rem;margin:0 0 16px;color:var(--light-text)"></p>
+
+    <!-- ── Per-umpire summary cards ─────────────────────────────────────────── -->
+    <div id="payrollSummary"></div>
+
+    <!-- ── Detail table ─────────────────────────────────────────────────────── -->
     <div class="schedule-section" style="margin-top:0">
       <table id="payrollTable">
         <thead>
@@ -60,22 +70,22 @@
             <th>Umpire</th>
             <th>Date</th>
             <th>City / Div</th>
+            <th>Field</th>
             <th>Slot</th>
             <th>Pay</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody id="payrollBody">
-          <tr><td colspan="6" style="color:var(--light-text);text-align:center">Loading payroll…</td></tr>
+          <tr><td colspan="7" style="color:var(--light-text);text-align:center">Loading payroll…</td></tr>
         </tbody>
       </table>
     </div>
 
-    <!-- ── Umpire Requests ───────────────────────────────────────────────── -->
-    <h2>Umpire Requests</h2>
-    <p id="requestNote" class="schedule-source"></p>
-    <div id="requestList">
-      <p style="color:var(--light-text)">Loading requests…</p>
+    <!-- ── Umpire Requests (now managed in Scheduler) ───────────────────────── -->
+    <div class="document-note" style="margin-top:24px">
+      <p style="margin:0">Umpire requests from coaches are now managed in
+        <a href="admin-scheduler.html" style="color:#8ab4f8">Scheduler → Requests</a>.</p>
     </div>
 
   </div>
@@ -96,7 +106,7 @@
   </div>
 
   <script type="module" src="auth.js?v=18"></script>
-  <script type="module" src="admin-payroll.js?v=13"></script>
+  <script type="module" src="admin-payroll.js?v=14"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=3"></script>
   <script type="module" src="nav.js?v=2"></script>
