@@ -1,6 +1,8 @@
 // earnings.js — Umpire's own earnings history
 import { db }                           from "./firebase.js";
 import { authReadyPromise, isApproved, getCurrentUser } from "./auth.js";
+import { esc, fmtDate, fmtTime, setMsg, thisYearRange, lastYearRange } from "./utils.js";
+
 import {
   collection, getDocs, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -10,28 +12,6 @@ let fromFilter = "";
 let toFilter   = "";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-function fmtDate(iso) {
-  if (!iso) return "—";
-  return iso.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$2/$3/$1");
-}
-
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function thisYearRange() {
-  const y = new Date().getFullYear();
-  return { from: `${y}-01-01`, to: `${y}-12-31` };
-}
-
-function lastYearRange() {
-  const y = new Date().getFullYear() - 1;
-  return { from: `${y}-01-01`, to: `${y}-12-31` };
-}
 
 // ── Load ───────────────────────────────────────────────────────────────────
 

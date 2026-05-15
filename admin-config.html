@@ -204,7 +204,8 @@
       <p id="orgSettingsMessage" class="signup-message" aria-live="polite"></p>
     </div>
 
-    <!-- ── Slack Webhooks ────────────────────────────────────────────────── -->
+    <!-- ── Slack Webhooks (super admin only) ───────────────────────────── -->
+    <div id="slackWebhookSection" style="display:none">
     <h2>Slack Webhooks</h2>
     <div class="document-note">
       <p>Configure Slack channels to receive notifications. Each webhook can subscribe to specific event types and optionally filter by division. Create webhooks in Slack: <strong>Apps → Incoming Webhooks → Add New Webhook to Workspace</strong>.</p>
@@ -274,6 +275,7 @@
       <button type="button" class="btn print-btn" id="triggerSummaryBtn">Send Daily Summary Now</button>
     </div>
     <p id="slackTriggerMessage" class="signup-message" aria-live="polite"></p>
+    </div><!-- /slackWebhookSection -->
 
     <!-- ── Push Notifications ────────────────────────────────────────────── -->
     <h2>Send Notification</h2>

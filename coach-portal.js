@@ -1,47 +1,19 @@
 // coach-portal.js — Coach dashboard
 import { db } from "./firebase.js";
 import { authReadyPromise, isCoach, isAdmin, getCurrentUser, getCurrentCoachProfile } from "./auth.js";
+import { esc, fmtDate, fmtTime, setMsg } from "./utils.js";
+
 import {
   collection, getDocs, addDoc, query, orderBy, where, serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function fmtDate(dateISO) {
-  if (!dateISO) return "—";
-  const [y, m, d] = dateISO.split("-");
-  return `${m}/${d}/${y}`;
-}
-
-function fmtTime(t) {
-  if (!t) return "";
-  const [h, m] = t.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  const hr   = h % 12 || 12;
-  return `${hr}:${String(m).padStart(2, "0")} ${ampm}`;
-}
-
 function val(id) { return (document.getElementById(id)?.value || "").trim(); }
 
 function fieldError(id, msg) {
   const el = document.getElementById(id);
   if (el) el.textContent = msg;
-}
-
-function setMsg(id, text, type = "info") {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = text;
-  el.className   = `signup-message ${type}`;
 }
 
 // ── Tab switching ─────────────────────────────────────────────────────────────

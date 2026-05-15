@@ -1,6 +1,8 @@
 // form.js — Acknowledgment form: Firebase account creation + Firestore profile
 import { auth, db } from "./firebase.js";
 import { getOrgSettings } from "./org.js";
+import { esc, formatPhoneInput } from "./utils.js";
+
 import {
   createUserWithEmailAndPassword,
   updateProfile,
@@ -36,11 +38,6 @@ getOrgSettings().then(s => {
     }
   }
 });
-
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
 // ── Google Sign-In mode ───────────────────────────────────────────────────────
 // When arriving from googleSignIn() redirect (form.html?google=1), the user is
@@ -173,17 +170,8 @@ function validateForm(data) {
 
 // ── Phone formatting ─────────────────────────────────────────────────────────
 
-function formatPhone(input) {
-  const digits = input.value.replace(/\D/g, "").slice(0, 10);
-  let formatted = digits;
-  if (digits.length > 6)      formatted = `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
-  else if (digits.length > 3) formatted = `(${digits.slice(0,3)}) ${digits.slice(3)}`;
-  else if (digits.length > 0) formatted = `(${digits}`;
-  input.value = formatted;
-}
-
-document.getElementById("phone").addEventListener("input", function() { formatPhone(this); });
-document.getElementById("parent_phone").addEventListener("input", function() { formatPhone(this); });
+document.getElementById("phone").addEventListener("input", function() { formatPhoneInput(this); });
+document.getElementById("parent_phone").addEventListener("input", function() { formatPhoneInput(this); });
 
 // Inline email validation on blur
 document.getElementById("email").addEventListener("blur", function() {

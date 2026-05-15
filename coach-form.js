@@ -1,20 +1,14 @@
 // coach-form.js — Coach registration
 import { auth, db } from "./firebase.js";
 import { authReadyPromise, isCoach, isAdmin, isApproved, getCurrentUser } from "./auth.js";
+import { esc, setMsg, formatPhone } from "./utils.js";
+
 import {
   createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   doc, setDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-function formatPhone(raw) {
-  const digits = raw.replace(/\D/g, "").slice(0, 10);
-  if (digits.length === 10) {
-    return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
-  }
-  return raw;
-}
 
 function fieldError(id, msg) {
   const el = document.getElementById(id);
@@ -25,13 +19,6 @@ function clearErrors() {
   ["cfFirstNameError","cfLastNameError","cfEmailError","cfPhoneError",
    "cfTeamNameError","cfDivisionError","cfCityError","cfPasswordError"]
     .forEach(id => fieldError(id, ""));
-}
-
-function setMsg(text, type = "info") {
-  const el = document.getElementById("cfMessage");
-  if (!el) return;
-  el.textContent = text;
-  el.className = `signup-message ${type}`;
 }
 
 function val(id) { return (document.getElementById(id)?.value || "").trim(); }

@@ -1,6 +1,8 @@
 // admin-teams.js — Teams & Leagues management
 import { db }                             from "./firebase.js";
 import { authReadyPromise, isAdmin }      from "./auth.js";
+import { esc } from "./utils.js";
+
 import {
   collection, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
   doc, query, where, orderBy, serverTimestamp
@@ -15,10 +17,6 @@ let teamCoaches          = [];   // approved coaches for team-form dropdown
 let activeSection        = "teams";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function esc(s) {
-  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
 
 // ── Section navigation ────────────────────────────────────────────────────────
 

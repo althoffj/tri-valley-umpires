@@ -1,6 +1,8 @@
 // fields.js — Dynamic facility/field info loaded from Firestore
 import { db } from "./firebase.js";
 import { authReadyPromise, isApproved, isAdmin } from "./auth.js";
+import { esc } from "./utils.js";
+
 import {
   collection,
   getDocs,
@@ -9,12 +11,6 @@ import {
   orderBy,
   query
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 // ── Weather ───────────────────────────────────────────────────────────────────
 

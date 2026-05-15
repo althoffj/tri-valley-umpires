@@ -1,6 +1,8 @@
 // admin-games.js — Game management: sync, add, list, edit modal, team calendars
 import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin } from "./auth.js";
+import { esc, fmtDate, fmtTime, todayISO, setMsg } from "./utils.js";
+
 import {
   getFunctions,
   httpsCallable
@@ -37,41 +39,6 @@ let gfField    = "";
 let gfUmpire   = "";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function fmtDate(dateISO) {
-  if (!dateISO) return "—";
-  const [y, m, d] = dateISO.split("-");
-  return `${m}/${d}/${y}`;
-}
-
-function fmtTime(timeStr) {
-  if (!timeStr) return "—";
-  const [h, m] = timeStr.split(":");
-  const hr = parseInt(h, 10);
-  const ampm = hr >= 12 ? "PM" : "AM";
-  return `${hr % 12 || 12}:${m} ${ampm}`;
-}
-
-function setMsg(id, text, type = "info") {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = text;
-  el.className   = `signup-message ${type}`;
-}
 
 function cancelledLabel(g) {
   const type  = g.cancellationType || "cancelled";
@@ -440,14 +407,17 @@ async function unassignSlot(gameId, slotType) {
   if (!confirm(`Remove the umpire from the ${slotType} slot?`)) return;
   try {
     const gameRef = doc(db, "games", gameId);
-    const snap = await getDoc(gameRef);
-    if (!snap.exists()) return;
-    const slots = (snap.data().umpireSlots || []).map(s =>
-      s.type === slotType ? { ...s, assignedUid: null, assignedName: null } : s
-    );
-    await updateDoc(gameRef, { umpireSlots: slots });
+    let updatedSlots;
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(gameRef);
+      if (!snap.exists()) throw new Error("Game not found.");
+      updatedSlots = (snap.data().umpireSlots || []).map(s =>
+        s.type === slotType ? { type: s.type, payRate: s.payRate ?? 0 } : s
+      );
+      tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires: true });
+    });
     const g = allGames.find(g => g.id === gameId);
-    if (g) g.umpireSlots = slots;
+    if (g) { g.umpireSlots = updatedSlots; g.needsUmpires = true; }
     renderAdminGames();
   } catch (err) {
     alert(err.message);
@@ -720,14 +690,23 @@ async function doAssign(uid, name) {
 
   try {
     const gameRef = doc(db, "games", gameId);
-    const snap    = await getDoc(gameRef);
-    if (!snap.exists()) throw new Error("Game not found.");
-    const slots = (snap.data().umpireSlots || []).map(s =>
-      s.type === slotType ? { ...s, assignedUid: uid, assignedName: name } : s
-    );
-    await updateDoc(gameRef, { umpireSlots: slots });
+    let updatedSlots;
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(gameRef);
+      if (!snap.exists()) throw new Error("Game not found.");
+      const current = snap.data().umpireSlots || [];
+      const target  = current.find(s => s.type === slotType);
+      if (target?.assignedUid && target.assignedUid !== uid) {
+        throw new Error("Slot was just assigned to someone else. Refresh and try again.");
+      }
+      updatedSlots = current.map(s =>
+        s.type === slotType ? { ...s, assignedUid: uid, assignedName: name } : s
+      );
+      const needsUmpires = updatedSlots.some(s => !s.assignedUid);
+      tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires });
+    });
     const g = allGames.find(g => g.id === gameId);
-    if (g) g.umpireSlots = slots;
+    if (g) { g.umpireSlots = updatedSlots; g.needsUmpires = updatedSlots.some(s => !s.assignedUid); }
     document.getElementById("assignModal").style.display = "none";
     renderAdminGames();
   } catch (err) {

@@ -2,6 +2,8 @@
 import { db, app }                       from "./firebase.js";
 import { authReadyPromise, isAdmin }      from "./auth.js";
 import { getFunctions, httpsCallable }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
+import { esc, fmtDate, fmtTime, fmtTime as fmt12, todayISO } from "./utils.js";
+
 import {
   collection, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
   doc, query, where, orderBy, serverTimestamp
@@ -93,22 +95,6 @@ let peCurrentPractice      = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function esc(s) {
-  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
-
-function fmtDate(iso) {
-  if (!iso) return "—";
-  const [y, m, d] = iso.split("-");
-  return `${parseInt(m)}/${parseInt(d)}/${y}`;
-}
-
-function fmt12(t) {
-  if (!t) return "—";
-  const [h, m] = t.split(":").map(Number);
-  return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"}`;
-}
-
 function issueBadge(issue) {
   return `<span class="sched-issue-badge" style="background:${issue.color}22;color:${issue.color};border-color:${issue.color}44">${esc(issue.label)}</span>`;
 }
@@ -128,11 +114,6 @@ function gameRowCells(game) {
     <td>${esc(game.homeTeam && game.awayTeam
       ? `${game.awayTeam} @ ${game.homeTeam}` : game.homeTeam || game.awayTeam || "—")}</td>
     <td>${sourceLabel(game)}</td>`;
-}
-
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
 /** Find team color by matching homeTeam or awayTeam name */

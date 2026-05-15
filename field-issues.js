@@ -1,6 +1,8 @@
 // field-issues.js — Submit field issue reports; view own submissions
 import { db } from "./firebase.js";
 import { authReadyPromise, isApproved, isAdmin, getCurrentUser } from "./auth.js";
+import { esc, setMsg } from "./utils.js";
+
 import {
   collection,
   getDocs,
@@ -12,25 +14,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function setMsg(id, text, type = "info") {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = text;
-  el.className   = `signup-message ${type}`;
-}
-
-function fmtDate(ts) {
-  if (!ts) return "—";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 function severityBadge(s) {
   const color = s === "High" ? "#c0392b" : s === "Medium" ? "#b8860b" : "#2a6a2a";

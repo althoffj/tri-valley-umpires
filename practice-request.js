@@ -1,6 +1,8 @@
 // practice-request.js — public coach practice request form
 import { db } from "./firebase.js";
 import { collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { esc } from "./utils.js";
+
 
 // ── Recurrence toggle ─────────────────────────────────────────────────────────
 

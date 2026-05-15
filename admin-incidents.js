@@ -1,24 +1,14 @@
 // admin-incidents.js — view all incident reports
 import { db } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
+import { esc, fmtDate, setMsg } from "./utils.js";
+
 import {
   collection,
   getDocs,
   query,
   orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function fmtDate(dateISO) {
-  if (!dateISO) return "—";
-  const [y, m, d] = dateISO.split("-");
-  return `${m}/${d}/${y}`;
-}
 
 async function loadIncidents() {
   const listEl = document.getElementById("incidentList");

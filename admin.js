@@ -1,6 +1,8 @@
 // admin.js — Overview: pending approvals, roster, admin user management
 import { app, db } from "./firebase.js";
-import { authReadyPromise, isAdmin, getCurrentUser } from "./auth.js";
+import { authReadyPromise, isAdmin, isSuperAdmin, getCurrentUser } from "./auth.js";
+import { esc, fmtTime, setMsg, csvCell } from "./utils.js";
+
 import {
   getFunctions,
   httpsCallable
@@ -21,22 +23,6 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function setMsg(id, text, type = "info") {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = text;
-  el.className   = `signup-message ${type}`;
-}
-
 // ── Admin role helpers ────────────────────────────────────────────────────────
 
 let currentAdminDoc = null;
@@ -48,14 +34,6 @@ async function loadCurrentAdminDoc() {
     const snap = await getDoc(doc(db, "admins", user.uid));
     currentAdminDoc = snap.exists() ? snap.data() : null;
   } catch (_) { currentAdminDoc = null; }
-}
-
-function isSuperAdmin() {
-  if (!currentAdminDoc) return false;
-  if (currentAdminDoc.superAdmin === true)  return true;
-  if (currentAdminDoc.superAdmin === false) return false;
-  // superAdmin field absent → legacy account; empty roles = super admin
-  return (currentAdminDoc.roles || []).length === 0;
 }
 
 // ── Pending Approvals ─────────────────────────────────────────────────────────
@@ -857,10 +835,6 @@ async function saveAccountEdits() {
 
 // ── Umpire Roster Export ──────────────────────────────────────────────────────
 
-function csvCell(v) {
-  return `"${String(v ?? "").replace(/"/g, '""')}"`;
-}
-
 async function exportRosterCSV() {
   const btn = document.getElementById("exportRosterBtn");
   if (btn) { btn.disabled = true; btn.textContent = "Exporting…"; }
@@ -1009,7 +983,7 @@ async function loadAdminQuickStats() {
     }
 
     const rows = todayGames.map(g => {
-      const time = g.time ? fmtTime12(g.time) : "—";
+      const time = g.time ? fmtTime(g.time) : "—";
       const slots = (g.umpireSlots || []).map(s => {
         const who = s.assignedName
           ? `<span style="color:#b8f2c4">${esc(s.assignedName)}</span>`
@@ -1039,14 +1013,6 @@ async function loadAdminQuickStats() {
     console.error("Quick stats error:", err);
     cardsEl.innerHTML = `<p style="color:var(--light-text);font-size:0.85rem">Could not load stats.</p>`;
   }
-}
-
-function fmtTime12(t) {
-  if (!t) return "";
-  const [h, m] = t.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  const hr   = h % 12 || 12;
-  return `${hr}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

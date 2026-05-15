@@ -2,36 +2,13 @@
 import { db } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
 import { getOrgSettings, getSeasonRange } from "./org.js";
+import { esc, fmtDate, fmtTime, setMsg, thisYearRange, lastYearRange } from "./utils.js";
+
 import {
-  collection, getDocs, getDoc, doc, updateDoc, query, orderBy
+  collection, getDocs, getDoc, doc, updateDoc, writeBatch, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
-function fmtDate(iso) {
-  if (!iso) return "—";
-  return iso.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$2/$3/$1");
-}
-function fmtTime(t) {
-  if (!t) return "—";
-  const [h, m] = t.split(":").map(Number);
-  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-}
-function thisYearRange() {
-  // Use configured season dates if available; fall back to full calendar year
-  try { return getSeasonRange(); } catch { /* org.js not yet resolved */ }
-  const y = new Date().getFullYear();
-  return { from: `${y}-01-01`, to: `${y}-12-31` };
-}
-function lastYearRange() {
-  const y = new Date().getFullYear() - 1;
-  return { from: `${y}-01-01`, to: `${y}-12-31` };
-}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -191,16 +168,23 @@ async function markAllPaid(uid) {
   });
 
   try {
-    for (const [gameId, gameRows] of Object.entries(byGame)) {
-      const ref  = doc(db, "games", gameId);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) continue;
+    // Fetch all game docs in parallel, then commit all updates as a single batch
+    const gameIds = Object.keys(byGame);
+    const refs    = gameIds.map(id => doc(db, "games", id));
+    const snaps   = await Promise.all(refs.map(ref => getDoc(ref)));
+
+    const batch = writeBatch(db);
+    snaps.forEach((snap, i) => {
+      if (!snap.exists()) return;
+      const gameRows = byGame[gameIds[i]];
       const slots = (snap.data().umpireSlots ?? []).map(s => {
         const match = gameRows.find(r => r.slotType === s.type && r.uid === s.assignedUid);
         return match ? { ...s, paid: true } : s;
       });
-      await updateDoc(ref, { umpireSlots: slots });
-    }
+      batch.update(refs[i], { umpireSlots: slots });
+    });
+    await batch.commit();
+
     // Update local state
     rows.forEach(r => { r.paid = true; });
     renderAll();
@@ -295,10 +279,11 @@ async function togglePaid(gameId, slotType, uid) {
 
 // ── Pay stub ──────────────────────────────────────────────────────────────────
 
-function generatePayStub(uid) {
+async function generatePayStub(uid) {
   const rows     = filteredRows().filter(r => r.uid === uid && !r.noShow);
   if (!rows.length) return;
 
+  const org  = await getOrgSettings();
   const name      = rows[0].umpireName;
   const owed      = rows.reduce((s, r) => s + r.pay, 0);
   const paid      = rows.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
@@ -327,6 +312,8 @@ function generatePayStub(uid) {
         <td class="${r.paid ? "paid" : "unpaid"}">${r.paid ? "Paid" : "Unpaid"}</td>
       </tr>`).join("");
 
+  const brand = org.accentColor || "#601929";
+
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -350,14 +337,14 @@ function generatePayStub(uid) {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      border-bottom: 3px solid #601929;
+      border-bottom: 3px solid ${brand};
       padding-bottom: 14px;
       margin-bottom: 20px;
     }
     .org-name {
       font-size: 20px;
       font-weight: 700;
-      color: #601929;
+      color: ${brand};
       line-height: 1.2;
     }
     .org-sub {
@@ -383,7 +370,7 @@ function generatePayStub(uid) {
       padding: 14px 18px;
       margin-bottom: 20px;
     }
-    .stub-info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #601929; margin-bottom: 3px; }
+    .stub-info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: ${brand}; margin-bottom: 3px; }
     .stub-info-value { font-size: 14px; font-weight: 600; color: #111; }
 
     /* ── Rate note ── */
@@ -402,7 +389,7 @@ function generatePayStub(uid) {
       font-size: 12.5px;
     }
     thead th {
-      background: #601929;
+      background: ${brand};
       color: #fff;
       text-align: left;
       padding: 7px 10px;
@@ -459,7 +446,7 @@ function generatePayStub(uid) {
       margin-bottom: 24px;
     }
     .print-bar button {
-      background: #601929;
+      background: ${brand};
       color: #fff;
       border: none;
       border-radius: 6px;
@@ -468,7 +455,7 @@ function generatePayStub(uid) {
       cursor: pointer;
       font-family: inherit;
     }
-    .print-bar button:hover { background: #7a2035; }
+    .print-bar button:hover { filter: brightness(0.85); }
 
     @media print {
       body { padding: 16px; }
@@ -486,9 +473,9 @@ function generatePayStub(uid) {
   <!-- Header -->
   <div class="stub-header">
     <div>
-      <div class="org-name">Tri-Valley Baseball Umpires</div>
-      <div class="org-sub">Tri-Valley Baseball Association &nbsp;·&nbsp; SD VFW Baseball</div>
-      <div class="org-sub">Contact: Jeff Althoff &nbsp;·&nbsp; 605-380-0229</div>
+      <div class="org-name">${org.orgName}</div>
+      <div class="org-sub">${org.assocName}</div>
+      <div class="org-sub">Contact: ${org.coordinatorName} &nbsp;·&nbsp; ${org.coordinatorPhone}</div>
     </div>
     <div class="stub-meta">
       <div><strong>Pay Statement</strong></div>
@@ -552,9 +539,9 @@ function generatePayStub(uid) {
 
   <!-- Footer -->
   <div class="stub-footer">
-    <p>This document is a payment record for officiating services rendered to Tri-Valley Baseball Association.
+    <p>This document is a payment record for officiating services rendered to ${org.assocName}.
     It is not a tax document. Please retain for your records.</p>
-    <p style="margin-top:4px">Questions? Contact Jeff Althoff at 605-380-0229 or post in the Umpire Slack channel.</p>
+    <p style="margin-top:4px">Questions? Contact ${org.coordinatorName} at ${org.coordinatorPhone} or post in the Umpire Slack channel.</p>
   </div>
 
 </body>

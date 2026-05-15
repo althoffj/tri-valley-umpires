@@ -2,6 +2,8 @@
 import { db, auth } from "./firebase.js";
 import { isApproved, isAdmin, getCurrentUser } from "./auth.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { esc, fmtTime, todayISO } from "./utils.js";
+
 import {
   collection, getDocs, getDoc, query, orderBy, doc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -33,19 +35,8 @@ const DOW_LABELS  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-
 function isoFromDate(dt) {
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
-}
-
-function fmtTime(t) {
-  if (!t) return "";
-  const [h, m] = t.split(":").map(Number);
-  return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 
 function fmtDate(iso) {
@@ -53,12 +44,6 @@ function fmtDate(iso) {
   const [y, m, d] = iso.split("-").map(Number);
   const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(y, m-1, d).getDay()];
   return `${dow}, ${m}/${d}/${y}`;
-}
-
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 }
 
 function isMyGame(g) {

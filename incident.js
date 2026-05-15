@@ -1,5 +1,7 @@
 // incident.js — submit incident reports against games the umpire worked
 import { app, db } from "./firebase.js";
+import { esc, fmtDate, setMsg } from "./utils.js";
+
 import {
   authReadyPromise,
   isApproved,
@@ -26,29 +28,7 @@ import {
 // Storage is initialized here only — not in the shared firebase.js
 const storage = getStorage(app);
 
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function fmtDate(dateISO) {
-  if (!dateISO) return "—";
-  const [y, m, d] = dateISO.split("-");
-  return `${m}/${d}/${y}`;
-}
-
 function val(id) { return (document.getElementById(id)?.value || "").trim(); }
-
-function setMsg(text, type = "info") {
-  const el = document.getElementById("incidentMessage");
-  if (!el) return;
-  el.textContent = text;
-  el.className = `signup-message ${type}`;
-}
 
 function fieldError(id, msg) {
   const el = document.getElementById(id);

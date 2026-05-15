@@ -1,3 +1,4 @@
+import { esc, fmtDate, fmtTime, fmtTime as fmt12, todayISO } from "./utils.js";
 // facility-schedule.js — Public shareable facility field schedule
 // No auth required. Calls getFacilitySchedule cloud function.
 
@@ -24,35 +25,14 @@ let filterDiv      = "";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function esc(s) {
-  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
-
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-
 function isoFromDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-
-function fmtDate(iso) {
-  if (!iso) return "—";
-  const [y, m, d] = iso.split("-");
-  return `${parseInt(m)}/${parseInt(d)}/${y}`;
 }
 
 function fmtDateLong(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T12:00:00");
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-}
-
-function fmt12(t) {
-  if (!t) return "—";
-  const [h, m] = t.split(":").map(Number);
-  return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 
 const MONTH_NAMES = ["January","February","March","April","May","June",

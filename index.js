@@ -9,6 +9,8 @@ document.querySelectorAll("#seasonYear, .season-year").forEach(el => {
 document.title = `Tri-Valley Baseball Umpires - ${SEASON_YEAR}`;
 import { db, auth } from "./firebase.js";
 import { getOrgSettings } from "./org.js";
+import { esc, fmtDate, fmtTime, todayISO } from "./utils.js";
+
 // Refresh title with org name once settings resolve
 getOrgSettings().then(s => {
   document.title = `${s.orgName} - ${SEASON_YEAR}`;
@@ -42,8 +44,8 @@ async function loadAnnouncements() {
       active.map(d => {
         const a = d.data();
         return `<div class="document-note" style="border-left-color:#7ec8f7;margin-bottom:12px">
-          <strong style="color:white;display:block;margin-bottom:4px">${a.title ?? ""}</strong>
-          <p style="margin:0;white-space:pre-wrap">${a.body ?? ""}</p>
+          <strong style="color:white;display:block;margin-bottom:4px">${esc(a.title)}</strong>
+          <p style="margin:0;white-space:pre-wrap">${esc(a.body)}</p>
         </div>`;
       }).join("");
   } catch (_) {
@@ -51,21 +53,10 @@ async function loadAnnouncements() {
   }
 }
 
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-
 function weekEndISO() {
   const d = new Date();
   d.setDate(d.getDate() + 6);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-
-function fmtTime(t) {
-  if (!t) return "";
-  const [h, m] = t.split(":").map(Number);
-  return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 
 function fmtDate(iso) {

@@ -1,6 +1,8 @@
 // schedule.js — Firestore-based schedule with multi-slot signups, badges, and pay tracking
 import { getOrgSettings } from "./org.js";
 import { db, auth } from "./firebase.js";
+import { esc, fmtDate, fmtTime, todayISO } from "./utils.js";
+
 import {
   authReadyPromise,
   isLoggedIn,
@@ -125,31 +127,11 @@ async function fetchWeather(city, date, timeStr) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function gameDateStatus(dateISO) {
   const today = todayISO();
   if (dateISO < today)   return "past";
   if (dateISO === today) return "today";
   return "upcoming";
-}
-
-function fmtDate(dateISO) {
-  if (!dateISO) return "—";
-  const [y, m, d] = dateISO.split("-");
-  return `${m}/${d}/${y}`;
 }
 
 function dateBadge(game) {
@@ -1065,19 +1047,22 @@ async function cancelSlot(gameId, slotType) {
     // Outside the window — self-service cancel
     if (!confirm(`Cancel your ${slotType} signup for this game? This cannot be undone.`)) return;
     try {
-      const gameRef  = doc(db, "games", gameId);
-      const gameSnap = await getDoc(gameRef);
-      if (!gameSnap.exists()) return;
-      const slots = (gameSnap.data().umpireSlots || []).map(s => {
-        if (s.type === slotType && s.assignedUid === user.uid) {
-          return { ...s, assignedUid: null, assignedName: null, payRate: s.payRate ?? null };
-        }
-        return s;
+      const gameRef = doc(db, "games", gameId);
+      let updatedSlots;
+      await runTransaction(db, async tx => {
+        const snap = await tx.get(gameRef);
+        if (!snap.exists()) throw new Error("Game not found.");
+        updatedSlots = (snap.data().umpireSlots || []).map(s =>
+          s.type === slotType && s.assignedUid === user.uid
+            ? { type: s.type, payRate: s.payRate ?? null }   // strip assignment fields
+            : s
+        );
+        const needsUmpires = updatedSlots.some(s => !s.assignedUid);
+        tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires });
       });
-      await updateDoc(gameRef, { umpireSlots: slots });
       // Update local state
       const g = games.find(x => x.id === gameId);
-      if (g) g.umpireSlots = slots;
+      if (g) { g.umpireSlots = updatedSlots; g.needsUmpires = updatedSlots.some(s => !s.assignedUid); }
       renderGameRows();
     } catch (err) {
       alert("Failed to cancel signup: " + err.message);

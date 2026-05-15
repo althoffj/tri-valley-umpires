@@ -6,6 +6,7 @@ import {
   query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
+import { esc, fmtDate, fmtTime, setMsg } from "./utils.js";
 
 const fns         = getFunctions();
 const notifySwap  = httpsCallable(fns, "notifyTournamentSwap");
@@ -17,30 +18,6 @@ let allGames       = [];
 let expandedTid    = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
-
-function fmtDate(iso) {
-  if (!iso) return "—";
-  return iso.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$2/$3/$1");
-}
-
-function fmtTime(t) {
-  if (!t) return "—";
-  const [h, m] = t.split(":").map(Number);
-  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-}
-
-function setMsg(id, text, type = "info") {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = text;
-  el.className   = `signup-message ${type}`;
-}
 
 function addMinutesToTime(timeStr, minutes) {
   if (!timeStr) return timeStr;

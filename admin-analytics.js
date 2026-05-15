@@ -1,6 +1,8 @@
 // admin-analytics.js — Season Analytics
 import { db }                        from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
+import { esc } from "./utils.js";
+
 import { collection, getDocs, query, orderBy }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -218,10 +220,6 @@ function getMondayISO(d) {
 function fmtWeek(iso) {
   const [, m, day] = iso.split("-");
   return `${parseInt(m)}/${parseInt(day)}`;
-}
-
-function esc(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 init();

@@ -1,5 +1,7 @@
 // request-umpire.js — public coach form to request umpire coverage
 import { db } from "./firebase.js";
+import { esc, fmtDate, fmtTime, setMsg } from "./utils.js";
+
 import {
   collection,
   getDocs,
@@ -27,11 +29,6 @@ let defaultRates = { plate: 40, field: 30 };
 })();
 
 // ── Facilities cascade ────────────────────────────────────────────────────────
-
-function esc(v) {
-  return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 let facilitiesData = [];
 
@@ -115,13 +112,6 @@ function getLocationStrings() {
 
 loadFacilities();
 
-function setMsg(text, type = "info") {
-  const el = document.getElementById("requestMessage");
-  if (!el) return;
-  el.textContent = text;
-  el.className = `signup-message ${type}`;
-}
-
 function fieldError(id, msg) {
   const el = document.getElementById(id);
   if (el) el.textContent = msg;
@@ -133,19 +123,6 @@ function clearErrors() {
   ].forEach(id => fieldError(id, ""));
 }
 
-function fmtTime(t) {
-  if (!t) return "—";
-  const [h, m] = t.split(":").map(Number);
-  const period = h >= 12 ? "PM" : "AM";
-  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${period}`;
-}
-
-function fmtDate(dateISO) {
-  if (!dateISO) return "—";
-  const [y, mo, d] = dateISO.split("-");
-  return `${mo}/${d}/${y}`;
-}
-
 // Phone formatting
 document.getElementById("coachPhone")?.addEventListener("input", function () {
   const digits = this.value.replace(/\D/g, "").slice(0, 10);
@@ -153,7 +130,6 @@ document.getElementById("coachPhone")?.addEventListener("input", function () {
   if (digits.length <= 6) { this.value = `(${digits.slice(0,3)}) ${digits.slice(3)}`; return; }
   this.value = `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
 });
-
 
 document.getElementById("requestForm")?.addEventListener("submit", async function (e) {
   e.preventDefault();

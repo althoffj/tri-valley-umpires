@@ -1,6 +1,8 @@
 // availability.js — Umpire unavailability calendar
 import { db } from "./firebase.js";
 import { authReadyPromise, isApproved, getCurrentUser } from "./auth.js";
+import { esc, todayISO, setMsg } from "./utils.js";
+
 import {
   doc,
   getDoc,
@@ -16,20 +18,8 @@ let viewYear  = new Date().getFullYear();
 let viewMonth = new Date().getMonth(); // 0-indexed
 let dirty     = false;
 
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-
 function isoFromParts(y, m, d) {
   return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-}
-
-function setMsg(text, type = "info") {
-  const el = document.getElementById("availMsg");
-  if (!el) return;
-  el.textContent = text;
-  el.className   = `signup-message ${type}`;
 }
 
 // ── Render calendar ───────────────────────────────────────────────────────────

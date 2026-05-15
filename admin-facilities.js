@@ -1,6 +1,8 @@
 // admin-facilities.js — Facilities CRUD with per-facility fields management
 import { db } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
+import { esc, setMsg } from "./utils.js";
+
 import {
   collection,
   getDocs,
@@ -16,22 +18,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function setMsg(id, text, type = "info") {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = text;
-  el.className   = `signup-message ${type}`;
-}
 
 // In-memory cache so edit forms can read full field objects without DOM scraping
 let facilitiesCache = {}; // { [facilityId]: facilityData }

@@ -1,7 +1,9 @@
 // admin-users.js — Umpire directory + admin account & permissions management
 
 import { app, db } from "./firebase.js";
-import { authReadyPromise, isAdmin, getCurrentUser } from "./auth.js";
+import { authReadyPromise, isAdmin, isSuperAdmin, getCurrentUser } from "./auth.js";
+import { esc, setMsg, csvCell } from "./utils.js";
+
 import {
   getFunctions,
   httpsCallable
@@ -14,17 +16,6 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function esc(v) {
-  return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function setMsg(id, text, type = "info") {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = text;
-  el.className   = `signup-message ${type}`;
-}
-
 // ── Admin role helpers ────────────────────────────────────────────────────────
 
 let currentAdminDoc = null;
@@ -34,13 +25,6 @@ async function loadCurrentAdminDoc() {
   if (!user) return;
   const snap = await getDoc(doc(db, "admins", user.uid)).catch(() => null);
   currentAdminDoc = snap?.exists() ? snap.data() : {};
-}
-
-function isSuperAdmin() {
-  if (!currentAdminDoc) return false;
-  if (currentAdminDoc.superAdmin === true)  return true;
-  if (currentAdminDoc.superAdmin === false) return false;
-  return (currentAdminDoc.roles || []).length === 0;
 }
 
 // ── Section switching ─────────────────────────────────────────────────────────
@@ -314,8 +298,6 @@ async function deleteUmpireAccount(uid, name) {
 }
 
 // ── CSV Export ────────────────────────────────────────────────────────────────
-
-function csvCell(v) { return `"${String(v ?? "").replace(/"/g, '""')}"`; }
 
 async function exportRosterCSV() {
   const btn = document.getElementById("exportRosterBtn");
