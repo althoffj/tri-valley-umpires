@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Admin: Sponsors - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=16" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io https://firebasestorage.googleapis.com; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+  <style>
+    .sponsor-card {
+      background:var(--field);border-radius:10px;padding:16px 20px;
+      margin-bottom:12px;display:flex;align-items:flex-start;gap:16px
+    }
+    .sponsor-logo-thumb {
+      width:64px;height:64px;object-fit:contain;border-radius:6px;
+      background:#1a1a2e;border:1px solid #333;flex-shrink:0
+    }
+    .sponsor-logo-placeholder {
+      width:64px;height:64px;border-radius:6px;background:#1a1a2e;
+      border:1px solid #333;flex-shrink:0;display:flex;align-items:center;
+      justify-content:center;font-size:1.6rem;color:#555
+    }
+    .sponsor-card-body { flex:1;min-width:0 }
+    .sponsor-card-name { font-weight:700;font-size:1.05rem;margin-bottom:4px }
+    .sponsor-card-meta { font-size:0.82rem;color:var(--light-text);margin-bottom:6px }
+    .sponsor-card-tags { display:flex;flex-wrap:wrap;gap:4px }
+    .sponsor-tag { font-size:0.72rem;padding:2px 7px;border-radius:4px;background:#1e2a3a;color:#8ab4f8 }
+    .sponsor-tag.team { background:#1a2e1a;color:#86efac }
+    .sponsor-tag.inactive { background:#3a1a1a;color:#ffb4b4 }
+    .sponsor-history-row {
+      display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;padding:10px;
+      background:rgba(255,255,255,0.03);border:1px solid #333;
+      border-radius:6px;align-items:flex-start
+    }
+    .sponsor-team-row {
+      display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;padding:10px;
+      background:rgba(255,255,255,0.03);border:1px solid #333;
+      border-radius:6px;align-items:center
+    }
+    .logo-preview-wrap { display:flex;align-items:center;gap:12px;margin-top:8px }
+    .logo-preview-img {
+      width:80px;height:80px;object-fit:contain;border-radius:8px;
+      background:#1a1a2e;border:1px solid #333
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+<nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html">Games</a>
+      <a href="admin-scheduler.html">Scheduler</a>
+      <a href="admin-teams.html">Teams</a>
+      <a href="admin-tournament.html">Tournaments</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-sponsors.html" class="admin-subnav-active">Sponsors</a>
+      <a href="admin-incidents.html">Incidents</a>
+      <a href="admin-alerts.html">Alerts</a>
+      <a href="admin-config.html">Config</a>
+      <a href="admin-analytics.html">Analytics</a>
+      <a href="admin-users.html">Users</a>
+    </nav>
+
+    <h2 style="margin-bottom:4px">Sponsors</h2>
+    <div class="document-note" style="margin-bottom:20px">
+      <p style="margin:0">Manage sponsors, their contributions, and team assignments. Per-team sponsorship amounts are visible here only — they do not appear on team pages.</p>
+    </div>
+
+    <!-- Sponsor list -->
+    <div id="sponsorList" style="margin-bottom:16px">
+      <p style="color:var(--light-text)">Loading sponsors…</p>
+    </div>
+    <div class="page-actions" style="margin-bottom:24px">
+      <button type="button" class="btn" id="addSponsorBtn">+ Add Sponsor</button>
+    </div>
+
+    <!-- ── Add / Edit form ──────────────────────────────────────────────────── -->
+    <div id="sponsorEditPanel" style="display:none;background:var(--field);border-radius:10px;padding:20px 24px;margin-bottom:24px">
+      <h3 id="sponsorEditTitle" style="margin-top:0">Add Sponsor</h3>
+      <input type="hidden" id="sponsorEditId" />
+
+      <!-- ── Identity ──────────────────────────────────────────────────────── -->
+      <div class="form-row">
+        <div class="form-group">
+          <label for="spName">Business Name <span style="color:#e53935">*</span></label>
+          <input type="text" id="spName" placeholder="e.g. Acme Hardware" maxlength="120" required />
+        </div>
+        <div class="form-group form-group--sm">
+          <label style="display:flex;align-items:center;gap:8px;margin-top:28px;cursor:pointer;font-weight:normal">
+            <input type="checkbox" id="spActive" checked style="accent-color:var(--accent)" />
+            Active
+          </label>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="spWebsite">Website</label>
+          <input type="url" id="spWebsite" placeholder="https://example.com" />
+        </div>
+        <div class="form-group">
+          <label for="spPhone">Business Phone</label>
+          <input type="tel" id="spPhone" placeholder="605-555-1234" />
+        </div>
+      </div>
+
+      <!-- ── Address ───────────────────────────────────────────────────────── -->
+      <div class="form-group">
+        <label for="spAddress">Street Address</label>
+        <input type="text" id="spAddress" placeholder="123 Main St" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="spCity">City</label>
+          <input type="text" id="spCity" placeholder="Crooks" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="spState">State</label>
+          <input type="text" id="spState" maxlength="2" placeholder="SD"
+            style="text-transform:uppercase;width:100%" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="spZip">ZIP</label>
+          <input type="text" id="spZip" maxlength="10" placeholder="57035" style="width:100%" />
+        </div>
+      </div>
+
+      <!-- ── Main contact ──────────────────────────────────────────────────── -->
+      <h4 style="margin:16px 0 10px;font-size:0.95rem;border-top:1px solid #333;padding-top:14px">Main Contact</h4>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="spContactName">Name</label>
+          <input type="text" id="spContactName" placeholder="First and last name" />
+        </div>
+        <div class="form-group">
+          <label for="spContactTitle">Title</label>
+          <input type="text" id="spContactTitle" placeholder="e.g. Owner, Marketing Director" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="spContactPhone">Phone</label>
+          <input type="tel" id="spContactPhone" placeholder="605-555-1234" />
+        </div>
+        <div class="form-group">
+          <label for="spContactEmail">Email</label>
+          <input type="email" id="spContactEmail" placeholder="contact@example.com" />
+        </div>
+      </div>
+
+      <!-- ── Logo ─────────────────────────────────────────────────────────── -->
+      <h4 style="margin:16px 0 10px;font-size:0.95rem;border-top:1px solid #333;padding-top:14px">Logo</h4>
+      <div class="logo-preview-wrap" id="logoPreviewWrap" style="display:none">
+        <img id="logoPreviewImg" class="logo-preview-img" src="" alt="Logo preview" />
+        <button type="button" class="btn print-btn" id="removeLogoBtn"
+          style="font-size:0.8rem;padding:5px 10px">Remove Logo</button>
+      </div>
+      <div class="form-group" style="margin-top:8px">
+        <label for="spLogoFile">Upload Logo <span style="font-weight:normal;color:var(--light-text)">(PNG, JPG, SVG — max 2 MB)</span></label>
+        <input type="file" id="spLogoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+          style="display:block;margin-top:4px;color:var(--text);font-size:0.9rem" />
+        <p id="logoUploadMsg" class="signup-message" style="margin-top:4px"></p>
+      </div>
+
+      <!-- ── Team assignments ──────────────────────────────────────────────── -->
+      <h4 style="margin:16px 0 10px;font-size:0.95rem;border-top:1px solid #333;padding-top:14px">
+        Team Assignments
+        <span style="font-weight:normal;color:var(--light-text);font-size:0.85rem"> — per-team amounts (admin only)</span>
+      </h4>
+      <div id="spTeamAssignWrap" style="margin-bottom:8px"></div>
+      <p id="spTeamAssignHint" style="color:var(--light-text);font-size:0.85rem;margin:0 0 8px">No teams assigned yet.</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="spAddTeamSel" style="flex:1;min-width:180px;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem">
+          <option value="">— Add a team —</option>
+        </select>
+        <button type="button" class="btn print-btn" id="spAddTeamBtn"
+          style="font-size:0.85rem;padding:7px 14px">Add Team</button>
+      </div>
+
+      <!-- ── Contribution history ──────────────────────────────────────────── -->
+      <h4 style="margin:16px 0 10px;font-size:0.95rem;border-top:1px solid #333;padding-top:14px">
+        Contribution History
+        <span style="font-weight:normal;color:var(--light-text);font-size:0.85rem"> — year-over-year totals</span>
+      </h4>
+      <div id="spHistoryWrap" style="margin-bottom:8px"></div>
+      <p id="spHistoryHint" style="color:var(--light-text);font-size:0.85rem;margin:0 0 8px">No history entries yet.</p>
+      <button type="button" class="btn print-btn" id="spAddHistoryBtn"
+        style="font-size:0.85rem;padding:6px 14px">+ Add Year</button>
+
+      <!-- ── Notes ────────────────────────────────────────────────────────── -->
+      <div class="form-group" style="margin-top:16px;border-top:1px solid #333;padding-top:14px">
+        <label for="spNotes">Notes <span style="font-weight:normal;color:var(--light-text)">(internal only)</span></label>
+        <textarea id="spNotes" rows="3" placeholder="Any internal notes about this sponsor…"
+          style="width:100%;padding:10px;background:var(--container);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.9rem;box-sizing:border-box;resize:vertical"></textarea>
+      </div>
+
+      <div class="page-actions" style="margin-top:16px">
+        <button type="button" class="btn" id="sponsorSaveBtn">Save Sponsor</button>
+        <button type="button" class="btn print-btn" id="sponsorCancelBtn">Cancel</button>
+        <button type="button" class="btn" id="sponsorDeleteBtn"
+          style="display:none;background:#7a1c1c;margin-left:auto">Delete Sponsor</button>
+      </div>
+      <p id="sponsorEditMsg" class="signup-message" aria-live="polite"></p>
+    </div>
+
+  </div>
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | <span data-org-text="coordinatorName">Jeff Althoff</span>: <span data-org-text="coordinatorPhone">605-380-0229</span>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=19"></script>
+  <script type="module" src="admin-sponsors.js?v=1"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=5"></script>
+  <script type="module" src="nav.js?v=3"></script>
+</body>
+</html>

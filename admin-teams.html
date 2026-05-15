@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#601929">
   <title>Admin: Teams &amp; Leagues - Tri-Valley Baseball Umpires</title>
   <link rel="stylesheet" href="styles.css?v=16" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io https://firebasestorage.googleapis.com; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
 </head>
 <body>
   <div class="header">
@@ -27,6 +27,7 @@
       <a href="admin-tournament.html">Tournaments</a>
       <a href="admin-payroll.html">Payroll</a>
       <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-sponsors.html">Sponsors</a>
       <a href="admin-incidents.html">Incidents</a>
       <a href="admin-alerts.html">Alerts</a>
       <a href="admin-config.html">Config</a>
@@ -118,6 +119,29 @@
               <option value="">— No coach assigned —</option>
             </select>
           </div>
+
+          <!-- ── Sponsors (edit mode only) ──────────────────────────────────── -->
+          <div id="tSponsorSection" style="display:none;border-top:1px solid #333;padding-top:14px;margin-bottom:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+              <label style="margin:0;font-size:0.95rem">
+                Sponsors
+                <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — assigned to this team</span>
+              </label>
+              <a href="admin-sponsors.html" style="font-size:0.82rem;color:#8ab4f8">Manage all sponsors →</a>
+            </div>
+            <div id="tSponsorList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+              <p style="color:var(--light-text);font-size:0.85rem;margin:0">Loading…</p>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+              <select id="tAddSponsorSel" style="flex:1;min-width:180px;padding:7px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem">
+                <option value="">— Assign a sponsor —</option>
+              </select>
+              <button type="button" class="btn print-btn" id="tAddSponsorBtn"
+                style="font-size:0.85rem;padding:7px 14px">Assign</button>
+            </div>
+            <p id="tSponsorMsg" class="signup-message" style="margin-top:6px"></p>
+          </div>
+
           <div class="page-actions" style="margin-top:0">
             <button type="submit" class="btn" id="teamFormSubmitBtn">Add Team</button>
             <button type="button" class="btn print-btn" id="teamFormCancelBtn" style="display:none">Cancel</button>
@@ -224,7 +248,7 @@
   </div>
 
   <script type="module" src="auth.js?v=19"></script>
-  <script type="module" src="admin-teams.js?v=1"></script>
+  <script type="module" src="admin-teams.js?v=2"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=3"></script>

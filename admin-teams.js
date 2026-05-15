@@ -5,16 +5,22 @@ import { esc, showToast, showConfirm } from "./utils.js";
 
 import {
   collection, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
-  doc, query, where, orderBy, serverTimestamp
+  doc, query, where, orderBy, arrayUnion, arrayRemove, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let teams                = [];   // [{name, division, city, icsUrl, color, needsUmpireForHome, ...}]
+let teams                = [];   // [{id, name, division, city, icsUrl, color, needsUmpireForHome, ...}]
 let leagues              = [];   // [{id, name, division, websiteUrl, notes, contacts, homeLocations}]
 let facilitiesForLeagues = [];   // [{id, name, address}]
 let teamCoaches          = [];   // approved coaches for team-form dropdown
+let allSponsors          = [];   // all sponsors (for assign dropdown)
 let activeSection        = "teams";
+
+// Generate a stable ID for a team from its name
+function makeTeamId(name) {
+  return "t_" + name.replace(/\W+/g, "_").toLowerCase().replace(/^_|_$/g, "");
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -64,6 +70,20 @@ async function loadTeams() {
   } catch {
     teamCoaches = [];
   }
+  // Sponsors fetch — for team-side assignment
+  try {
+    const sponsorsSnap = await getDocs(query(collection(db, "sponsors"), orderBy("name")));
+    allSponsors = sponsorsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch {
+    allSponsors = [];
+  }
+  // Ensure every team has a stable id
+  let needResave = false;
+  teams.forEach(t => {
+    if (!t.id) { t.id = makeTeamId(t.name); needResave = true; }
+  });
+  if (needResave) await saveTeams(false);
+
   renderTeamList();
   populateLeagueSelector();
   populateCoachSelector();
@@ -125,6 +145,12 @@ function startEditTeam(idx) {
   document.getElementById("teamFormCancelBtn").style.display = "";
   document.getElementById("tName").focus();
   document.getElementById("teamFormWrap").scrollIntoView({ behavior: "smooth" });
+  // Show and load sponsor section for existing teams with a stable ID
+  if (t.id) {
+    const sec = document.getElementById("tSponsorSection");
+    if (sec) sec.style.display = "";
+    loadSponsorsForTeam(t.id);
+  }
 }
 
 function cancelEditTeam() {
@@ -136,7 +162,132 @@ function cancelEditTeam() {
   document.getElementById("teamFormCancelBtn").style.display = "none";
   document.getElementById("teamFormMsg").textContent = "";
   document.getElementById("teamFormMsg").className = "signup-message";
+  hideSponsorSection();
 }
+
+// ── Team-side sponsor management ──────────────────────────────────────────────
+
+function hideSponsorSection() {
+  const sec = document.getElementById("tSponsorSection");
+  if (sec) sec.style.display = "none";
+}
+
+async function loadSponsorsForTeam(teamId) {
+  const listEl = document.getElementById("tSponsorList");
+  const selEl  = document.getElementById("tAddSponsorSel");
+  if (!listEl || !selEl) return;
+
+  listEl.innerHTML = `<p style="color:var(--light-text);font-size:0.85rem;margin:0">Loading…</p>`;
+
+  let assigned = [];
+  try {
+    const snap = await getDocs(query(
+      collection(db, "sponsors"),
+      where("teamIds", "array-contains", teamId)
+    ));
+    assigned = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch {
+    assigned = [];
+  }
+
+  // Render assigned sponsor chips
+  if (!assigned.length) {
+    listEl.innerHTML = `<p style="color:var(--light-text);font-size:0.85rem;margin:0">No sponsors assigned yet.</p>`;
+  } else {
+    listEl.innerHTML = assigned.map(sp => `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#1e2a3a;border-radius:6px;border:1px solid #2a3a4a">
+        ${sp.logoUrl
+          ? `<img src="${esc(sp.logoUrl)}" alt="" style="width:28px;height:28px;object-fit:contain;border-radius:4px;background:#111;border:1px solid #333;flex-shrink:0" />`
+          : `<span style="font-size:1rem">🏢</span>`}
+        <span style="font-size:0.9rem;font-weight:600">${esc(sp.name)}</span>
+        ${!sp.active ? `<span style="font-size:0.72rem;color:#ffb4b4;background:#3a1a1a;border-radius:4px;padding:1px 6px">Inactive</span>` : ""}
+        <button type="button" class="ts-unassign-btn" data-sponsor-id="${esc(sp.id)}" data-team-id="${esc(teamId)}"
+          style="margin-left:auto;font-size:0.8rem;padding:3px 8px;background:transparent;color:#ff8a8a;border:1px solid #ff6a6a;border-radius:4px;cursor:pointer">
+          Unassign
+        </button>
+      </div>`).join("");
+
+    listEl.querySelectorAll(".ts-unassign-btn").forEach(btn => {
+      btn.addEventListener("click", () => unassignSponsorFromTeam(btn.dataset.sponsorId, btn.dataset.teamId));
+    });
+  }
+
+  // Populate assign dropdown with unassigned sponsors
+  const assignedIds = new Set(assigned.map(s => s.id));
+  const unassigned = allSponsors.filter(s => !assignedIds.has(s.id));
+  selEl.innerHTML = '<option value="">— Assign a sponsor —</option>' +
+    unassigned.map(s =>
+      `<option value="${esc(s.id)}">${esc(s.name)}${!s.active ? " (inactive)" : ""}</option>`
+    ).join("");
+}
+
+async function assignSponsorToTeam(sponsorId, teamId, teamName) {
+  const msgEl = document.getElementById("tSponsorMsg");
+  if (!sponsorId || !teamId) return;
+  try {
+    msgEl.textContent = "Assigning…";
+    msgEl.className   = "signup-message info";
+    // Add to sponsor's teamIds array and teamAssignments (amount 0 by default)
+    const sponsorRef = doc(db, "sponsors", sponsorId);
+    const sponsorSnap = await getDoc(sponsorRef);
+    if (!sponsorSnap.exists()) throw new Error("Sponsor not found.");
+    const sponsorData = sponsorSnap.data();
+    const existing = (sponsorData.teamAssignments || []).find(a => a.teamId === teamId);
+    if (!existing) {
+      await updateDoc(sponsorRef, {
+        teamIds: arrayUnion(teamId),
+        teamAssignments: arrayUnion({ teamId, teamName, amount: 0 }),
+      });
+    }
+    // Refresh sponsor data cache
+    const updSnap = await getDocs(query(collection(db, "sponsors"), orderBy("name")));
+    allSponsors = updSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    msgEl.textContent = "✓ Assigned.";
+    msgEl.className   = "signup-message success";
+    setTimeout(() => { msgEl.textContent = ""; msgEl.className = "signup-message"; }, 2000);
+    await loadSponsorsForTeam(teamId);
+    document.getElementById("tAddSponsorSel").value = "";
+  } catch (err) {
+    msgEl.textContent = "Error: " + err.message;
+    msgEl.className   = "signup-message error";
+  }
+}
+
+async function unassignSponsorFromTeam(sponsorId, teamId) {
+  if (!await showConfirm("Remove this sponsor from the team?")) return;
+  const msgEl = document.getElementById("tSponsorMsg");
+  try {
+    msgEl.textContent = "Removing…";
+    msgEl.className   = "signup-message info";
+    const sponsorRef  = doc(db, "sponsors", sponsorId);
+    const sponsorSnap = await getDoc(sponsorRef);
+    if (!sponsorSnap.exists()) throw new Error("Sponsor not found.");
+    const sponsorData = sponsorSnap.data();
+    const assignment  = (sponsorData.teamAssignments || []).find(a => a.teamId === teamId);
+    const updates = { teamIds: arrayRemove(teamId) };
+    if (assignment) updates.teamAssignments = arrayRemove(assignment);
+    await updateDoc(sponsorRef, updates);
+    // Refresh sponsor data cache
+    const updSnap = await getDocs(query(collection(db, "sponsors"), orderBy("name")));
+    allSponsors = updSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    msgEl.textContent = "✓ Removed.";
+    msgEl.className   = "signup-message success";
+    setTimeout(() => { msgEl.textContent = ""; msgEl.className = "signup-message"; }, 2000);
+    await loadSponsorsForTeam(teamId);
+  } catch (err) {
+    msgEl.textContent = "Error: " + err.message;
+    msgEl.className   = "signup-message error";
+  }
+}
+
+document.getElementById("tAddSponsorBtn")?.addEventListener("click", () => {
+  const teamIdx = document.getElementById("teamEditIndex").value;
+  if (teamIdx === "") return;
+  const team = teams[parseInt(teamIdx)];
+  const sponsorId = document.getElementById("tAddSponsorSel")?.value;
+  if (!sponsorId || !team?.id) return;
+  assignSponsorToTeam(sponsorId, team.id, team.name);
+});
 
 async function deleteTeam(idx) {
   if (!await showConfirm(`Delete team "${teams[idx].name}"?`)) return;
@@ -154,8 +305,14 @@ document.getElementById("teamForm").addEventListener("submit", async e => {
   const leagueObj = leagues.find(l => l.id === leagueId);
   const coachId   = document.getElementById("tCoach")?.value || "";
   const coachObj  = teamCoaches.find(c => c.id === coachId);
+  const nameVal  = document.getElementById("tName").value.trim();
+  if (!nameVal) return;
+  const editIdx  = document.getElementById("teamEditIndex").value;
+  // Preserve existing stable ID on edit; generate for new teams
+  const existingId = editIdx !== "" ? (teams[parseInt(editIdx)].id || makeTeamId(nameVal)) : makeTeamId(nameVal);
   const teamData = {
-    name:               document.getElementById("tName").value.trim(),
+    id:                 existingId,
+    name:               nameVal,
     division:           document.getElementById("tDivision").value,
     city:               document.getElementById("tCity").value,
     color:              document.getElementById("tColor").value,
@@ -168,9 +325,7 @@ document.getElementById("teamForm").addEventListener("submit", async e => {
     coachEmail:         coachObj?.email || "",
     coachPhone:         coachObj?.phone || "",
   };
-  if (!teamData.name) return;
 
-  const editIdx = document.getElementById("teamEditIndex").value;
   if (editIdx !== "") {
     teams[parseInt(editIdx)] = teamData;
   } else {
@@ -185,6 +340,8 @@ document.getElementById("teamForm").addEventListener("submit", async e => {
     msg.className   = "signup-message success";
     cancelEditTeam();
     renderTeamList();
+    // Refresh sponsor list in case it was open
+    hideSponsorSection();
     setTimeout(() => { msg.textContent = ""; msg.className = "signup-message"; }, 2000);
   } catch (err) {
     msg.textContent = "Error: " + err.message;
