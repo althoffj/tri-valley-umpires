@@ -2,7 +2,7 @@
 import { db } from "./firebase.js";
 import { authReadyPromise, isCoach, isAdmin, getCurrentUser, getCurrentCoachProfile } from "./auth.js";
 import {
-  collection, getDocs, addDoc, query, orderBy, where, serverTimestamp
+  collection, getDocs, addDoc, query, orderBy, where, serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -46,6 +46,8 @@ function setMsg(id, text, type = "info") {
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 
+let myRequestsLoaded = false;
+
 function setupTabs() {
   document.querySelectorAll(".cp-tab-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -54,6 +56,11 @@ function setupTabs() {
       btn.classList.add("tab-active");
       const pane = document.getElementById(`cpPane-${btn.dataset.pane}`);
       if (pane) pane.style.display = "";
+      // Lazy-load My Requests on first open
+      if (btn.dataset.pane === "myRequests" && !myRequestsLoaded) {
+        myRequestsLoaded = true;
+        loadMyRequests();
+      }
     });
   });
 }
@@ -267,6 +274,83 @@ function prefillForms() {
   if (prDiv && !prDiv.value && profile.division) prDiv.value = profile.division;
   const urDiv = document.getElementById("cpUrDivision");
   if (urDiv && !urDiv.value && profile.division) urDiv.value = profile.division;
+}
+
+// ── My Requests ───────────────────────────────────────────────────────────────
+
+function statusPill(status) {
+  const map = {
+    pending:  { bg: "rgba(255,200,100,0.12)", border: "#ffcc80", color: "#ffcc80", label: "Pending" },
+    approved: { bg: "rgba(111,207,151,0.12)", border: "#6fcf97", color: "#6fcf97", label: "Approved" },
+    denied:   { bg: "rgba(235,87,87,0.12)",   border: "#eb5757", color: "#eb5757", label: "Denied" },
+  };
+  const s = map[status] || map.pending;
+  return `<span style="padding:2px 10px;border-radius:12px;font-size:0.78rem;background:${s.bg};border:1px solid ${s.border};color:${s.color}">${s.label}</span>`;
+}
+
+async function loadMyRequests() {
+  const el = document.getElementById("cpMyRequestsList");
+  if (!el) return;
+  const uid = getCurrentUser()?.uid;
+  if (!uid) { el.innerHTML = `<p style="color:var(--light-text)">Sign in to see your requests.</p>`; return; }
+
+  el.innerHTML = `<p style="color:var(--light-text);text-align:center;padding:20px">Loading…</p>`;
+
+  try {
+    const [umpireSnap, practiceSnap] = await Promise.all([
+      getDocs(query(collection(db, "umpireRequests"),  where("submittedBy", "==", uid), orderBy("createdAt", "desc"), limit(50))),
+      getDocs(query(collection(db, "practiceRequests"), where("submittedBy", "==", uid), orderBy("createdAt", "desc"), limit(50))),
+    ]);
+
+    const umpireReqs  = umpireSnap.docs.map(d  => ({ id: d.id,  ...d.data() }));
+    const practiceReqs = practiceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    if (!umpireReqs.length && !practiceReqs.length) {
+      el.innerHTML = `<div class="document-note"><p style="margin:0;color:var(--light-text)">No requests submitted yet. Use the Request Umpire or Request Practice tabs to get started.</p></div>`;
+      return;
+    }
+
+    let html = "";
+
+    if (umpireReqs.length) {
+      html += `<h3 style="margin:0 0 12px">Umpire Requests</h3>`;
+      html += umpireReqs.map(r => `
+        <div class="document-note" style="margin-bottom:10px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+            <div>
+              <strong>${esc(fmtDate(r.date))}${r.time ? " · " + esc(fmtTime(r.time)) : ""}</strong>
+              <span style="color:var(--light-text);font-size:0.85rem;margin-left:8px">${esc(r.division || "")}</span>
+            </div>
+            ${statusPill(r.status)}
+          </div>
+          <div style="font-size:0.9rem;margin-bottom:2px">${esc(r.homeTeam || "—")} <span style="color:var(--light-text)">vs</span> ${esc(r.awayTeam || "—")}</div>
+          <div style="font-size:0.82rem;color:var(--light-text)">${esc(r.location || "—")} · ${r.umpiresNeeded || 1} umpire${r.umpiresNeeded !== 1 ? "s" : ""} needed</div>
+          ${r.adminNote ? `<div style="font-size:0.82rem;color:#8ab4f8;margin-top:6px">📝 Admin note: ${esc(r.adminNote)}</div>` : ""}
+        </div>`).join("");
+    }
+
+    if (practiceReqs.length) {
+      html += `<h3 style="margin:${umpireReqs.length ? "20px" : "0"} 0 12px">Practice Requests</h3>`;
+      html += practiceReqs.map(r => `
+        <div class="document-note" style="margin-bottom:10px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+            <div>
+              <strong>${esc(fmtDate(r.date))}${r.startTime ? " · " + esc(fmtTime(r.startTime)) : ""}${r.endTime ? " – " + esc(fmtTime(r.endTime)) : ""}</strong>
+              <span style="color:var(--light-text);font-size:0.85rem;margin-left:8px">${esc(r.division || "")}</span>
+            </div>
+            ${statusPill(r.status)}
+          </div>
+          <div style="font-size:0.9rem;margin-bottom:2px">${esc(r.teamName || "—")}</div>
+          <div style="font-size:0.82rem;color:var(--light-text)">${esc(r.location || "—")}</div>
+          ${r.adminNote ? `<div style="font-size:0.82rem;color:#8ab4f8;margin-top:6px">📝 Admin note: ${esc(r.adminNote)}</div>` : ""}
+        </div>`).join("");
+    }
+
+    el.innerHTML = html;
+  } catch (err) {
+    console.error("loadMyRequests:", err);
+    el.innerHTML = `<div class="document-note"><p style="color:#ffb4b4;margin:0">Failed to load requests. Please refresh.</p></div>`;
+  }
 }
 
 // ── Division filter buttons ───────────────────────────────────────────────────

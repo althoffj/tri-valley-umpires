@@ -167,13 +167,14 @@ function switchSection(section) {
   document.querySelectorAll(".sched-sec-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.section === section);
   });
-  ["import","calendar","practices","settings"].forEach(s => {
+  ["import","calendar","practices","requests","settings"].forEach(s => {
     const el = document.getElementById(`sec-${s}`);
     if (el) el.style.display = s === section ? "" : "none";
   });
   // Lazy load section data
   if (section === "calendar")  loadCalendar();
   if (section === "practices") loadPractices();
+  if (section === "requests")  loadUmpireRequests();
   if (section === "settings")  loadSettings();
 }
 
@@ -2090,6 +2091,148 @@ document.getElementById("addPracticeForm").addEventListener("submit", async e =>
   } finally {
     btn.disabled = false;
     btn.textContent = orig;
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  UMPIRE REQUESTS SECTION
+// ══════════════════════════════════════════════════════════════════════════════
+
+let umpireRequests = [];
+
+async function loadUmpireRequests() {
+  try {
+    const snap = await getDocs(query(collection(db, "umpireRequests"), orderBy("createdAt", "desc")));
+    umpireRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    umpireRequests = [];
+    console.error("loadUmpireRequests:", err);
+  }
+  renderUmpireRequests();
+}
+
+function renderUmpireRequests() {
+  const pending  = umpireRequests.filter(r => r.status === "pending");
+  const resolved = umpireRequests.filter(r => r.status !== "pending");
+
+  renderUrList("urPendingList",  pending,  true);
+  renderUrList("urResolvedList", resolved, false);
+
+  const pendingSection = document.getElementById("urPendingSection");
+  if (pendingSection) {
+    const h3 = pendingSection.querySelector("h3");
+    if (h3) h3.textContent = `Pending Umpire Requests${pending.length ? " (" + pending.length + ")" : ""}`;
+  }
+}
+
+function renderUrList(containerId, requests, showActions) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!requests.length) {
+    el.innerHTML = `<p style="color:var(--light-text);font-size:0.88rem">${showActions ? "No pending requests." : "No resolved requests yet."}</p>`;
+    return;
+  }
+  el.innerHTML = requests.map(r => {
+    const statusColor = r.status === "approved" ? "#6fcf97" : r.status === "denied" ? "#ff8a8a" : "#ffcc80";
+    const statusLabel = r.status === "approved" ? "Approved" : r.status === "denied" ? "Denied" : "Pending";
+    const submitted   = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "";
+    return `
+      <div class="team-row" style="flex-direction:column;align-items:stretch;padding:14px;margin-bottom:10px;gap:0" id="urCard_${esc(r.id)}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <strong>${esc(fmtDate(r.date))}${r.time ? " · " + esc(fmt12(r.time)) : ""}</strong>
+              <span style="font-size:0.78rem;background:rgba(96,25,41,0.3);border:1px solid #601929;border-radius:4px;padding:1px 6px;color:#ffb0b0">${esc(r.division || "")}</span>
+              <span style="font-size:0.78rem;padding:1px 8px;border-radius:12px;background:${statusColor}22;border:1px solid ${statusColor}55;color:${statusColor}">${statusLabel}</span>
+            </div>
+            <div style="font-size:0.9rem;margin-top:4px">${esc(r.homeTeam || "—")} <span style="color:var(--light-text)">vs</span> ${esc(r.awayTeam || "—")}</div>
+          </div>
+          <div style="text-align:right;font-size:0.8rem;color:var(--light-text)">${submitted ? "Submitted " + esc(submitted) : ""}</div>
+        </div>
+        <div style="font-size:0.85rem;color:var(--light-text);margin-bottom:6px;display:flex;flex-wrap:wrap;gap:12px">
+          <span>📍 ${esc(r.location || "—")}</span>
+          <span>⚾ ${r.umpiresNeeded || 1} umpire${r.umpiresNeeded !== 1 ? "s" : ""} needed</span>
+          ${r.teamName ? `<span>🏅 ${esc(r.teamName)}</span>` : ""}
+        </div>
+        <div style="font-size:0.85rem;color:var(--light-text);margin-bottom:${showActions ? "10px" : "0"};display:flex;flex-wrap:wrap;gap:12px">
+          <span>👤 ${esc(r.submittedByName || r.contactName || "—")}</span>
+          ${r.contactPhone ? `<span>📞 <a href="tel:${esc(r.contactPhone.replace(/\D/g,""))}" style="color:var(--text)">${esc(r.contactPhone)}</a></span>` : ""}
+        </div>
+        ${r.notes ? `<div style="font-size:0.82rem;color:#ccc;margin-bottom:${showActions ? "10px" : "0"};border-top:1px solid #333;padding-top:6px">Notes: ${esc(r.notes)}</div>` : ""}
+        ${r.adminNote ? `<div style="font-size:0.82rem;color:#8ab4f8;margin-top:4px">📝 Admin note: ${esc(r.adminNote)}</div>` : ""}
+        ${showActions ? `
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn ur-approve-btn" data-id="${esc(r.id)}" style="font-size:0.82rem;padding:5px 14px;background:#1a4a2a">✓ Approve</button>
+            <button class="btn print-btn ur-deny-btn" data-id="${esc(r.id)}" style="font-size:0.82rem;padding:5px 14px;color:#ff8a8a;border-color:#ff8a8a">✕ Deny</button>
+          </div>
+          <p id="urMsg_${esc(r.id)}" class="signup-message" aria-live="polite"></p>
+        ` : ""}
+      </div>`;
+  }).join("");
+
+  if (showActions) {
+    el.querySelectorAll(".ur-approve-btn").forEach(btn =>
+      btn.addEventListener("click", () => approveUmpireRequest(btn.dataset.id)));
+    el.querySelectorAll(".ur-deny-btn").forEach(btn =>
+      btn.addEventListener("click", () => openDenyModal(btn.dataset.id)));
+  }
+}
+
+async function approveUmpireRequest(id) {
+  const msg = document.getElementById(`urMsg_${id}`);
+  if (msg) { msg.textContent = "Approving…"; msg.className = "signup-message info"; }
+  try {
+    await updateDoc(doc(db, "umpireRequests", id), { status: "approved", resolvedAt: serverTimestamp() });
+    await loadUmpireRequests();
+  } catch (err) {
+    if (msg) { msg.textContent = "Error: " + err.message; msg.className = "signup-message error"; }
+  }
+}
+
+function openDenyModal(id) {
+  document.getElementById("urDenyId").value   = id;
+  document.getElementById("urDenyNote").value = "";
+  document.getElementById("urDenyMsg").textContent = "";
+  document.getElementById("urDenyMsg").className   = "signup-message";
+  document.getElementById("urDenyModal").style.display = "flex";
+}
+
+function closeDenyModal() {
+  document.getElementById("urDenyModal").style.display = "none";
+}
+
+document.getElementById("urDenyCancelBtn")?.addEventListener("click", closeDenyModal);
+document.getElementById("urDenyModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("urDenyModal")) closeDenyModal();
+});
+
+document.getElementById("urDenyConfirmBtn")?.addEventListener("click", async () => {
+  const id   = document.getElementById("urDenyId").value;
+  const note = document.getElementById("urDenyNote").value.trim();
+  const msg  = document.getElementById("urDenyMsg");
+  if (!id) return;
+  msg.textContent = "Denying…";
+  msg.className   = "signup-message info";
+  try {
+    const update = { status: "denied", resolvedAt: serverTimestamp() };
+    if (note) update.adminNote = note;
+    await updateDoc(doc(db, "umpireRequests", id), update);
+    closeDenyModal();
+    await loadUmpireRequests();
+  } catch (err) {
+    msg.textContent = "Error: " + err.message;
+    msg.className   = "signup-message error";
+  }
+});
+
+// Toggle chevron on <details> open/close
+document.querySelector("#sec-requests details")?.addEventListener("toggle", function() {
+  const chevron = document.getElementById("urHistoryToggle");
+  if (chevron) chevron.textContent = this.open ? "▼" : "▶";
+  if (this.open && !document.getElementById("urResolvedList")?.dataset.loaded) {
+    const el = document.getElementById("urResolvedList");
+    if (el) el.dataset.loaded = "1";
+    // Already rendered by renderUmpireRequests; nothing extra needed
   }
 });
 

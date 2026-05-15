@@ -41,6 +41,7 @@
       <button class="sched-sec-btn active" data-section="import">Import</button>
       <button class="sched-sec-btn" data-section="calendar">Calendar</button>
       <button class="sched-sec-btn" data-section="practices">Practices</button>
+      <button class="sched-sec-btn" data-section="requests">Requests</button>
       <button class="sched-sec-btn" data-section="settings">Settings</button>
     </div>
 
@@ -246,6 +247,49 @@
           </div>
           <p id="addPracticeMsg" class="signup-message" aria-live="polite"></p>
         </form>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════════
+         REQUESTS SECTION
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="sec-requests" style="display:none">
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0">Umpire requests submitted by coaches for games not yet on the schedule. Review each request and approve or deny. Approved requests are recorded; you'll still need to assign umpires through the normal scheduling flow.</p>
+      </div>
+
+      <!-- Pending umpire requests -->
+      <div id="urPendingSection">
+        <h3 style="margin:0 0 12px">Pending Umpire Requests</h3>
+        <div id="urPendingList">
+          <p style="color:var(--light-text)">Loading…</p>
+        </div>
+      </div>
+
+      <!-- Resolved umpire requests -->
+      <details style="margin-top:24px">
+        <summary style="cursor:pointer;font-weight:600;color:var(--light-text);font-size:0.9rem;padding:8px 0;list-style:none;display:flex;align-items:center;gap:6px">
+          <span id="urHistoryToggle">▶</span> Resolved Requests
+        </summary>
+        <div id="urResolvedList" style="margin-top:12px">
+          <p style="color:var(--light-text);font-size:0.88rem">Loading…</p>
+        </div>
+      </details>
+
+      <!-- Deny modal -->
+      <div id="urDenyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center">
+        <div style="background:var(--container);border:1px solid #444;border-radius:10px;padding:24px;max-width:420px;width:90%;margin:auto">
+          <h3 style="margin:0 0 12px">Deny Request</h3>
+          <input type="hidden" id="urDenyId" />
+          <label for="urDenyNote">Note to coach <span style="font-weight:normal;color:var(--light-text)">(optional)</span></label>
+          <textarea id="urDenyNote" rows="3" placeholder="Reason for denial…"
+            style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.9rem;box-sizing:border-box;resize:vertical;margin-bottom:14px"></textarea>
+          <div style="display:flex;gap:10px">
+            <button class="btn" id="urDenyConfirmBtn" style="background:#8b1a1a">Confirm Deny</button>
+            <button class="btn print-btn" id="urDenyCancelBtn">Cancel</button>
+          </div>
+          <p id="urDenyMsg" class="signup-message" aria-live="polite"></p>
+        </div>
       </div>
     </div>
 

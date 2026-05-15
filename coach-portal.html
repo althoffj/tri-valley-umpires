@@ -25,6 +25,7 @@
       <button class="cp-tab-btn tab-btn tab-active" data-pane="schedule">My Schedule</button>
       <button class="cp-tab-btn tab-btn" data-pane="umpireRequest">Request Umpire</button>
       <button class="cp-tab-btn tab-btn" data-pane="practiceRequest">Request Practice</button>
+      <button class="cp-tab-btn tab-btn" data-pane="myRequests">My Requests</button>
     </div>
 
     <!-- My Schedule tab -->
@@ -196,6 +197,14 @@
       </form>
     </div>
 
+    <!-- My Requests tab -->
+    <div id="cpPane-myRequests" class="cp-tab-pane" style="display:none">
+      <h2>My Requests</h2>
+      <div id="cpMyRequestsList">
+        <p style="color:var(--light-text);text-align:center;padding:30px">Loading…</p>
+      </div>
+    </div>
+
   </div>
 
   <!-- No-access fallback -->
@@ -213,7 +222,7 @@
   </div>
 
   <script type="module" src="auth.js?v=18"></script>
-  <script type="module" src="coach-portal.js?v=1"></script>
+  <script type="module" src="coach-portal.js?v=2"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=3"></script>
   <script type="module" src="nav.js?v=2"></script>
