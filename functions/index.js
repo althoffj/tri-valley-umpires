@@ -277,6 +277,8 @@ function parseVEvents(icsText) {
     const summary  = get("SUMMARY");
 
     const { date, time } = parseDTStart(dtstart);
+    const dtend = get("DTEND");
+    const { time: endTime } = parseDTStart(dtend);
     if (!date) continue;
 
     // Parse home/away from SUMMARY (GameChanger formats: "Away @ Home" or "Home vs Away")
@@ -295,7 +297,7 @@ function parseVEvents(icsText) {
       }
     }
 
-    events.push({ date, time, location, uid, summary, homeTeam, awayTeam, isAway });
+    events.push({ date, time, endTime, location, uid, summary, homeTeam, awayTeam, isAway });
   }
   return events;
 }
@@ -2334,6 +2336,102 @@ exports.onUmpireRequest = onDocumentWritten("umpireRequests/{requestId}", async 
     `Umpires needed: ${r.umpiresNeeded ?? "—"} · Phone: ${r.contactPhone ?? "—"}` +
     (r.notes ? `\nNotes: ${r.notes}` : "");
   await Promise.allSettled(urls.map(url => postSlack(url, msg)));
+});
+
+// ── Field Calendar Import ─────────────────────────────────────────────────────
+
+exports.fetchFacilityIcs = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db = getFirestore();
+
+  const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { facilityId } = request.data || {};
+  if (!facilityId) throw new HttpsError("invalid-argument", "facilityId required.");
+
+  const facilityDoc = await db.doc(`facilities/${facilityId}`).get();
+  if (!facilityDoc.exists) throw new HttpsError("not-found", "Facility not found.");
+  const facility = facilityDoc.data();
+
+  const icsUrl = facility.externalIcsUrl;
+  if (!icsUrl) throw new HttpsError("failed-precondition", "Facility has no external calendar URL configured.");
+
+  // Build dedup set from all existing games + practices
+  const [allGamesSnap, allPracticesSnap, teamsSnap] = await Promise.all([
+    db.collection("games").get(),
+    db.collection("practices").get(),
+    db.doc("config/teamCalendars").get(),
+  ]);
+
+  const knownUids = new Set();
+  allGamesSnap.docs.forEach(d => { const u = d.data().externalId || d.data().icsUid; if (u) knownUids.add(u); });
+  allPracticesSnap.docs.forEach(d => { const u = d.data().externalId || d.data().icsUid; if (u) knownUids.add(u); });
+
+  const teams = teamsSnap.exists ? (teamsSnap.data().teams || []) : [];
+
+  // Fetch ICS
+  let icsText;
+  try { icsText = await fetchICS(icsUrl); }
+  catch (err) { throw new HttpsError("internal", `Failed to fetch calendar: ${err.message}`); }
+
+  const today = todayISO();
+  const parsed = parseVEvents(icsText);
+
+  const events = [];
+  for (const ev of parsed) {
+    if (!ev.uid) continue;
+    // Only include today and future
+    if (ev.date && ev.date < today) continue;
+
+    const alreadyImported = knownUids.has(ev.uid);
+
+    // Type detection
+    let suggestedType = "other";
+    if (isPracticeEvent(ev.summary)) {
+      suggestedType = "practice";
+    } else if (/\bvs\.?\b|\s+@\s+/i.test(ev.summary || "") || (ev.homeTeam && ev.awayTeam)) {
+      suggestedType = "game";
+    }
+
+    // Team suggestion: fuzzy match against team names
+    let suggestedTeamId = "";
+    let suggestedTeamName = "";
+    const combinedLower = `${ev.homeTeam || ""} ${ev.awayTeam || ""} ${ev.summary || ""}`.toLowerCase();
+    for (const t of teams) {
+      // Use meaningful words (>3 chars) from team name for matching
+      const words = t.name.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      if (words.length > 0 && words.some(w => combinedLower.includes(w))) {
+        suggestedTeamId = t.id || "";
+        suggestedTeamName = t.name;
+        break;
+      }
+    }
+
+    events.push({
+      uid: ev.uid,
+      date: ev.date,
+      time: ev.time || "",
+      endTime: ev.endTime || "",
+      summary: ev.summary || "",
+      location: ev.location || "",
+      homeTeam: ev.homeTeam || "",
+      awayTeam: ev.awayTeam || "",
+      suggestedType,
+      suggestedTeamId,
+      suggestedTeamName,
+      alreadyImported,
+    });
+  }
+
+  events.sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || ""));
+
+  return {
+    facilityId,
+    facilityName: facility.name || "",
+    events,
+    newCount: events.filter(e => !e.alreadyImported).length,
+  };
 });
 
 // Notify admin when a coach submits a practice request

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Admin: Field Calendar Import - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=16" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+  <style>
+    .fc-table { width:100%;border-collapse:collapse;font-size:0.88rem }
+    .fc-table th { text-align:left;padding:8px 10px;border-bottom:2px solid #333;color:var(--light-text);font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap }
+    .fc-table td { padding:8px 10px;border-bottom:1px solid #222;vertical-align:middle }
+    .fc-table tr.already-imported { opacity:0.4 }
+    .fc-table tr.already-imported td { font-style:italic }
+    .fc-type-select, .fc-team-select { padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:5px;font-size:0.85rem;width:100% }
+    .fc-badge { font-size:0.72rem;padding:2px 7px;border-radius:4px;font-weight:600 }
+    .fc-badge.game { background:#1a2e1a;color:#86efac }
+    .fc-badge.practice { background:#1e2a3a;color:#8ab4f8 }
+    .fc-badge.other { background:#2a2a1a;color:#ffd966 }
+    .fc-badge.imported { background:#2a2a2a;color:#888 }
+    .fc-summary { font-weight:600;margin-bottom:2px }
+    .fc-sub { font-size:0.78rem;color:var(--light-text) }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <div class="container" id="adminContent" style="display:none">
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html">Games</a>
+      <a href="admin-scheduler.html">Scheduler</a>
+      <a href="admin-teams.html">Teams</a>
+      <a href="admin-tournament.html">Tournaments</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-sponsors.html">Sponsors</a>
+      <a href="admin-incidents.html">Incidents</a>
+      <a href="admin-alerts.html">Alerts</a>
+      <a href="admin-config.html">Config</a>
+      <a href="admin-analytics.html">Analytics</a>
+      <a href="admin-users.html">Users</a>
+    </nav>
+
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;flex-wrap:wrap">
+      <h2 style="margin:0">Field Calendar Import</h2>
+      <a href="admin-facilities.html" style="font-size:0.85rem;color:#8ab4f8">← Back to Facilities</a>
+    </div>
+    <div class="document-note" style="margin-bottom:20px">
+      <p style="margin:0">Fetch an external field-use calendar (iCal/ICS) for a facility and import events that aren't already on your schedule. Set the calendar URL in the <a href="admin-facilities.html">Facilities</a> page.</p>
+    </div>
+
+    <!-- Facility selector (shown when no ?facility= param) -->
+    <div id="fcFacilityPickWrap" style="display:none;margin-bottom:20px">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="fcFacilitySel">Select Facility</label>
+          <select id="fcFacilitySel" style="padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem">
+            <option value="">Loading…</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="fcFacilityName" style="margin-bottom:12px;font-size:1.05rem;font-weight:700"></div>
+
+    <div class="page-actions" style="margin-bottom:16px">
+      <button type="button" class="btn" id="fcFetchBtn" disabled>Fetch Events</button>
+      <span id="fcFetchStatus" style="font-size:0.88rem;color:var(--light-text);margin-left:8px"></span>
+    </div>
+
+    <div id="fcResultWrap" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <div>
+          <strong id="fcNewCount"></strong>
+          <span style="font-size:0.85rem;color:var(--light-text);margin-left:6px" id="fcSkipCount"></span>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;font-size:0.88rem">
+          <input type="checkbox" id="fcShowImported" />
+          Show already-imported events
+        </label>
+      </div>
+
+      <div style="overflow-x:auto">
+        <table class="fc-table">
+          <thead>
+            <tr>
+              <th style="width:32px"><input type="checkbox" id="fcSelectAll" title="Select all new events" /></th>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Event</th>
+              <th style="min-width:110px">Type</th>
+              <th style="min-width:160px">Team</th>
+              <th style="width:80px;text-align:center">Needs Umpire</th>
+            </tr>
+          </thead>
+          <tbody id="fcTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="page-actions" style="margin-top:16px">
+        <button type="button" class="btn" id="fcImportBtn">Import Selected</button>
+        <span id="fcImportCount" style="font-size:0.88rem;color:var(--light-text);margin-left:8px">0 selected</span>
+      </div>
+      <p id="fcImportMsg" class="signup-message" aria-live="polite" style="margin-top:8px"></p>
+    </div>
+
+  </div>
+
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | <span data-org-text="coordinatorName">Jeff Althoff</span>: <span data-org-text="coordinatorPhone">605-380-0229</span>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=19"></script>
+  <script type="module" src="admin-field-calendar.js?v=1"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=5"></script>
+  <script type="module" src="nav.js?v=3"></script>
+</body>
+</html>

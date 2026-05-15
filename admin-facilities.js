@@ -469,6 +469,9 @@ function renderFacilityCard(id, data, shedCode = "") {
           ${mapsLink}
           ${data.notes ? `<div style="font-size:0.85rem;color:var(--light-text);margin-top:6px">${esc(data.notes)}</div>` : ""}
           ${shedCode ? `<div style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;background:#1a2a1a;border:1px solid #2a6a2a;border-radius:6px;padding:6px 12px;font-size:0.9rem">🔑 <strong>Shed Code:</strong> <span style="font-family:monospace;font-size:1rem;letter-spacing:0.1em">${esc(shedCode)}</span></div>` : `<div style="margin-top:8px;font-size:0.82rem;color:var(--light-text)">🔑 No shed code set</div>`}
+          ${data.externalIcsUrl
+            ? `<a href="admin-field-calendar.html?facility=${esc(id)}" class="btn print-btn" style="font-size:0.8rem;padding:4px 10px;margin-top:4px;display:inline-block">📅 Import Field Calendar</a>`
+            : ""}
           ${issuesBanner(data.activeIssues)}
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
@@ -501,6 +504,12 @@ function renderFacilityCard(id, data, shedCode = "") {
           <div class="form-group">
             <label for="editFacilityMaps_${esc(id)}">Google Maps URL</label>
             <input type="url" id="editFacilityMaps_${esc(id)}" value="${esc(data.googleMapsUrl || "")}" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="editFacilityIcs_${esc(id)}">External Calendar URL <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem">(iCal/ICS subscription)</span></label>
+            <input type="url" id="editFacilityIcs_${esc(id)}" value="${esc(data.externalIcsUrl || "")}" placeholder="webcal:// or https://..." />
           </div>
         </div>
         <div class="form-row">
@@ -591,18 +600,19 @@ document.getElementById("showAddFacilityBtn").addEventListener("click", () => {
 
 document.getElementById("cancelAddFacilityBtn").addEventListener("click", () => {
   document.getElementById("addFacilityForm").style.display = "none";
-  ["facilityName","facilityAddress","facilityMapsUrl","facilityNotes","facilityIssues"]
+  ["facilityName","facilityAddress","facilityMapsUrl","facilityExternalIcs","facilityNotes","facilityIssues"]
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
   setMsg("addFacilityMessage", "", "info");
 });
 
 document.getElementById("saveAddFacilityBtn").addEventListener("click", async () => {
-  const name    = document.getElementById("facilityName").value.trim();
-  const address  = document.getElementById("facilityAddress").value.trim();
-  const mapsUrl  = document.getElementById("facilityMapsUrl").value.trim();
-  const notes    = document.getElementById("facilityNotes")?.value.trim() || "";
-  const issues   = document.getElementById("facilityIssues")?.value.trim() || "";
-  const shedCode = document.getElementById("facilityShedCode")?.value.trim() || "";
+  const name          = document.getElementById("facilityName").value.trim();
+  const address        = document.getElementById("facilityAddress").value.trim();
+  const mapsUrl        = document.getElementById("facilityMapsUrl").value.trim();
+  const externalIcsUrl = document.getElementById("facilityExternalIcs")?.value.trim() || "";
+  const notes          = document.getElementById("facilityNotes")?.value.trim() || "";
+  const issues         = document.getElementById("facilityIssues")?.value.trim() || "";
+  const shedCode       = document.getElementById("facilityShedCode")?.value.trim() || "";
 
   if (!name) { setMsg("addFacilityMessage", "Facility name is required.", "error"); return; }
 
@@ -612,12 +622,12 @@ document.getElementById("saveAddFacilityBtn").addEventListener("click", async ()
 
   try {
     const newRef = await addDoc(collection(db, "facilities"), {
-      name, address, googleMapsUrl: mapsUrl, notes, activeIssues: issues,
+      name, address, googleMapsUrl: mapsUrl, externalIcsUrl, notes, activeIssues: issues,
       fields: [], createdAt: serverTimestamp()
     });
     await setDoc(doc(db, "facilityCodes", newRef.id), { shedCode });
     setMsg("addFacilityMessage", "Facility added!", "success");
-    ["facilityName","facilityAddress","facilityMapsUrl","facilityNotes","facilityIssues","facilityShedCode"]
+    ["facilityName","facilityAddress","facilityMapsUrl","facilityExternalIcs","facilityNotes","facilityIssues","facilityShedCode"]
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
     document.getElementById("addFacilityForm").style.display = "none";
     await loadFacilities();
@@ -631,14 +641,15 @@ document.getElementById("saveAddFacilityBtn").addEventListener("click", async ()
 // ── Facility CRUD helpers ─────────────────────────────────────────────────────
 
 async function saveFacilityEdit(facilityId) {
-  const name       = document.getElementById(`editFacilityName_${facilityId}`)?.value.trim();
-  const address    = document.getElementById(`editFacilityAddress_${facilityId}`)?.value.trim();
-  const mapsUrl    = document.getElementById(`editFacilityMaps_${facilityId}`)?.value.trim();
-  const notes      = document.getElementById(`editFacilityNotes_${facilityId}`)?.value.trim() || "";
-  const issues     = document.getElementById(`editFacilityIssues_${facilityId}`)?.value.trim() || "";
-  const shedCode   = document.getElementById(`editFacilityShedCode_${facilityId}`)?.value.trim() || "";
-  const weatherLat = parseFloat(document.getElementById(`editFacilityLat_${facilityId}`)?.value) || null;
-  const weatherLon = parseFloat(document.getElementById(`editFacilityLon_${facilityId}`)?.value) || null;
+  const name           = document.getElementById(`editFacilityName_${facilityId}`)?.value.trim();
+  const address        = document.getElementById(`editFacilityAddress_${facilityId}`)?.value.trim();
+  const mapsUrl        = document.getElementById(`editFacilityMaps_${facilityId}`)?.value.trim();
+  const externalIcsUrl = document.getElementById(`editFacilityIcs_${facilityId}`)?.value.trim() || "";
+  const notes          = document.getElementById(`editFacilityNotes_${facilityId}`)?.value.trim() || "";
+  const issues         = document.getElementById(`editFacilityIssues_${facilityId}`)?.value.trim() || "";
+  const shedCode       = document.getElementById(`editFacilityShedCode_${facilityId}`)?.value.trim() || "";
+  const weatherLat     = parseFloat(document.getElementById(`editFacilityLat_${facilityId}`)?.value) || null;
+  const weatherLon     = parseFloat(document.getElementById(`editFacilityLon_${facilityId}`)?.value) || null;
 
   if (!name) {
     const msgEl = document.getElementById(`editFacilityMsg_${facilityId}`);
@@ -650,6 +661,7 @@ async function saveFacilityEdit(facilityId) {
     await Promise.all([
       updateDoc(doc(db, "facilities", facilityId), {
         name, address: address || "", googleMapsUrl: mapsUrl || "",
+        externalIcsUrl,
         notes, activeIssues: issues,
         ...(weatherLat != null ? { weatherLat } : {}),
         ...(weatherLon != null ? { weatherLon } : {}),

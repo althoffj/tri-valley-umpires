@@ -27,6 +27,7 @@
       <a href="admin-tournament.html">Tournaments</a>
       <a href="admin-payroll.html">Payroll</a>
       <a href="admin-facilities.html" class="admin-subnav-active">Facilities</a>
+      <a href="admin-sponsors.html">Sponsors</a>
       <a href="admin-incidents.html">Incidents</a>
       <a href="admin-alerts.html">Alerts</a>
       <a href="admin-config.html">Config</a>
@@ -62,6 +63,12 @@
         <div class="form-group">
           <label for="facilityMapsUrl">Google Maps URL</label>
           <input type="url" id="facilityMapsUrl" placeholder="https://maps.google.com/…" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="facilityExternalIcs">External Calendar URL <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem">(iCal/ICS subscription — for field use import)</span></label>
+          <input type="url" id="facilityExternalIcs" placeholder="webcal:// or https://..." />
         </div>
       </div>
       <div class="form-row">
@@ -130,7 +137,7 @@
   </div>
 
   <script type="module" src="auth.js?v=19"></script>
-  <script type="module" src="admin-facilities.js?v=9"></script>
+  <script type="module" src="admin-facilities.js?v=10"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=3"></script>
