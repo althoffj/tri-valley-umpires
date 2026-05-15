@@ -268,10 +268,16 @@ async function init() {
   }
   document.getElementById("incidentFormContainer").style.display = "";
 
-  // Show contextual back link
+  // Show contextual back link based on role
   if (isAdmin()) {
     document.getElementById("backToIncidents")?.style.setProperty("display", "");
     document.getElementById("backToSchedule")?.style.setProperty("display", "none");
+  } else if (isCoach()) {
+    const backLink = document.getElementById("backToSchedule");
+    if (backLink) {
+      backLink.href        = "coach-portal.html";
+      backLink.textContent = "Back to Coach Portal";
+    }
   }
 
   await loadMyGames();

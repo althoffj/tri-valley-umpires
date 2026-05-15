@@ -1,7 +1,19 @@
 // form.js — Acknowledgment form: Firebase account creation + Firestore profile
 import { auth, db } from "./firebase.js";
+import { authReadyPromise, isApproved, isAdmin, isCoach, isLoggedIn } from "./auth.js";
 import { getOrgSettings } from "./org.js";
 import { esc, formatPhoneInput } from "./utils.js";
+
+// Redirect already-authenticated users to their appropriate portal.
+// Skip this check for the Google sign-in flow (?google=1) — in that case the
+// user is authenticated but has no umpire profile yet and must complete the form.
+authReadyPromise.then(() => {
+  if (new URLSearchParams(window.location.search).has("google")) return;
+  if (isAdmin())    { window.location.href = "admin.html";        return; }
+  if (isApproved()) { window.location.href = "schedule.html";     return; }
+  if (isCoach())    { window.location.href = "coach-portal.html"; return; }
+  if (isLoggedIn()) { window.location.href = "index.html";        return; } // pending approval
+});
 
 import {
   createUserWithEmailAndPassword,
