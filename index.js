@@ -5,8 +5,14 @@ const SEASON_YEAR = new Date().getFullYear();
 document.querySelectorAll("#seasonYear, .season-year").forEach(el => {
   el.textContent = SEASON_YEAR;
 });
+// Title updated by org.js once org settings load; set a safe default now
 document.title = `Tri-Valley Baseball Umpires - ${SEASON_YEAR}`;
 import { db, auth } from "./firebase.js";
+import { getOrgSettings } from "./org.js";
+// Refresh title with org name once settings resolve
+getOrgSettings().then(s => {
+  document.title = `${s.orgName} - ${SEASON_YEAR}`;
+});
 import {
   isApproved,
   isAdmin

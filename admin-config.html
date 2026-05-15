@@ -51,6 +51,68 @@
         <a href="admin-scheduler.html">Scheduler</a> → <strong>Settings</strong> tab.</p>
     </div>
 
+    <!-- ── Organization Settings ────────────────────────────────────────── -->
+    <h2>Organization Settings</h2>
+    <div class="document-note" style="margin-bottom:16px">
+      <p style="margin:0">These settings control how your organization's name, contact info, and branding appear throughout the portal. Changes take effect immediately on page load for all visitors.</p>
+    </div>
+    <div style="background:var(--field);border-radius:10px;padding:20px;margin-bottom:32px">
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="orgName">Portal / Organization Name</label>
+          <input type="text" id="orgName" placeholder="Tri-Valley Baseball Umpires" maxlength="80" />
+          <p style="font-size:0.8rem;color:var(--light-text);margin:4px 0 0">Appears in page titles and throughout the site.</p>
+        </div>
+        <div class="form-group">
+          <label for="homeHeading">Home Page Heading</label>
+          <input type="text" id="homeHeading" placeholder="Welcome Umpires!" maxlength="80" />
+          <p style="font-size:0.8rem;color:var(--light-text);margin:4px 0 0">The greeting shown to signed-in umpires on the landing page.</p>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="assocName">Association Name</label>
+          <input type="text" id="assocName" placeholder="Tri-Valley Baseball Association" maxlength="100" />
+        </div>
+        <div class="form-group">
+          <label for="assocUrl">Association Website URL</label>
+          <input type="url" id="assocUrl" placeholder="https://www.trivalleyball.com" />
+        </div>
+      </div>
+
+      <h3 style="margin:20px 0 12px;font-size:1rem;border-top:1px solid #333;padding-top:16px">Umpire Coordinator</h3>
+      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 14px">Shown in the Contact section on the home page and in page footers throughout the portal.</p>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="coordinatorName">Name</label>
+          <input type="text" id="coordinatorName" placeholder="Jeff Althoff" maxlength="80" />
+        </div>
+        <div class="form-group">
+          <label for="coordinatorPhone">Phone</label>
+          <input type="tel" id="coordinatorPhone" placeholder="605-380-0229" maxlength="20" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="coordinatorEmail">Email</label>
+          <input type="email" id="coordinatorEmail" placeholder="althoff.jeff@gmail.com" />
+        </div>
+        <div class="form-group">
+          <label for="slackInviteUrl">Slack Invite URL</label>
+          <input type="url" id="slackInviteUrl" placeholder="https://join.slack.com/…" />
+        </div>
+      </div>
+
+      <div class="page-actions" style="margin-top:8px">
+        <button type="button" class="btn" id="saveOrgSettingsBtn">Save Organization Settings</button>
+      </div>
+      <p id="orgSettingsMessage" class="signup-message" aria-live="polite"></p>
+    </div>
+
     <!-- ── Slack Webhooks ────────────────────────────────────────────────── -->
     <h2>Slack Webhooks</h2>
     <div class="document-note">
@@ -173,7 +235,7 @@
   <div class="footer">
     <p>
       Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
-      | Jeff Althoff: 605-380-0229
+      | <span data-org-text="coordinatorName">Jeff Althoff</span>: <span data-org-text="coordinatorPhone">605-380-0229</span>
       | <a href="https://sdvfwbaseball.com/" target="_blank">SD VFW Baseball</a>
     </p>
   </div>

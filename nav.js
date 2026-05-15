@@ -1,5 +1,9 @@
 // nav.js — Dynamic top navigation, auth-aware, single source of truth
 import { authReadyPromise, isApproved, isAdmin, isCoach } from "./auth.js";
+import { getOrgSettings } from "./org.js";
+
+// Kick off org settings fetch immediately so data-org-* elements are patched ASAP
+getOrgSettings();
 
 // ── Current page & section detection ─────────────────────────────────────
 

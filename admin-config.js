@@ -1,4 +1,4 @@
-// admin-config.js — Pay rates, default slot types, Slack webhooks, push notifications
+// admin-config.js — Organization settings, Slack webhooks, push notifications
 import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
 import {
@@ -28,6 +28,62 @@ function setMsg(id, text, type = "info") {
   el.textContent = text;
   el.className   = `signup-message ${type}`;
 }
+
+// ── Organization Settings ─────────────────────────────────────────────────────
+
+const ORG_DEFAULTS = {
+  orgName:          "Tri-Valley Baseball Umpires",
+  assocName:        "Tri-Valley Baseball Association",
+  assocUrl:         "https://www.trivalleyball.com",
+  homeHeading:      "Welcome Umpires!",
+  coordinatorName:  "Jeff Althoff",
+  coordinatorPhone: "605-380-0229",
+  coordinatorEmail: "althoff.jeff@gmail.com",
+  slackInviteUrl:   "https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA",
+};
+
+async function loadOrgSettings() {
+  try {
+    const snap = await getDoc(doc(db, "config", "orgSettings"));
+    const s = snap.exists() ? { ...ORG_DEFAULTS, ...snap.data() } : { ...ORG_DEFAULTS };
+    document.getElementById("orgName").value          = s.orgName;
+    document.getElementById("homeHeading").value      = s.homeHeading;
+    document.getElementById("assocName").value        = s.assocName;
+    document.getElementById("assocUrl").value         = s.assocUrl;
+    document.getElementById("coordinatorName").value  = s.coordinatorName;
+    document.getElementById("coordinatorPhone").value = s.coordinatorPhone;
+    document.getElementById("coordinatorEmail").value = s.coordinatorEmail;
+    document.getElementById("slackInviteUrl").value   = s.slackInviteUrl;
+  } catch (e) {
+    setMsg("orgSettingsMessage", "Failed to load organization settings.", "error");
+  }
+}
+
+async function saveOrgSettings() {
+  const btn = document.getElementById("saveOrgSettingsBtn");
+  btn.disabled = true;
+  setMsg("orgSettingsMessage", "Saving…", "info");
+  try {
+    const data = {
+      orgName:          document.getElementById("orgName").value.trim()          || ORG_DEFAULTS.orgName,
+      homeHeading:      document.getElementById("homeHeading").value.trim()      || ORG_DEFAULTS.homeHeading,
+      assocName:        document.getElementById("assocName").value.trim()        || ORG_DEFAULTS.assocName,
+      assocUrl:         document.getElementById("assocUrl").value.trim()         || ORG_DEFAULTS.assocUrl,
+      coordinatorName:  document.getElementById("coordinatorName").value.trim()  || ORG_DEFAULTS.coordinatorName,
+      coordinatorPhone: document.getElementById("coordinatorPhone").value.trim() || ORG_DEFAULTS.coordinatorPhone,
+      coordinatorEmail: document.getElementById("coordinatorEmail").value.trim() || ORG_DEFAULTS.coordinatorEmail,
+      slackInviteUrl:   document.getElementById("slackInviteUrl").value.trim()   || ORG_DEFAULTS.slackInviteUrl,
+    };
+    await setDoc(doc(db, "config", "orgSettings"), data);
+    setMsg("orgSettingsMessage", "✓ Organization settings saved.", "success");
+  } catch (e) {
+    setMsg("orgSettingsMessage", "Failed to save: " + (e.message || "Unknown error"), "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("saveOrgSettingsBtn").addEventListener("click", saveOrgSettings);
 
 // ── Slack Webhooks ────────────────────────────────────────────────────────────
 
@@ -300,5 +356,6 @@ authReadyPromise.then(() => {
   document.getElementById("adminContent").style.display = "";
   document.getElementById("noAccess").style.display = "none";
 
+  loadOrgSettings();
   loadSlackWebhooks();
 });
