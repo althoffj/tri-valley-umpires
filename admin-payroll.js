@@ -1,6 +1,7 @@
 // admin-payroll.js — Payroll summary with per-umpire grouping and mark-paid
 import { db } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
+import { getOrgSettings, getSeasonRange } from "./org.js";
 import {
   collection, getDocs, getDoc, doc, updateDoc, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -22,6 +23,8 @@ function fmtTime(t) {
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 function thisYearRange() {
+  // Use configured season dates if available; fall back to full calendar year
+  try { return getSeasonRange(); } catch { /* org.js not yet resolved */ }
   const y = new Date().getFullYear();
   return { from: `${y}-01-01`, to: `${y}-12-31` };
 }
@@ -43,6 +46,9 @@ async function loadPayroll() {
   const tbody = document.getElementById("payrollBody");
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="7" style="color:var(--light-text);text-align:center">Loading…</td></tr>';
+
+  // Ensure org settings (season dates) are resolved before computing default filter
+  await getOrgSettings().catch(() => {});
 
   try {
     const [gamesSnap, ratesSnap] = await Promise.all([

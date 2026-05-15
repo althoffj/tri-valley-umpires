@@ -1,5 +1,6 @@
 // form.js — Acknowledgment form: Firebase account creation + Firestore profile
 import { auth, db } from "./firebase.js";
+import { getOrgSettings } from "./org.js";
 import {
   createUserWithEmailAndPassword,
   updateProfile,
@@ -12,6 +13,34 @@ import {
   getDoc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ── Registration gate + disclaimer ────────────────────────────────────────────
+getOrgSettings().then(s => {
+  // Disclaimer text
+  const disclaimerEl = document.getElementById("registrationDisclaimerNote");
+  if (disclaimerEl && s.registrationDisclaimer) {
+    disclaimerEl.textContent = s.registrationDisclaimer;
+  }
+
+  // Registration open/closed
+  if (s.registrationOpen === false) {
+    const form    = document.getElementById("umpireForm");
+    const msg     = s.registrationClosedMessage || "Umpire registration is currently closed.";
+    const notice  = document.createElement("div");
+    notice.className = "document-note";
+    notice.style.borderLeftColor = "#ffcc80";
+    notice.innerHTML = `<p style="margin:0"><strong>Registration Closed</strong><br />${esc(msg)}</p>`;
+    if (form) {
+      form.style.display = "none";
+      form.parentNode.insertBefore(notice, form);
+    }
+  }
+});
+
+function esc(v) {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 // ── Google Sign-In mode ───────────────────────────────────────────────────────
 // When arriving from googleSignIn() redirect (form.html?google=1), the user is

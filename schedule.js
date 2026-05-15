@@ -1,4 +1,5 @@
 // schedule.js — Firestore-based schedule with multi-slot signups, badges, and pay tracking
+import { getOrgSettings } from "./org.js";
 import { db, auth } from "./firebase.js";
 import {
   authReadyPromise,
@@ -47,6 +48,12 @@ const CITY_COORDS = {
   "City of Colton": { lat: 43.7877, lon: -97.0002 }
 };
 
+// Org settings — loaded async; used for weather fallback and late-cancel window
+let _orgSettings        = null;
+let _lateCancelHours    = 4;   // default: 4 hrs; overwritten once scheduling config loads
+let _schedConfigLoaded  = false;
+getOrgSettings().then(s => { _orgSettings = s; });
+
 const weatherCache = {}; // "city|date" → { temp, condition, wind } | null
 
 const WMO_LABELS = {
@@ -75,8 +82,10 @@ async function fetchWeather(city, date, timeStr) {
   const key = `${city}|${date}`;
   if (key in weatherCache) return weatherCache[key];
 
-  const coords = CITY_COORDS[city];
-  if (!coords) return (weatherCache[key] = null);
+  // Use built-in city lookup, then fall back to org-configured home coords
+  const coords = CITY_COORDS[city]
+    ?? (_orgSettings ? { lat: _orgSettings.weatherLat, lon: _orgSettings.weatherLon } : null);
+  if (!coords || coords.lat == null) return (weatherCache[key] = null);
 
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}` +
@@ -1009,35 +1018,70 @@ async function cancelSlot(gameId, slotType) {
   const profile = getCurrentProfile();
   if (!user || !profile) return;
 
-  const key = `${gameId}|${slotType}`;
+  const key  = `${gameId}|${slotType}`;
+  const game = games.find(g => g.id === gameId);
+  if (!game) return;
+
   if (pendingCancels[key]) {
     alert("You already have a pending cancellation request for this slot.");
     return;
   }
 
-  if (!confirm(`Request to cancel your ${slotType} signup? An admin must approve before you are removed.`)) return;
+  // Determine whether this is a self-service cancel or requires admin approval
+  const isLate = (() => {
+    if (_lateCancelHours <= 0) return true; // always require approval
+    try {
+      const [y, mo, d]  = (game.date || "").split("-").map(Number);
+      const [h, m]      = (game.time || "00:00").split(":").map(Number);
+      const gameMs      = new Date(y, mo - 1, d, h, m).getTime();
+      const windowMs    = _lateCancelHours * 60 * 60 * 1000;
+      return (gameMs - Date.now()) < windowMs;
+    } catch { return true; }
+  })();
 
-  const game = games.find(g => g.id === gameId);
-  if (!game) return;
-
-  try {
-    const ref = await addDoc(collection(db, "cancellationRequests"), {
-      gameId,
-      slotType,
-      uid:          user.uid,
-      name:         profile.name || user.email,
-      gameDate:     game.date     || "",
-      gameTime:     game.time     || "",
-      gameCity:     game.city     || "",
-      gameDivision: game.division || "",
-      gameField:    game.field    || "",
-      status:       "pending",
-      requestedAt:  serverTimestamp()
-    });
-    pendingCancels[key] = ref.id;
-    renderGameRows();
-  } catch (err) {
-    alert("Failed to submit cancellation request: " + err.message);
+  if (isLate) {
+    // Within the late-cancel window — route through admin approval
+    if (!confirm(`Request to cancel your ${slotType} signup? An admin must approve before you are removed.`)) return;
+    try {
+      const ref = await addDoc(collection(db, "cancellationRequests"), {
+        gameId,
+        slotType,
+        uid:          user.uid,
+        name:         profile.name || user.email,
+        gameDate:     game.date     || "",
+        gameTime:     game.time     || "",
+        gameCity:     game.city     || "",
+        gameDivision: game.division || "",
+        gameField:    game.field    || "",
+        status:       "pending",
+        requestedAt:  serverTimestamp()
+      });
+      pendingCancels[key] = ref.id;
+      renderGameRows();
+    } catch (err) {
+      alert("Failed to submit cancellation request: " + err.message);
+    }
+  } else {
+    // Outside the window — self-service cancel
+    if (!confirm(`Cancel your ${slotType} signup for this game? This cannot be undone.`)) return;
+    try {
+      const gameRef  = doc(db, "games", gameId);
+      const gameSnap = await getDoc(gameRef);
+      if (!gameSnap.exists()) return;
+      const slots = (gameSnap.data().umpireSlots || []).map(s => {
+        if (s.type === slotType && s.assignedUid === user.uid) {
+          return { ...s, assignedUid: null, assignedName: null, payRate: s.payRate ?? null };
+        }
+        return s;
+      });
+      await updateDoc(gameRef, { umpireSlots: slots });
+      // Update local state
+      const g = games.find(x => x.id === gameId);
+      if (g) g.umpireSlots = slots;
+      renderGameRows();
+    } catch (err) {
+      alert("Failed to cancel signup: " + err.message);
+    }
   }
 }
 
@@ -1134,6 +1178,11 @@ document.getElementById("confirmSignupBtn").addEventListener("click", () => {
 document.getElementById("cancelSignupBtn").addEventListener("click", closeModal);
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+
+// Load lateCancelHours from scheduling config
+getDoc(doc(db, "config", "scheduling")).then(snap => {
+  if (snap.exists()) _lateCancelHours = snap.data().lateCancelHours ?? 4;
+}).catch(() => {});
 
 authReadyPromise.then(() => {
   const myGamesBtn = document.getElementById("myGamesBtn");

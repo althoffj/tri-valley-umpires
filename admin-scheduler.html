@@ -153,7 +153,7 @@
 
       <!-- Filter bar -->
       <div id="calFilterBar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center">
-        <select id="calFilterDiv" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+        <select id="calFilterDiv" data-org-divisions style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
           <option value="">All Divisions</option>
           <option value="10U">10U</option>
           <option value="12U">12U</option>
@@ -379,6 +379,12 @@
             <label for="sLateStartCutoff">Latest start — no lights (HH:MM, 24h)</label>
             <input type="time" id="sLateStartCutoff" value="19:30" />
           </div>
+          <div class="form-group form-group--sm">
+            <label for="sLateCancelHours">Late-cancel window (hours before game)</label>
+            <input type="number" id="sLateCancelHours" min="0" max="72" step="1" placeholder="4"
+              style="width:100px" />
+            <p style="font-size:0.8rem;color:var(--light-text);margin:4px 0 0">Cancellations submitted within this many hours of game time require admin approval. Cancellations before this window are self-service. Set to 0 to always require approval.</p>
+          </div>
         </div>
         <div class="page-actions" style="margin-top:12px">
           <button type="submit" class="btn">Save Scheduling Rules</button>
@@ -415,7 +421,7 @@
       <div class="form-row">
         <div class="form-group">
           <label for="seDivision">Division</label>
-          <select id="seDivision">
+          <select id="seDivision" data-org-divisions>
             <option value="10U">10U</option>
             <option value="12U">12U</option>
             <option value="14U">14U</option>
@@ -502,7 +508,7 @@
         </div>
         <div class="form-group">
           <label for="peDivision">Division</label>
-          <select id="peDivision">
+          <select id="peDivision" data-org-divisions>
             <option value="">— None —</option>
             <option value="10U">10U</option>
             <option value="12U">12U</option>

@@ -49,7 +49,7 @@
         </div>
         <div class="form-group">
           <label for="gameDivision">Division</label>
-          <select id="gameDivision" required>
+          <select id="gameDivision" required data-org-divisions>
             <option value="">-- Select --</option>
             <option value="10U">10U</option>
             <option value="12U">12U</option>
@@ -159,7 +159,7 @@
     <!-- Dropdown filters row -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
       <select id="gfLeague"   class="gf-select"><option value="">All Programs</option></select>
-      <select id="gfDivision" class="gf-select"><option value="">All Divisions</option></select>
+      <select id="gfDivision" class="gf-select" data-org-divisions><option value="">All Divisions</option></select>
       <select id="gfTeam"     class="gf-select"><option value="">All Teams</option></select>
       <select id="gfFacility" class="gf-select"><option value="">All Facilities</option></select>
       <select id="gfField"    class="gf-select"><option value="">All Fields</option></select>
@@ -223,7 +223,7 @@
         </div>
         <div class="form-group">
           <label for="editGameDivision">Division</label>
-          <select id="editGameDivision">
+          <select id="editGameDivision" data-org-divisions>
             <option value="10U">10U</option>
             <option value="12U">12U</option>
             <option value="14U">14U</option>

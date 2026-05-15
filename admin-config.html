@@ -107,7 +107,98 @@
         </div>
       </div>
 
-      <div class="page-actions" style="margin-top:8px">
+      <!-- ── Active Divisions ────────────────────────────────────────────── -->
+      <h3 style="margin:20px 0 12px;font-size:1rem;border-top:1px solid #333;padding-top:16px">Active Divisions</h3>
+      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 12px">Only checked divisions will appear in dropdowns throughout the site.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:4px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="8U" /> 8U</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="10U" /> 10U</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="12U" /> 12U</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="14U" /> 14U</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="HS JV" /> HS JV</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="HS Varsity" /> HS Varsity</label>
+      </div>
+
+      <!-- ── Brand Color ─────────────────────────────────────────────────── -->
+      <h3 style="margin:20px 0 12px;font-size:1rem;border-top:1px solid #333;padding-top:16px">Brand Color</h3>
+      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 12px">Primary accent color used for buttons, headers, and highlights. A darker hover variant is computed automatically.</p>
+      <div class="form-row" style="align-items:center">
+        <div class="form-group form-group--sm">
+          <label for="orgAccentColor">Accent Color</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="color" id="orgAccentColor" value="#601929" style="width:48px;height:36px;padding:2px;border:1px solid #555;border-radius:6px;background:var(--field);cursor:pointer" />
+            <input type="text" id="orgAccentColorHex" placeholder="#601929" maxlength="7"
+              style="width:90px;padding:8px 10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:0.9rem;font-family:monospace" />
+          </div>
+        </div>
+        <div style="align-self:flex-end;padding-bottom:8px;font-size:0.85rem;color:var(--light-text)">
+          Preview: <span id="orgColorPreview" style="display:inline-block;width:80px;height:24px;border-radius:4px;vertical-align:middle;margin-left:6px"></span>
+        </div>
+      </div>
+
+      <!-- ── Season Dates ────────────────────────────────────────────────── -->
+      <h3 style="margin:20px 0 12px;font-size:1rem;border-top:1px solid #333;padding-top:16px">Season Dates</h3>
+      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 12px">Used as the default date range for the Payroll "This Year" filter and other season-aware views. Leave blank to use Jan 1 – Dec 31 of the current calendar year.</p>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="orgSeasonStart">Season Start</label>
+          <input type="date" id="orgSeasonStart" />
+        </div>
+        <div class="form-group">
+          <label for="orgSeasonEnd">Season End</label>
+          <input type="date" id="orgSeasonEnd" />
+        </div>
+      </div>
+
+      <!-- ── Registration ────────────────────────────────────────────────── -->
+      <h3 style="margin:20px 0 12px;font-size:1rem;border-top:1px solid #333;padding-top:16px">Registration</h3>
+      <div class="form-row" style="align-items:center;margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+          <input type="checkbox" id="orgRegistrationOpen" checked style="width:16px;height:16px;accent-color:var(--accent)" />
+          Registration open (new umpires can submit the acknowledgment form)
+        </label>
+      </div>
+      <div class="form-group" id="orgRegClosedMsgGroup">
+        <label for="orgRegistrationClosedMessage">Closed message (shown instead of the form when registration is closed)</label>
+        <textarea id="orgRegistrationClosedMessage" rows="3" maxlength="500"
+          placeholder="Umpire registration is currently closed for the season. Please check back later."
+          style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--container);color:#eee;font-size:0.9rem;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="orgRegistrationDisclaimer">Registration form disclaimer / intro text</label>
+        <textarea id="orgRegistrationDisclaimer" rows="4" maxlength="800"
+          placeholder="Before submitting this form, review the official expectations PDF…"
+          style="width:100%;padding:10px;border:1px solid #555;border-radius:6px;background:var(--container);color:#eee;font-size:0.9rem;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
+        <p style="font-size:0.8rem;color:var(--light-text);margin:4px 0 0">Shown as the introductory note at the top of the umpire acknowledgment form.</p>
+      </div>
+
+      <!-- ── Technical: Weather & Timezone ──────────────────────────────── -->
+      <h3 style="margin:20px 0 12px;font-size:1rem;border-top:1px solid #333;padding-top:16px">Technical Settings</h3>
+      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 12px">Used for weather forecasts on the schedule and accurate date handling. The weather coordinates are used as a fallback for cities not in the built-in lookup table.</p>
+      <div class="form-row">
+        <div class="form-group form-group--sm">
+          <label for="orgWeatherLat">Weather Latitude</label>
+          <input type="number" id="orgWeatherLat" step="0.0001" min="-90" max="90" placeholder="43.68" style="width:130px" />
+        </div>
+        <div class="form-group form-group--sm">
+          <label for="orgWeatherLon">Weather Longitude</label>
+          <input type="number" id="orgWeatherLon" step="0.0001" min="-180" max="180" placeholder="-96.96" style="width:130px" />
+        </div>
+        <div class="form-group">
+          <label for="orgTimezone">Timezone</label>
+          <select id="orgTimezone">
+            <option value="America/New_York">Eastern (America/New_York)</option>
+            <option value="America/Chicago">Central (America/Chicago)</option>
+            <option value="America/Denver">Mountain (America/Denver)</option>
+            <option value="America/Phoenix">Mountain no-DST (America/Phoenix)</option>
+            <option value="America/Los_Angeles">Pacific (America/Los_Angeles)</option>
+            <option value="America/Anchorage">Alaska (America/Anchorage)</option>
+            <option value="Pacific/Honolulu">Hawaii (Pacific/Honolulu)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="page-actions" style="margin-top:16px">
         <button type="button" class="btn" id="saveOrgSettingsBtn">Save Organization Settings</button>
       </div>
       <p id="orgSettingsMessage" class="signup-message" aria-live="polite"></p>

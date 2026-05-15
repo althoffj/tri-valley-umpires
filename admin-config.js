@@ -32,31 +32,73 @@ function setMsg(id, text, type = "info") {
 // ── Organization Settings ─────────────────────────────────────────────────────
 
 const ORG_DEFAULTS = {
-  orgName:          "Tri-Valley Baseball Umpires",
-  assocName:        "Tri-Valley Baseball Association",
-  assocUrl:         "https://www.trivalleyball.com",
-  homeHeading:      "Welcome Umpires!",
-  coordinatorName:  "Jeff Althoff",
-  coordinatorPhone: "605-380-0229",
-  coordinatorEmail: "althoff.jeff@gmail.com",
-  slackInviteUrl:   "https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA",
+  orgName:                    "Tri-Valley Baseball Umpires",
+  assocName:                  "Tri-Valley Baseball Association",
+  assocUrl:                   "https://www.trivalleyball.com",
+  homeHeading:                "Welcome Umpires!",
+  coordinatorName:            "Jeff Althoff",
+  coordinatorPhone:           "605-380-0229",
+  coordinatorEmail:           "althoff.jeff@gmail.com",
+  slackInviteUrl:             "https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA",
+  activeDivisions:            ["8U", "10U", "12U", "14U", "HS JV", "HS Varsity"],
+  accentColor:                "#601929",
+  seasonStart:                "",
+  seasonEnd:                  "",
+  registrationOpen:           true,
+  registrationClosedMessage:  "Umpire registration is currently closed for the season. Please check back later.",
+  registrationDisclaimer:     "Before submitting this form, review the official expectations PDF. The PDF is the source of truth for the rules and expectations you are acknowledging.",
+  weatherLat:                 43.68,
+  weatherLon:                 -96.96,
+  timezone:                   "America/Chicago",
 };
 
 async function loadOrgSettings() {
   try {
     const snap = await getDoc(doc(db, "config", "orgSettings"));
     const s = snap.exists() ? { ...ORG_DEFAULTS, ...snap.data() } : { ...ORG_DEFAULTS };
+    if (!Array.isArray(s.activeDivisions)) s.activeDivisions = ORG_DEFAULTS.activeDivisions;
+
+    // Identity
     document.getElementById("orgName").value          = s.orgName;
     document.getElementById("homeHeading").value      = s.homeHeading;
     document.getElementById("assocName").value        = s.assocName;
     document.getElementById("assocUrl").value         = s.assocUrl;
+    // Coordinator
     document.getElementById("coordinatorName").value  = s.coordinatorName;
     document.getElementById("coordinatorPhone").value = s.coordinatorPhone;
     document.getElementById("coordinatorEmail").value = s.coordinatorEmail;
     document.getElementById("slackInviteUrl").value   = s.slackInviteUrl;
+    // Divisions
+    document.querySelectorAll(".org-division-cb").forEach(cb => {
+      cb.checked = s.activeDivisions.includes(cb.value);
+    });
+    // Brand color
+    const color = s.accentColor || "#601929";
+    document.getElementById("orgAccentColor").value    = color;
+    document.getElementById("orgAccentColorHex").value = color;
+    document.getElementById("orgColorPreview").style.background = color;
+    // Season
+    document.getElementById("orgSeasonStart").value = s.seasonStart || "";
+    document.getElementById("orgSeasonEnd").value   = s.seasonEnd   || "";
+    // Registration
+    document.getElementById("orgRegistrationOpen").checked          = s.registrationOpen !== false;
+    document.getElementById("orgRegistrationClosedMessage").value   = s.registrationClosedMessage || "";
+    document.getElementById("orgRegistrationDisclaimer").value      = s.registrationDisclaimer    || "";
+    toggleRegClosedMsg();
+    // Technical
+    document.getElementById("orgWeatherLat").value = s.weatherLat ?? "";
+    document.getElementById("orgWeatherLon").value = s.weatherLon ?? "";
+    const tzSel = document.getElementById("orgTimezone");
+    if (tzSel) tzSel.value = s.timezone || "America/Chicago";
   } catch (e) {
     setMsg("orgSettingsMessage", "Failed to load organization settings.", "error");
   }
+}
+
+function toggleRegClosedMsg() {
+  const open  = document.getElementById("orgRegistrationOpen")?.checked;
+  const group = document.getElementById("orgRegClosedMsgGroup");
+  if (group) group.style.display = open ? "none" : "";
 }
 
 async function saveOrgSettings() {
@@ -64,15 +106,44 @@ async function saveOrgSettings() {
   btn.disabled = true;
   setMsg("orgSettingsMessage", "Saving…", "info");
   try {
+    const activeDivisions = [...document.querySelectorAll(".org-division-cb:checked")]
+      .map(cb => cb.value);
+    if (!activeDivisions.length) {
+      setMsg("orgSettingsMessage", "Select at least one active division.", "error");
+      btn.disabled = false;
+      return;
+    }
+
+    const hexVal = (document.getElementById("orgAccentColorHex").value.trim() || "#601929").replace(/[^#0-9a-fA-F]/g, "");
+    const accentColor = /^#[0-9a-fA-F]{6}$/.test(hexVal) ? hexVal
+      : document.getElementById("orgAccentColor").value || "#601929";
+
     const data = {
+      // Identity
       orgName:          document.getElementById("orgName").value.trim()          || ORG_DEFAULTS.orgName,
       homeHeading:      document.getElementById("homeHeading").value.trim()      || ORG_DEFAULTS.homeHeading,
       assocName:        document.getElementById("assocName").value.trim()        || ORG_DEFAULTS.assocName,
       assocUrl:         document.getElementById("assocUrl").value.trim()         || ORG_DEFAULTS.assocUrl,
+      // Coordinator
       coordinatorName:  document.getElementById("coordinatorName").value.trim()  || ORG_DEFAULTS.coordinatorName,
       coordinatorPhone: document.getElementById("coordinatorPhone").value.trim() || ORG_DEFAULTS.coordinatorPhone,
       coordinatorEmail: document.getElementById("coordinatorEmail").value.trim() || ORG_DEFAULTS.coordinatorEmail,
       slackInviteUrl:   document.getElementById("slackInviteUrl").value.trim()   || ORG_DEFAULTS.slackInviteUrl,
+      // Divisions
+      activeDivisions,
+      // Brand
+      accentColor,
+      // Season
+      seasonStart: document.getElementById("orgSeasonStart").value || "",
+      seasonEnd:   document.getElementById("orgSeasonEnd").value   || "",
+      // Registration
+      registrationOpen:          document.getElementById("orgRegistrationOpen").checked,
+      registrationClosedMessage: document.getElementById("orgRegistrationClosedMessage").value.trim() || ORG_DEFAULTS.registrationClosedMessage,
+      registrationDisclaimer:    document.getElementById("orgRegistrationDisclaimer").value.trim()    || ORG_DEFAULTS.registrationDisclaimer,
+      // Technical
+      weatherLat: parseFloat(document.getElementById("orgWeatherLat").value) || ORG_DEFAULTS.weatherLat,
+      weatherLon: parseFloat(document.getElementById("orgWeatherLon").value) || ORG_DEFAULTS.weatherLon,
+      timezone:   document.getElementById("orgTimezone").value                || ORG_DEFAULTS.timezone,
     };
     await setDoc(doc(db, "config", "orgSettings"), data);
     setMsg("orgSettingsMessage", "✓ Organization settings saved.", "success");
@@ -84,6 +155,20 @@ async function saveOrgSettings() {
 }
 
 document.getElementById("saveOrgSettingsBtn").addEventListener("click", saveOrgSettings);
+
+// Color picker ↔ hex input sync
+document.getElementById("orgAccentColor").addEventListener("input", function() {
+  document.getElementById("orgAccentColorHex").value = this.value;
+  document.getElementById("orgColorPreview").style.background = this.value;
+});
+document.getElementById("orgAccentColorHex").addEventListener("input", function() {
+  const v = this.value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+    document.getElementById("orgAccentColor").value = v;
+    document.getElementById("orgColorPreview").style.background = v;
+  }
+});
+document.getElementById("orgRegistrationOpen").addEventListener("change", toggleRegClosedMsg);
 
 // ── Slack Webhooks ────────────────────────────────────────────────────────────
 

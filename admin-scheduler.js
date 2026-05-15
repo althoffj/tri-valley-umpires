@@ -237,6 +237,8 @@ async function loadSettings() {
       });
       const cutoffEl = document.getElementById("sLateStartCutoff");
       if (cutoffEl) cutoffEl.value = d.lateStartCutoff ?? "19:30";
+      const lcEl = document.getElementById("sLateCancelHours");
+      if (lcEl) lcEl.value = d.lateCancelHours ?? 4;
     }
   } catch (err) {
     console.error("loadSettings:", err);
@@ -296,8 +298,9 @@ document.getElementById("sSchedulingForm").addEventListener("submit", async func
       const val = parseInt(document.getElementById(elId)?.value);
       gameDurationMinutes[div] = isNaN(val) ? SCHED_DEFAULTS[div] : val;
     });
-    const lateStartCutoff = document.getElementById("sLateStartCutoff").value || "19:30";
-    await setDoc(doc(db, "config", "scheduling"), { gameDurationMinutes, lateStartCutoff });
+    const lateStartCutoff  = document.getElementById("sLateStartCutoff").value || "19:30";
+    const lateCancelHours  = parseInt(document.getElementById("sLateCancelHours")?.value) || 0;
+    await setDoc(doc(db, "config", "scheduling"), { gameDurationMinutes, lateStartCutoff, lateCancelHours });
     setSettingsMsg("sSchedulingMsg", "Scheduling rules saved.", "success");
   } catch (err) {
     setSettingsMsg("sSchedulingMsg", err.message, "error");
