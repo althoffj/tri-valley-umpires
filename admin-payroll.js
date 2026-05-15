@@ -136,10 +136,10 @@ function renderSummary() {
   const cards = Object.entries(byUmpire)
     .sort(([, a], [, b]) => a.name.localeCompare(b.name))
     .map(([uid, { name, rows: uRows }]) => {
-      const owed       = uRows.reduce((s, r) => s + r.pay, 0);
-      const paid       = uRows.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
+      const owed        = uRows.reduce((s, r) => s + r.pay, 0);
+      const paid        = uRows.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
       const outstanding = owed - paid;
-      const allPaid    = outstanding === 0;
+      const allPaid     = outstanding === 0;
       const unpaidCount = uRows.filter(r => !r.paid).length;
       return `
         <div style="background:var(--container);border:1px solid ${allPaid ? "#2a4a2a" : "#444"};border-radius:8px;padding:14px 16px;min-width:180px;flex:1 1 180px">
@@ -149,11 +149,17 @@ function renderSummary() {
           <div style="font-size:0.82rem;margin-bottom:10px;color:${allPaid ? "#6fcf97" : "#ffcc80"}">
             ${allPaid ? "✓ Fully paid" : `Outstanding: $${outstanding.toFixed(2)}`}
           </div>
-          ${!allPaid ? `
-            <button class="btn mark-all-paid-btn" data-uid="${esc(uid)}"
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${!allPaid ? `
+              <button class="btn mark-all-paid-btn" data-uid="${esc(uid)}"
+                style="font-size:0.78rem;padding:4px 12px;width:100%">
+                Mark All Paid (${unpaidCount})
+              </button>` : ""}
+            <button class="btn print-btn pay-stub-btn" data-uid="${esc(uid)}"
               style="font-size:0.78rem;padding:4px 12px;width:100%">
-              Mark All Paid (${unpaidCount})
-            </button>` : ""}
+              📄 Pay Stub
+            </button>
+          </div>
         </div>`;
     });
 
@@ -161,6 +167,9 @@ function renderSummary() {
 
   el.querySelectorAll(".mark-all-paid-btn").forEach(btn => {
     btn.addEventListener("click", () => markAllPaid(btn.dataset.uid));
+  });
+  el.querySelectorAll(".pay-stub-btn").forEach(btn => {
+    btn.addEventListener("click", () => generatePayStub(btn.dataset.uid));
   });
 }
 
@@ -275,6 +284,280 @@ async function togglePaid(gameId, slotType, uid) {
   } catch (err) {
     console.error(err);
     alert("Error updating paid status.");
+  }
+}
+
+// ── Pay stub ──────────────────────────────────────────────────────────────────
+
+function generatePayStub(uid) {
+  const rows     = filteredRows().filter(r => r.uid === uid && !r.noShow);
+  if (!rows.length) return;
+
+  const name      = rows[0].umpireName;
+  const owed      = rows.reduce((s, r) => s + r.pay, 0);
+  const paid      = rows.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
+  const balance   = owed - paid;
+  const today     = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const periodFrom = payrollFromFilter ? new Date(payrollFromFilter + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "All time";
+  const periodTo   = payrollToFilter   ? new Date(payrollToFilter   + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : today;
+
+  const rateTable = [
+    payRates.plate ? `Plate Umpire: $${payRates.plate.toFixed(2)}` : null,
+    payRates.field ? `Field Umpire: $${payRates.field.toFixed(2)}` : null,
+    payRates.extra ? `Extra: $${payRates.extra.toFixed(2)}` : null,
+  ].filter(Boolean).join(" &nbsp;·&nbsp; ");
+
+  const gameRows = rows
+    .slice()
+    .sort((a, b) => a.date < b.date ? -1 : 1)
+    .map(r => `
+      <tr>
+        <td>${fmtDate(r.date)}</td>
+        <td>${r.division || "—"}</td>
+        <td>${r.city || "—"}</td>
+        <td>${r.field || "—"}</td>
+        <td>${r.slotType}</td>
+        <td class="money">$${r.pay.toFixed(2)}</td>
+        <td class="${r.paid ? "paid" : "unpaid"}">${r.paid ? "Paid" : "Unpaid"}</td>
+      </tr>`).join("");
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pay Stub — ${name}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      color: #111;
+      background: #fff;
+      padding: 32px 40px;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    /* ── Header ── */
+    .stub-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 3px solid #601929;
+      padding-bottom: 14px;
+      margin-bottom: 20px;
+    }
+    .org-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: #601929;
+      line-height: 1.2;
+    }
+    .org-sub {
+      font-size: 12px;
+      color: #555;
+      margin-top: 3px;
+    }
+    .stub-meta {
+      text-align: right;
+      font-size: 12px;
+      color: #555;
+    }
+    .stub-meta strong { color: #111; }
+
+    /* ── To / Period block ── */
+    .stub-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 24px;
+      background: #f7f0f1;
+      border: 1px solid #d9b8bb;
+      border-radius: 6px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+    }
+    .stub-info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #601929; margin-bottom: 3px; }
+    .stub-info-value { font-size: 14px; font-weight: 600; color: #111; }
+
+    /* ── Rate note ── */
+    .rate-note {
+      font-size: 11px;
+      color: #555;
+      margin-bottom: 16px;
+    }
+    .rate-note strong { color: #111; }
+
+    /* ── Table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 12.5px;
+    }
+    thead th {
+      background: #601929;
+      color: #fff;
+      text-align: left;
+      padding: 7px 10px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    thead th.money { text-align: right; }
+    tbody tr:nth-child(even) { background: #faf5f6; }
+    tbody td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e8dde0;
+      vertical-align: middle;
+    }
+    td.money { text-align: right; font-variant-numeric: tabular-nums; }
+    td.paid   { color: #1a6b30; font-weight: 600; }
+    td.unpaid { color: #8a4a00; font-weight: 600; }
+
+    /* ── Totals ── */
+    .totals {
+      width: 260px;
+      margin-left: auto;
+      border: 1px solid #d9b8bb;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 7px 14px;
+      font-size: 13px;
+      border-bottom: 1px solid #ead8da;
+    }
+    .totals-row:last-child { border-bottom: none; }
+    .totals-row.total-owed  { background: #f7f0f1; }
+    .totals-row.total-paid  { background: #f0f7f2; color: #1a6b30; }
+    .totals-row.total-bal   { background: ${balance > 0 ? "#fff8ee" : "#f0f7f2"}; font-weight: 700; color: ${balance > 0 ? "#8a4a00" : "#1a6b30"}; }
+    .totals-label { font-weight: 500; }
+    .totals-amount { font-variant-numeric: tabular-nums; }
+
+    /* ── Footer note ── */
+    .stub-footer {
+      border-top: 1px solid #ddd;
+      padding-top: 12px;
+      font-size: 11px;
+      color: #777;
+      line-height: 1.5;
+    }
+
+    /* ── Print button (screen only) ── */
+    .print-bar {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .print-bar button {
+      background: #601929;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 9px 24px;
+      font-size: 14px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .print-bar button:hover { background: #7a2035; }
+
+    @media print {
+      body { padding: 16px; }
+      .print-bar { display: none; }
+      @page { margin: 1.5cm; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="print-bar">
+    <button onclick="window.print()">🖨 Print / Save as PDF</button>
+  </div>
+
+  <!-- Header -->
+  <div class="stub-header">
+    <div>
+      <div class="org-name">Tri-Valley Baseball Umpires</div>
+      <div class="org-sub">Tri-Valley Baseball Association &nbsp;·&nbsp; SD VFW Baseball</div>
+      <div class="org-sub">Contact: Jeff Althoff &nbsp;·&nbsp; 605-380-0229</div>
+    </div>
+    <div class="stub-meta">
+      <div><strong>Pay Statement</strong></div>
+      <div>Generated: ${today}</div>
+    </div>
+  </div>
+
+  <!-- To / Period info -->
+  <div class="stub-info">
+    <div>
+      <div class="stub-info-label">Umpire</div>
+      <div class="stub-info-value">${name}</div>
+    </div>
+    <div>
+      <div class="stub-info-label">Pay Period</div>
+      <div class="stub-info-value">${periodFrom === periodTo ? periodFrom : periodFrom + " – " + periodTo}</div>
+    </div>
+    <div>
+      <div class="stub-info-label">Games Worked</div>
+      <div class="stub-info-value">${rows.length}</div>
+    </div>
+    <div>
+      <div class="stub-info-label">Statement Date</div>
+      <div class="stub-info-value">${today}</div>
+    </div>
+  </div>
+
+  ${rateTable ? `<div class="rate-note"><strong>Pay rates:</strong> ${rateTable}</div>` : ""}
+
+  <!-- Game detail table -->
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Division</th>
+        <th>City</th>
+        <th>Field</th>
+        <th>Position</th>
+        <th class="money">Rate</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>${gameRows}</tbody>
+  </table>
+
+  <!-- Totals -->
+  <div class="totals">
+    <div class="totals-row total-owed">
+      <span class="totals-label">Total Earned</span>
+      <span class="totals-amount">$${owed.toFixed(2)}</span>
+    </div>
+    <div class="totals-row total-paid">
+      <span class="totals-label">Amount Paid</span>
+      <span class="totals-amount">$${paid.toFixed(2)}</span>
+    </div>
+    <div class="totals-row total-bal">
+      <span class="totals-label">${balance > 0 ? "Balance Due" : "Fully Paid"}</span>
+      <span class="totals-amount">$${balance.toFixed(2)}</span>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="stub-footer">
+    <p>This document is a payment record for officiating services rendered to Tri-Valley Baseball Association.
+    It is not a tax document. Please retain for your records.</p>
+    <p style="margin-top:4px">Questions? Contact Jeff Althoff at 605-380-0229 or post in the Umpire Slack channel.</p>
+  </div>
+
+</body>
+</html>`;
+
+  const win = window.open("", "_blank");
+  if (win) {
+    win.document.write(html);
+    win.document.close();
   }
 }
 
