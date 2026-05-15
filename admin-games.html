@@ -39,14 +39,18 @@
     <form id="addGameForm" class="signup-form">
       <div class="form-row">
         <div class="form-group">
-          <label for="gameCity">City / League</label>
-          <select id="gameCity" required>
-            <option value="">-- Select --</option>
-            <option value="City of Crooks">City of Crooks</option>
-            <option value="City of Colton">City of Colton</option>
-            <option value="MinnDak">MinnDak</option>
+          <label for="gameLeague">League / Program</label>
+          <select id="gameLeague">
+            <option value="">— None —</option>
           </select>
         </div>
+        <div class="form-group">
+          <label for="gameCity">City / Town *</label>
+          <input type="text" id="gameCity" required placeholder="e.g. Crooks" />
+        </div>
+      </div>
+
+      <div class="form-row">
         <div class="form-group">
           <label for="gameDivision">Division</label>
           <select id="gameDivision" required data-org-divisions>
@@ -214,13 +218,18 @@
 
       <div class="form-row">
         <div class="form-group">
-          <label for="editGameCity">City / League</label>
-          <select id="editGameCity">
-            <option value="City of Crooks">City of Crooks</option>
-            <option value="City of Colton">City of Colton</option>
-            <option value="MinnDak">MinnDak</option>
+          <label for="editGameLeague">League / Program</label>
+          <select id="editGameLeague">
+            <option value="">— None —</option>
           </select>
         </div>
+        <div class="form-group">
+          <label for="editGameCity">City / Town</label>
+          <input type="text" id="editGameCity" placeholder="e.g. Crooks" />
+        </div>
+      </div>
+
+      <div class="form-row">
         <div class="form-group">
           <label for="editGameDivision">Division</label>
           <select id="editGameDivision" data-org-divisions>

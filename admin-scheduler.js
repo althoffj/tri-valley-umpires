@@ -1585,17 +1585,27 @@ document.querySelectorAll(".cal-view-btn").forEach(btn => {
 //  GAME EDIT MODAL (calendar / list view)
 // ══════════════════════════════════════════════════════════════════════════════
 
+function populateSeLeague(selectedName) {
+  const sel = document.getElementById("seLeague");
+  if (!sel) return;
+  const opts = leagues.map(l => `<option value="${esc(l.name)}">${esc(l.name)}</option>`).join("");
+  sel.innerHTML = `<option value="">— None —</option>${opts}`;
+  sel.value = selectedName || "";
+}
+
 function openGameEditModal(game) {
   const modal = document.getElementById("schedGameEditModal");
   if (!modal) return;
 
   seCurrentGame = game; // keep reference for slot management
+  populateSeLeague(game.league || "");
 
   document.getElementById("seGameId").value         = game.id;
   document.getElementById("seDate").value           = game.date        || "";
   document.getElementById("seTime").value           = game.time        || "";
   document.getElementById("seDivision").value       = game.division    || "10U";
-  document.getElementById("seCity").value           = game.city        || "City of Crooks";
+  document.getElementById("seLeague").value         = game.league      || "";
+  document.getElementById("seCity").value           = game.city        || "";
   document.getElementById("seField").value          = game.field       || "";
   document.getElementById("seGameType").value       = game.gameType    || "Regular";
   document.getElementById("seHomeTeam").value       = game.homeTeam    || "";
@@ -1635,6 +1645,7 @@ document.getElementById("seGameSaveBtn").addEventListener("click", async () => {
       date:         document.getElementById("seDate").value,
       time:         document.getElementById("seTime").value,
       division:     document.getElementById("seDivision").value,
+      league:       document.getElementById("seLeague").value,
       city:         document.getElementById("seCity").value,
       field:        document.getElementById("seField").value.trim(),
       gameType:     document.getElementById("seGameType").value,

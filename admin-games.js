@@ -24,6 +24,7 @@ let allGames       = [];
 let gameFilter     = "upcoming";
 let currentRates   = { plate: 0, field: 0, extra: 0 };
 let facilitiesData = []; // [{ id, name, fields:[{name,notes}] }]
+let leaguesData    = []; // [{ id, name }] from leagues collection
 
 // Active filter state
 let gfFrom     = "";
@@ -180,8 +181,8 @@ function applyGameFilters() {
     // Date range
     if (gfFrom && g.date < gfFrom) return false;
     if (gfTo   && g.date > gfTo)   return false;
-    // League/city program
-    if (gfLeague && (g.city || "") !== gfLeague) return false;
+    // League/program filter (check g.league first; fall back to g.city for old records)
+    if (gfLeague && (g.league || g.city || "") !== gfLeague) return false;
     // Division
     if (gfDivision && (g.division || "") !== gfDivision) return false;
     // Team — match teamName, homeTeam, or awayTeam
@@ -205,7 +206,7 @@ function applyGameFilters() {
 }
 
 function buildFilterDropdowns() {
-  const leagues   = [...new Set(allGames.map(g => g.city   || "").filter(Boolean))].sort();
+  const leagues   = [...new Set(allGames.map(g => g.league || g.city || "").filter(Boolean))].sort();
   const divisions = [...new Set(allGames.map(g => g.division || "").filter(Boolean))].sort();
   const teams     = [...new Set(
     allGames.flatMap(g => [g.teamName, g.homeTeam, g.awayTeam].filter(Boolean))
@@ -261,9 +262,10 @@ function renderAdminGames() {
       ? `<div style="font-size:0.8rem;color:var(--light-text)">${locationBadge}${esc(g.homeTeam||"")}${g.homeTeam && g.awayTeam ? (g.isAway ? " @ " : " vs ") : ""}${esc(g.awayTeam||"")}</div>`
       : "";
 
-    // League badge (shown when city/program is set)
-    const leagueBadge = g.city
-      ? `<div style="font-size:0.72rem;color:#8ab4f8;margin-top:2px">${esc(g.city)}</div>`
+    // League + city badge
+    const leagueParts = [g.league, g.city].filter(Boolean);
+    const leagueBadge = leagueParts.length
+      ? `<div style="font-size:0.72rem;color:#8ab4f8;margin-top:2px">${leagueParts.map(esc).join(" · ")}</div>`
       : "";
 
     const canAssign = isAdmin() && !g.cancelled;
@@ -335,7 +337,7 @@ function openCancelModal(gameId) {
   if (!game) return;
   document.getElementById("cancelGameId").value    = gameId;
   document.getElementById("cancelGameInfo").textContent =
-    `${fmtDate(game.date)} at ${fmtTime(game.time)} — ${game.city || ""}${game.division ? " · " + game.division : ""}`;
+    `${fmtDate(game.date)} at ${fmtTime(game.time)} — ${[game.league, game.city].filter(Boolean).join(" · ")}${game.division ? " · " + game.division : ""}`;
   document.getElementById("cancelNotes").value     = "";
   document.getElementById("cancelGameMsg").textContent = "";
   document.getElementById("cancelGameMsg").className   = "signup-message";
@@ -355,6 +357,7 @@ function scheduleMakeup(gameId) {
   formEl?.scrollIntoView({ behavior: "smooth", block: "start" });
   // Pre-fill matching fields; leave date blank so admin must pick the new date
   const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+  set("gameLeague",   g.league   || "");
   set("gameCity",     g.city     || "");
   set("gameDivision", g.division || "");
   set("gameTime",     g.time     || "");
@@ -457,7 +460,7 @@ async function notifyOpenSlots(gameId) {
   const open = (game.umpireSlots || []).filter(s => !s.assignedUid);
   if (open.length === 0) { alert("No open slots on this game."); return; }
   const slotTypes = open.map(s => s.type).join(", ");
-  const label = `${fmtDate(game.date)} at ${fmtTime(game.time)} — ${game.city || ""} ${game.division || ""}${game.field ? " · " + game.field : ""}`;
+  const label = `${fmtDate(game.date)} at ${fmtTime(game.time)} — ${[game.league, game.city].filter(Boolean).join(" · ")} ${game.division || ""}${game.field ? " · " + game.field : ""}`;
   if (!confirm(`Send Slack + push notification to all umpires about open slots?\n\n${label}\nOpen: ${slotTypes}`)) return;
 
   try {
@@ -474,7 +477,7 @@ async function notifyOpenSlots(gameId) {
 async function deleteGame(gameId) {
   const game = allGames.find(g => g.id === gameId);
   if (!game) return;
-  if (!confirm(`Permanently delete the game on ${fmtDate(game.date)} at ${game.city}?\nThis cannot be undone.`)) return;
+  if (!confirm(`Permanently delete the game on ${fmtDate(game.date)} at ${[game.league, game.city].filter(Boolean).join(" · ") || ""}?\nThis cannot be undone.`)) return;
   try {
     await deleteDoc(doc(db, "games", gameId));
     allGames = allGames.filter(g => g.id !== gameId);
@@ -490,6 +493,7 @@ function openEditModal(gameId) {
   const modal = document.getElementById("editGameModal");
 
   document.getElementById("editGameId").value        = gameId;
+  document.getElementById("editGameLeague").value    = game.league || "";
   document.getElementById("editGameCity").value      = game.city || "";
   document.getElementById("editGameDivision").value  = game.division || "";
   document.getElementById("editGameDate").value      = game.date || "";
@@ -566,6 +570,7 @@ async function saveGameEdit() {
   try {
     const facilityId = document.getElementById("editGameFacility")?.value || "";
     const updates = {
+      league:     document.getElementById("editGameLeague").value,
       city:       document.getElementById("editGameCity").value,
       division:   document.getElementById("editGameDivision").value,
       date:       document.getElementById("editGameDate").value,
@@ -695,7 +700,7 @@ async function openAssignModal(gameId, slotType) {
   assignTarget = { gameId, slotType, gameDate: game?.date || "", gameTime: game?.time || "" };
   const label = document.getElementById("assignSlotLabel");
   if (label && game) {
-    label.textContent = `${slotType} slot — ${game.city || ""} ${fmtDate(game.date)} ${fmtTime(game.time)}`;
+    label.textContent = `${slotType} slot — ${[game.league, game.city].filter(Boolean).join(" · ")} ${fmtDate(game.date)} ${fmtTime(game.time)}`;
   }
   document.getElementById("assignSearch").value = "";
   document.getElementById("assignMessage").textContent = "";
@@ -766,6 +771,7 @@ document.getElementById("addGameForm").addEventListener("submit", async function
   btn.disabled = true;
   setMsg("addGameMessage", "Adding game…", "info");
 
+  const league     = document.getElementById("gameLeague").value;
   const city       = document.getElementById("gameCity").value;
   const division   = document.getElementById("gameDivision").value;
   const date       = document.getElementById("gameDate").value;
@@ -785,7 +791,7 @@ document.getElementById("addGameForm").addEventListener("submit", async function
 
   try {
     const gameData = {
-      city, division, date, time, type, field, facilityId,
+      league, city, division, date, time, type, field, facilityId,
       umpireSlots,
       needsUmpires: true,
       cancelled: false,
@@ -826,6 +832,27 @@ async function loadPayRates() {
       prefillSlotPays();
     }
   } catch (_) {}
+}
+
+async function loadLeagues() {
+  try {
+    const snap = await getDocs(query(collection(db, "leagues"), orderBy("name")));
+    leaguesData = snap.docs.map(d => ({ id: d.id, name: d.data().name || d.id }));
+  } catch (_) {
+    leaguesData = [];
+  }
+  populateLeagueSelects();
+}
+
+function populateLeagueSelects() {
+  const opts = leaguesData.map(l => `<option value="${esc(l.name)}">${esc(l.name)}</option>`).join("");
+  ["gameLeague", "editGameLeague"].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">— None —</option>${opts}`;
+    if (cur) sel.value = cur;
+  });
 }
 
 function prefillSlotPays() {
@@ -1049,6 +1076,7 @@ authReadyPromise.then(() => {
   document.getElementById("noAccess").style.display = "none";
 
   loadPayRates();
+  loadLeagues();
   loadGames();
   loadFacilitiesIntoSelects();
   loadPendingCancellations();
