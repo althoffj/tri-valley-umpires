@@ -67,19 +67,33 @@ function setupTabs() {
 
 // ── Schedule ──────────────────────────────────────────────────────────────────
 
-let allGames = [];
-let showAll  = false;
+let allGames     = [];
+let myPractices  = [];
+let showAll      = false;
 
 async function loadSchedule() {
   const listEl = document.getElementById("cpScheduleList");
   if (!listEl) return;
 
+  const uid  = getCurrentUser()?.uid;
+  const year = new Date().getFullYear();
+
   try {
-    const snap = await getDocs(query(collection(db, "games"), orderBy("date", "desc"), orderBy("time")));
-    const year  = new Date().getFullYear();
-    allGames = snap.docs
+    const [gamesSnap, practiceSnap] = await Promise.all([
+      getDocs(query(collection(db, "games"), orderBy("date", "desc"), orderBy("time"))),
+      uid
+        ? getDocs(query(collection(db, "practiceRequests"),
+            where("submittedBy", "==", uid),
+            where("status", "==", "approved"),
+            orderBy("date")))
+        : Promise.resolve({ docs: [] }),
+    ]);
+
+    allGames = gamesSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(g => (g.date || "").startsWith(String(year)));
+
+    myPractices = practiceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
     renderSchedule();
   } catch (err) {
@@ -97,12 +111,13 @@ function renderSchedule() {
 
   const visible = showAll ? allGames : allGames.filter(g => !myDiv || g.division === myDiv);
 
-  if (visible.length === 0) {
-    listEl.innerHTML = `<div class="document-note"><p style="margin:0;color:var(--light-text);text-align:center">No games found${!showAll && myDiv ? ` for ${myDiv}` : ""}.</p></div>`;
-    return;
-  }
+  let html = "";
 
-  listEl.innerHTML = visible.map(g => {
+  // ── Games ─────────────────────────────────────────────────────────────────
+  if (visible.length === 0) {
+    html += `<div class="document-note"><p style="margin:0;color:var(--light-text);text-align:center">No games found${!showAll && myDiv ? ` for ${myDiv}` : ""}.</p></div>`;
+  } else {
+    html += visible.map(g => {
     const slots = Array.isArray(g.umpireSlots) ? g.umpireSlots : [];
     const slotHtml = slots.length
       ? slots.map(s => {
@@ -131,7 +146,26 @@ function renderSchedule() {
       <div style="font-size:0.82rem;color:var(--light-text);margin-bottom:6px">${esc(g.facility || g.field || "—")}</div>
       <div>${slotHtml}</div>
     </div>`;
-  }).join("");
+    }).join("");
+  }
+
+  // ── Approved Practices ────────────────────────────────────────────────────
+  if (myPractices.length) {
+    html += `<h3 style="margin:20px 0 10px;font-size:1rem">My Approved Practices</h3>`;
+    html += myPractices.map(p => `
+      <div class="document-note" style="margin-bottom:10px;border-left:3px solid #5b8dd9">
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:4px">
+          <strong style="font-size:0.95rem">${esc(fmtDate(p.date))}</strong>
+          ${p.startTime ? `<span style="color:var(--light-text);font-size:0.85rem">${esc(fmtTime(p.startTime))}${p.endTime ? " – " + esc(fmtTime(p.endTime)) : ""}</span>` : ""}
+          <span style="font-size:0.75rem;background:#1a2a4a;color:#8ab4f8;border:1px solid #2a4a8a;border-radius:4px;padding:1px 6px">Practice ✓</span>
+        </div>
+        <div style="font-size:0.9rem;margin-bottom:2px">${esc(p.teamName || "—")}</div>
+        <div style="font-size:0.82rem;color:var(--light-text)">${esc(p.location || "—")}</div>
+        ${p.notes ? `<div style="font-size:0.82rem;color:#ccc;margin-top:4px">${esc(p.notes)}</div>` : ""}
+      </div>`).join("");
+  }
+
+  listEl.innerHTML = html;
 }
 
 // ── Umpire Request ────────────────────────────────────────────────────────────
