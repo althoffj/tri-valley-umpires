@@ -52,6 +52,8 @@ async function loadOrgSettings() {
     toggleRegClosedMsg();
     // Coach access
     document.getElementById("orgAllowCoachShedCodes").checked = s.allowCoachShedCodes === true;
+    // Field use calendar
+    document.getElementById("orgFieldCalendarUrl").value = s.fieldCalendarUrl || "";
     // Technical
     document.getElementById("orgWeatherLat").value = s.weatherLat ?? "";
     document.getElementById("orgWeatherLon").value = s.weatherLon ?? "";
@@ -113,6 +115,8 @@ async function saveOrgSettings() {
       timezone:   document.getElementById("orgTimezone").value                || ORG_DEFAULTS.timezone,
       // Coach access
       allowCoachShedCodes: document.getElementById("orgAllowCoachShedCodes").checked,
+      // Field use calendar
+      fieldCalendarUrl: document.getElementById("orgFieldCalendarUrl").value.trim(),
     };
     await setDoc(doc(db, "config", "orgSettings"), data);
     setMsg("orgSettingsMessage", "✓ Organization settings saved.", "success");

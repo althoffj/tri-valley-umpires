@@ -2452,3 +2452,149 @@ exports.onPracticeRequest = onDocumentWritten("practiceRequests/{requestId}", as
     (r.notes ? `\nNotes: ${r.notes}` : "");
   await Promise.allSettled(urls.map(url => postSlack(url, msg)));
 });
+
+// ── fetchOrgIcs ───────────────────────────────────────────────────────────────
+// Fetches the org-level field use calendar (stored in config/orgSettings.fieldCalendarUrl),
+// parses future events, auto-detects which facility each event belongs to by matching
+// field/facility name keywords from the SUMMARY, and returns events ready for review.
+
+exports.fetchOrgIcs = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db = getFirestore();
+
+  const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  // Load org calendar URL
+  const orgDoc = await db.doc("config/orgSettings").get();
+  const fieldCalendarUrl = orgDoc.exists ? orgDoc.data().fieldCalendarUrl : null;
+  if (!fieldCalendarUrl) {
+    throw new HttpsError(
+      "failed-precondition",
+      "No field use calendar URL configured. Add one in Config → Organization Settings → Field Use Calendar."
+    );
+  }
+
+  // Build facility + field keyword index (longer names first to prefer specific matches)
+  const facilitiesSnap = await db.collection("facilities").get();
+  const fieldKeywords = [];
+  facilitiesSnap.docs.forEach(d => {
+    const fac = d.data();
+    if (fac.name) {
+      fieldKeywords.push({ pattern: fac.name.toLowerCase(), facilityId: d.id, facilityName: fac.name, fieldName: "" });
+    }
+    (fac.fields || []).forEach(f => {
+      if (f.name) {
+        fieldKeywords.push({ pattern: f.name.toLowerCase(), facilityId: d.id, facilityName: fac.name, fieldName: f.name });
+      }
+    });
+  });
+  fieldKeywords.sort((a, b) => b.pattern.length - a.pattern.length);
+
+  // Load teams for suggestions
+  const teamsSnap = await db.doc("config/teamCalendars").get();
+  const teams = teamsSnap.exists ? (teamsSnap.data().teams || []) : [];
+
+  // Build dedup set from all existing games + practices
+  const [gamesSnap, practicesSnap] = await Promise.all([
+    db.collection("games").get(),
+    db.collection("practices").get(),
+  ]);
+  const knownUids = new Set();
+  gamesSnap.docs.forEach(d => { const u = d.data().externalId || d.data().icsUid; if (u) knownUids.add(u); });
+  practicesSnap.docs.forEach(d => { const u = d.data().externalId || d.data().icsUid; if (u) knownUids.add(u); });
+
+  // Fetch and parse ICS
+  let icsText;
+  try { icsText = await fetchICS(fieldCalendarUrl); }
+  catch (err) { throw new HttpsError("internal", `Failed to fetch calendar: ${err.message}`); }
+
+  const today  = todayISO();
+  const parsed = parseVEvents(icsText);
+
+  const events = [];
+  for (const ev of parsed) {
+    if (!ev.uid) continue;
+    if (ev.date && ev.date < today) continue;
+
+    const alreadyImported = knownUids.has(ev.uid);
+
+    // ── Type + structure detection ───────────────────────────────────────────
+    // This calendar uses the format: "-Game- [DIV] [FIELD] TV [OPPONENT]"
+    let suggestedType = "other";
+    let division = "";
+    let opponent = "";
+    let fieldHint = "";
+
+    const gameMatch = (ev.summary || "").match(/^-\s*Game\s*-\s+(\S+)\s+(.+?)\s+TV\s+(.+)$/i);
+    if (gameMatch) {
+      suggestedType = "game";
+      division      = gameMatch[1].trim();
+      fieldHint     = gameMatch[2].trim();
+      opponent      = gameMatch[3].trim();
+    } else if (isPracticeEvent(ev.summary)) {
+      suggestedType = "practice";
+    } else if (/\bgame\b/i.test(ev.summary || "") || /\bvs\.?\b|\s+@\s+/i.test(ev.summary || "")) {
+      suggestedType = "game";
+    }
+
+    // ── Facility detection ────────────────────────────────────────────────────
+    // Search the field hint first (from structured game format), then full summary
+    const searchStr  = fieldHint || ev.summary || "";
+    const searchLow  = searchStr.toLowerCase();
+    let detectedFacilityId   = "";
+    let detectedFacilityName = "";
+    let detectedFieldName    = "";
+    for (const kw of fieldKeywords) {
+      if (searchLow.includes(kw.pattern)) {
+        detectedFacilityId   = kw.facilityId;
+        detectedFacilityName = kw.facilityName;
+        detectedFieldName    = kw.fieldName;
+        break;
+      }
+    }
+
+    // ── Team suggestion ───────────────────────────────────────────────────────
+    let suggestedTeamId   = "";
+    let suggestedTeamName = "";
+    const combinedLow = `${ev.homeTeam || ""} ${ev.awayTeam || ""} ${ev.summary || ""}`.toLowerCase();
+    for (const t of teams) {
+      const words = t.name.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      if (words.length > 0 && words.some(w => combinedLow.includes(w))) {
+        suggestedTeamId   = t.id || "";
+        suggestedTeamName = t.name;
+        break;
+      }
+    }
+
+    events.push({
+      uid:                 ev.uid,
+      date:                ev.date,
+      time:                ev.time    || "",
+      endTime:             ev.endTime || "",
+      summary:             ev.summary || "",
+      division,
+      opponent,
+      detectedFacilityId,
+      detectedFacilityName,
+      detectedFieldName,
+      suggestedType,
+      suggestedTeamId,
+      suggestedTeamName,
+      alreadyImported,
+    });
+  }
+
+  events.sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || ""));
+
+  const facilities = facilitiesSnap.docs
+    .map(d => ({ id: d.id, name: d.data().name || "" }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    source:   "org",
+    events,
+    newCount: events.filter(e => !e.alreadyImported).length,
+    facilities,
+  };
+});

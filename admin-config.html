@@ -183,6 +183,19 @@
       </div>
       <p style="font-size:0.8rem;color:var(--light-text);margin:0 0 4px">When enabled, coaches who are signed in and approved will see shed and equipment codes on the Fields page alongside umpires.</p>
 
+      <!-- ── Field Use Calendar ──────────────────────────────────────────── -->
+      <h3 style="margin:20px 0 12px;font-size:1rem;border-top:1px solid #333;padding-top:16px">Field Use Calendar</h3>
+      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 12px">An iCal/ICS subscription covering field use across all facilities (games, practices, external rentals). New events are surfaced in the import tool — nothing is imported automatically. Field names are detected from the event title and matched against your configured facilities.</p>
+      <div class="form-group">
+        <label for="orgFieldCalendarUrl">Calendar URL <span style="font-weight:normal;color:var(--light-text)">(paste the .ics or basic.ics link)</span></label>
+        <input type="url" id="orgFieldCalendarUrl"
+          placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+          style="font-family:monospace;font-size:0.85rem" />
+      </div>
+      <div style="margin-top:8px">
+        <a href="admin-field-calendar.html" class="btn print-btn" style="font-size:0.85rem;padding:7px 14px">Open Import Tool →</a>
+      </div>
+
       <!-- ── Technical: Weather & Timezone ──────────────────────────────── -->
       <h3 style="margin:20px 0 12px;font-size:1rem;border-top:1px solid #333;padding-top:16px">Technical Settings</h3>
       <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 12px">Used for weather forecasts on the schedule and accurate date handling. The weather coordinates are used as a fallback for cities not in the built-in lookup table.</p>

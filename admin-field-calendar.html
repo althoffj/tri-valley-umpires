@@ -54,7 +54,7 @@
       <a href="admin-facilities.html" style="font-size:0.85rem;color:#8ab4f8">← Back to Facilities</a>
     </div>
     <div class="document-note" style="margin-bottom:20px">
-      <p style="margin:0">Fetch an external field-use calendar (iCal/ICS) for a facility and import events that aren't already on your schedule. Set the calendar URL in the <a href="admin-facilities.html">Facilities</a> page.</p>
+      <p style="margin:0">Fetch the field-use calendar and import events that aren't already on your schedule. Set the org-wide calendar URL in <a href="admin-config.html">Config → Organization Settings</a>. Each event shows its auto-detected facility, type, and team — review and adjust before importing.</p>
     </div>
 
     <!-- Facility selector (shown when no ?facility= param) -->
@@ -96,6 +96,7 @@
               <th>Date</th>
               <th>Time</th>
               <th>Event</th>
+              <th id="fcFacilityTh" style="min-width:140px;display:none">Facility</th>
               <th style="min-width:110px">Type</th>
               <th style="min-width:160px">Team</th>
               <th style="width:80px;text-align:center">Needs Umpire</th>
@@ -128,7 +129,7 @@
   </div>
 
   <script type="module" src="auth.js?v=19"></script>
-  <script type="module" src="admin-field-calendar.js?v=1"></script>
+  <script type="module" src="admin-field-calendar.js?v=2"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=3"></script>
