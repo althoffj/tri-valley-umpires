@@ -1,12 +1,13 @@
 // tabs.js — Mobile bottom tab navigation (visible below 640px via CSS)
-import { authReadyPromise, isApproved, isAdmin } from "./auth.js";
+import { authReadyPromise, isApproved, isAdmin, isCoach } from "./auth.js";
 
 const activePage = (() => {
   const page = window.location.pathname.split("/").pop() || "index.html";
   if (page.startsWith("admin")) return "admin";
   if (["schedule.html", "calendar.html", "availability.html"].includes(page)) return "games";
-  if (["fields.html", "field-issues.html"].includes(page)) return "fields";
-  if (["incident.html", "field-issues.html"].includes(page)) return "reports";
+  if (["fields.html", "field-issues.html", "facility-schedule.html"].includes(page)) return "fields";
+  if (["incident.html"].includes(page)) return "reports";
+  if (page === "coach-portal.html") return "coach";
   return "home";
 })();
 
@@ -23,8 +24,11 @@ function injectTabBar() {
   bar.className = "mobile-tabs";
   bar.setAttribute("aria-label", "Mobile navigation");
   bar.innerHTML = `
-    ${a("mt-home",  "index.html",    "🏠", "Home",    activePage === "home")}
-    ${a("mt-games", "schedule.html", "⚾", "Games",   activePage === "games")}
+    ${a("mt-home",  "index.html",        "🏠", "Home",    activePage === "home")}
+    ${a("mt-games", "schedule.html",     "⚾", "Games",   activePage === "games")}
+    <a href="coach-portal.html" class="mobile-tab${activePage === "coach"   ? " active" : ""}" id="mt-coach"   style="display:none">
+      <span class="tab-icon">📋</span><span class="tab-label">Portal</span>
+    </a>
     <a href="fields.html"   class="mobile-tab${activePage === "fields"  ? " active" : ""}" id="mt-fields"  style="display:none">
       <span class="tab-icon">🏟</span><span class="tab-label">Fields</span>
     </a>
@@ -44,19 +48,33 @@ function injectTabBar() {
 }
 
 function updateTabs() {
-  const fields  = document.getElementById("mt-fields");
-  const reports = document.getElementById("mt-reports");
-  const admin   = document.getElementById("mt-admin");
+  const coachTab = document.getElementById("mt-coach");
+  const fields   = document.getElementById("mt-fields");
+  const reports  = document.getElementById("mt-reports");
+  const admin    = document.getElementById("mt-admin");
   if (!fields) return;
+
   if (isAdmin()) {
+    // Admins: show Fields, Reports, and Admin; hide Coach Portal
+    if (coachTab) coachTab.style.display = "none";
     fields.style.display  = "";
-    reports.style.display = "none";
+    reports.style.display = "";
     admin.style.display   = "";
   } else if (isApproved()) {
+    // Approved umpires: show Fields and Reports; hide Coach Portal and Admin
+    if (coachTab) coachTab.style.display = "none";
     fields.style.display  = "";
     reports.style.display = "";
     admin.style.display   = "none";
+  } else if (isCoach()) {
+    // Coaches: show Coach Portal and Fields; hide Reports and Admin
+    if (coachTab) coachTab.style.display = "";
+    fields.style.display  = "";
+    reports.style.display = "none";
+    admin.style.display   = "none";
   } else {
+    // Guests: hide all role-specific tabs
+    if (coachTab) coachTab.style.display = "none";
     fields.style.display  = "none";
     reports.style.display = "none";
     admin.style.display   = "none";

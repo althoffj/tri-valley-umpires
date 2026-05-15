@@ -11,10 +11,12 @@ const page = window.location.pathname.split("/").pop() || "index.html";
 
 const section = (() => {
   if (["schedule.html", "calendar.html", "availability.html"].includes(page)) return "games";
-  if (["fields.html", "field-issues.html"].includes(page)) return "fields";
+  if (["fields.html", "field-issues.html", "facility-schedule.html"].includes(page)) return "fields";
   if (["incident.html"].includes(page)) return "reports";
   if (["expectations.html", "principles_of_umpiring.html", "rule_breakdown.html",
        "pregame-meeting.html", "training.html"].includes(page)) return "training";
+  if (["form.html", "coach-form.html"].includes(page)) return "join";
+  if (["request-umpire.html", "practice-request.html"].includes(page)) return "request";
   if (page.startsWith("admin")) return "admin";
   return "home";
 })();
@@ -52,16 +54,31 @@ function trainingDropdown() {
   );
 }
 
+function fieldsDropdown() {
+  return navTrigger("fields", "Fields",
+    navLink("fields.html",       "Field Directory") +
+    navLink("field-issues.html", "Field Issues")
+  );
+}
+
+// Guest: public visitors, prospective umpires, and coaches without an account
 function guestNav() {
   return `
     ${navLink("index.html", "Home")}
     ${trainingDropdown()}
-    ${navLink("fields.html",          "Fields")}
-    ${navLink("form.html",            "Become an Umpire")}
-    ${navLink("request-umpire.html",  "Request Umpire")}
+    ${navLink("fields.html", "Fields")}
+    ${navTrigger("join", "Join",
+      navLink("form.html",        "Become an Umpire") +
+      navLink("coach-form.html",  "Register as a Coach")
+    )}
+    ${navTrigger("request", "Request",
+      navLink("request-umpire.html",  "Request an Umpire") +
+      navLink("practice-request.html","Request Practice Time")
+    )}
   `;
 }
 
+// Approved umpire: schedule, signups, fields, reporting, training
 function umpireNav() {
   return `
     ${navLink("index.html", "Home")}
@@ -70,31 +87,26 @@ function umpireNav() {
       navLink("calendar.html",    "Calendar") +
       navLink("availability.html","My Availability")
     )}
-    ${navTrigger("fields", "Fields",
-      navLink("fields.html",      "Field Directory") +
-      navLink("field-issues.html","Report Field Issue")
-    )}
-    ${navTrigger("reports", "Reports",
-      navLink("incident.html",    "Incident Report") +
-      navLink("field-issues.html","Field Issues")
-    )}
+    ${fieldsDropdown()}
+    ${navLink("incident.html", "Incident Report")}
     ${trainingDropdown()}
   `;
 }
 
-// Admin uses the same top nav as umpire — Admin Panel is in the hamburger
+// Admin: same top nav as umpire — Admin Panel is in the hamburger menu
 function adminNav() {
   return umpireNav();
 }
 
+// Coach: portal-centric nav with fields access and reporting
 function coachNav() {
-  return `<div class="nav-links">
+  return `
     ${navLink("index.html",        "Home")}
     ${navLink("coach-portal.html", "Coach Portal")}
-    ${navLink("schedule.html",     "Schedule")}
+    ${fieldsDropdown()}
     ${navLink("incident.html",     "Incident Report")}
-    ${navLink("field-issues.html", "Field Issues")}
-  </div>`;
+    ${trainingDropdown()}
+  `;
 }
 
 // ── Build & inject ────────────────────────────────────────────────────────
