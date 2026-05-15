@@ -26,6 +26,9 @@ const EVENT_LABELS = {
   cancellationRequests: "Cancellation requests",
   incidentReports:      "Incident reports",
   tournamentSwaps:      "Tournament field swaps",
+  coachRegistration:    "Coach registrations",
+  umpireRequests:       "Coach umpire requests",
+  practiceRequests:     "Practice requests",
 };
 
 let webhooks = [];

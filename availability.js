@@ -1,6 +1,6 @@
 // availability.js — Umpire unavailability calendar
 import { db } from "./firebase.js";
-import { authReadyPromise, isApproved, getCurrentUser } from "./auth.js";
+import { authReadyPromise, isApproved, isCoach, getCurrentUser } from "./auth.js";
 import { esc, todayISO, setMsg } from "./utils.js";
 
 import {
@@ -142,6 +142,12 @@ window.addEventListener("beforeunload", e => {
 
 authReadyPromise.then(() => {
   if (!isApproved()) {
+    const guestEl = document.getElementById("availGuestMsg");
+    if (guestEl && isCoach()) {
+      guestEl.innerHTML = `<div class="document-note">
+        <p>Availability tracking is for umpires only. Visit your <a href="coach-portal.html">Coach Portal</a> to manage your games.</p>
+      </div>`;
+    }
     document.getElementById("availContent").style.display    = "none";
     document.getElementById("availGuestMsg").style.display   = "";
     return;

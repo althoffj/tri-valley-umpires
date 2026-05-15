@@ -1,6 +1,6 @@
 // fields.js — Dynamic facility/field info loaded from Firestore
 import { db } from "./firebase.js";
-import { authReadyPromise, isApproved, isAdmin } from "./auth.js";
+import { authReadyPromise, isApproved, isAdmin, isCoach } from "./auth.js";
 import { esc } from "./utils.js";
 import { getOrgSettings, getTimezone } from "./org.js";
 
@@ -221,6 +221,7 @@ function renderFacility(facility, weather) {
     ${(addressLine || notesLine || shedCodeHtml || weatherHtml)
       ? `<div class="document-note">${addressLine}${notesLine}${shedCodeHtml ? `<div style="margin-top:${(addressLine || notesLine) ? "8px" : "0"}">${shedCodeHtml}</div>` : ""}${weatherHtml ? `<div style="margin-top:${(addressLine || notesLine || shedCodeHtml) ? "8px" : "0"}">${weatherHtml}</div>` : ""}</div>`
       : ""}
+    <p style="margin:4px 0 16px;font-size:0.88rem"><a href="facility-schedule.html?id=${esc(facility.id)}">View ${esc(facility.name)} Schedule →</a></p>
     ${fieldsHtml ? `<div class="form-row" style="gap:24px;flex-wrap:wrap;align-items:stretch;justify-content:flex-start">${fieldsHtml}</div>` : ""}`;
 }
 
@@ -232,7 +233,8 @@ async function loadFacilities() {
 
   try {
     await authReadyPromise;
-    const canSeeCodes = isApproved() || isAdmin();
+    const org = await getOrgSettings();
+    const canSeeCodes = isApproved() || isAdmin() || (isCoach() && org.allowCoachShedCodes);
 
     const [facSnap, codesSnap] = await Promise.all([
       getDocs(query(collection(db, "facilities"), orderBy("name"))),

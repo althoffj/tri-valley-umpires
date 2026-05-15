@@ -12,7 +12,7 @@ export const ORG_DEFAULTS = {
   orgName:          "Tri-Valley Baseball Umpires",
   assocName:        "Tri-Valley Baseball Association",
   assocUrl:         "https://www.trivalleyball.com",
-  homeHeading:      "Welcome Umpires!",
+  homeHeading:      "Welcome!",
 
   // Coordinator
   coordinatorName:  "Jeff Althoff",
@@ -41,6 +41,9 @@ export const ORG_DEFAULTS = {
 
   // Timezone (IANA, e.g. "America/Chicago")
   timezone: "America/Chicago",
+
+  // Coach access
+  allowCoachShedCodes: false,  // When true, shed/equipment codes are visible to approved coaches
 };
 
 // ── Module state ──────────────────────────────────────────────────────────────

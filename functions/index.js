@@ -1043,6 +1043,9 @@ function getTargetWebhooks(config, eventType, division = null) {
     case "cancellationRequests":
     case "incidentReports":
     case "tournamentSwaps":
+    case "coachRegistration":
+    case "umpireRequests":
+    case "practiceRequests":
       addJeff(); break;
     case "dailySummary":
       if (config.dailySummary) urls.add(config.dailySummary); break;
@@ -2299,6 +2302,23 @@ exports.onUmpireRegistered = onDocumentWritten(
 );
 
 
+// Notify admin when a coach registers
+exports.onCoachRegistration = onDocumentWritten("coaches/{uid}", async (event) => {
+  if (event.data.before && event.data.before.exists) return; // only on creation
+  if (!event.data.after || !event.data.after.exists) return;
+  const db = getFirestore();
+  const r = event.data.after.data();
+  if (r.approved || r.active === false) return; // skip if already approved or inactive
+  const config = await loadWebhookConfig(db);
+  const urls = getTargetWebhooks(config, "coachRegistration");
+  const ADMIN_URL = "https://tri-valley-baseball-umpires.web.app/admin-users.html";
+  const msg = `👤 *New Coach Registration* — ${r.name ?? "Unknown"}\n` +
+    `Team: ${r.teamName ?? "—"} · Division: ${r.division ?? "—"} · City: ${r.city ?? "—"}\n` +
+    `Email: ${r.email ?? "—"} · Phone: ${r.phone ?? "—"}\n` +
+    `Review: ${ADMIN_URL}`;
+  await Promise.allSettled(urls.map(url => postSlack(url, msg)));
+});
+
 // Notify admin when a coach submits an umpire request
 exports.onUmpireRequest = onDocumentWritten("umpireRequests/{requestId}", async (event) => {
   if (!event.data.after.exists) return; // deletion
@@ -2307,7 +2327,7 @@ exports.onUmpireRequest = onDocumentWritten("umpireRequests/{requestId}", async 
   const db = getFirestore();
   const r = event.data.after.data();
   const config = await loadWebhookConfig(db);
-  const urls = getTargetWebhooks(config, "cancellationRequests"); // reuse that event bucket
+  const urls = getTargetWebhooks(config, "umpireRequests");
   const msg = `🗓️ *Umpire Request* from ${r.contactName ?? "a coach"}\n` +
     `Team: ${r.teamName ?? "—"} · Division: ${r.division ?? "—"}\n` +
     `Date: ${r.date ?? "—"} at ${r.time ?? "—"} · Location: ${r.location ?? "—"}\n` +
@@ -2324,10 +2344,13 @@ exports.onPracticeRequest = onDocumentWritten("practiceRequests/{requestId}", as
   const db = getFirestore();
   const r = event.data.after.data();
   const config = await loadWebhookConfig(db);
-  const urls = getTargetWebhooks(config, "cancellationRequests");
-  const msg = `🏟️ *Practice Request* from ${r.contactName ?? "a coach"}\n` +
-    `Team: ${r.teamName ?? "—"} · Division: ${r.division ?? "—"}\n` +
-    `Date: ${r.date ?? "—"} · ${r.startTime ?? ""}–${r.endTime ?? ""} · Location: ${r.location ?? "—"}` +
+  const urls = getTargetWebhooks(config, "practiceRequests");
+  const msg = `🏟️ *Practice Request* from ${r.coachName ?? r.contactName ?? "a coach"}\n` +
+    `Team: ${r.teamName ?? "—"}\n` +
+    `Field: ${r.field ?? "—"} · ${r.startTime ?? ""}–${r.endTime ?? ""}` +
+    (r.recurrence?.type === "weekly"
+      ? ` · Weekly (${r.recurrence.startDate ?? ""} – ${r.recurrence.endDate ?? ""})`
+      : ` · ${r.date ?? "—"}`) +
     (r.notes ? `\nNotes: ${r.notes}` : "");
   await Promise.allSettled(urls.map(url => postSlack(url, msg)));
 });

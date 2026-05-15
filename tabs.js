@@ -67,8 +67,16 @@ function updateTabs() {
     reports.style.display = "";
     admin.style.display   = "none";
   } else if (isCoach()) {
-    // Coaches: show Coach Portal and Fields; hide Reports and Admin
-    if (coachTab) coachTab.style.display = "";
+    // Coaches: repurpose the "Games" tab to go directly to Coach Portal,
+    // relabel it "Portal", and show the Fields tab. Hide the dedicated Coach
+    // Portal tab (mt-coach) since Games now covers it.
+    const gamesTab = document.getElementById("mt-games");
+    if (gamesTab) {
+      gamesTab.href = "coach-portal.html";
+      const lbl = gamesTab.querySelector(".tab-label");
+      if (lbl) lbl.textContent = "Portal";
+    }
+    if (coachTab) coachTab.style.display = "none";
     fields.style.display  = "";
     reports.style.display = "none";
     admin.style.display   = "none";

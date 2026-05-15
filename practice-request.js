@@ -1,7 +1,56 @@
 // practice-request.js — public coach practice request form
 import { db } from "./firebase.js";
-import { collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { esc } from "./utils.js";
+
+// ── Dynamic facility loading ───────────────────────────────────────────────────
+
+async function loadFieldOptions() {
+  const sel = document.getElementById("field");
+  if (!sel) return;
+  try {
+    const snap = await getDocs(query(collection(db, "facilities"), orderBy("name")));
+    if (snap.empty) return; // keep the hardcoded fallback options
+    // Replace options with dynamically loaded facilities + their sub-fields
+    sel.innerHTML = `<option value="">-- Select a field --</option>`;
+    snap.forEach(d => {
+      const fac = d.data();
+      const fields = Array.isArray(fac.fields) ? fac.fields.filter(f => f.name) : [];
+      if (fields.length > 1) {
+        // Multiple fields at this facility — add an optgroup
+        const grp = document.createElement("optgroup");
+        grp.label = fac.name || d.id;
+        fields.forEach(f => {
+          const opt = document.createElement("option");
+          opt.value       = `${fac.name} — ${f.name}`;
+          opt.textContent = `${fac.name} — ${f.name}`;
+          grp.appendChild(opt);
+        });
+        sel.appendChild(grp);
+      } else if (fields.length === 1) {
+        const opt = document.createElement("option");
+        opt.value       = `${fac.name} — ${fields[0].name}`;
+        opt.textContent = `${fac.name} — ${fields[0].name}`;
+        sel.appendChild(opt);
+      } else {
+        // Facility with no sub-fields
+        const opt = document.createElement("option");
+        opt.value       = fac.name || d.id;
+        opt.textContent = fac.name || d.id;
+        sel.appendChild(opt);
+      }
+    });
+    const other = document.createElement("option");
+    other.value       = "Other";
+    other.textContent = "Other (describe in notes)";
+    sel.appendChild(other);
+  } catch (err) {
+    console.warn("practice-request: failed to load facilities", err);
+    // Keep whatever options are already in the select
+  }
+}
+
+loadFieldOptions();
 
 
 // ── Recurrence toggle ─────────────────────────────────────────────────────────

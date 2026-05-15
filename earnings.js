@@ -1,6 +1,6 @@
 // earnings.js — Umpire's own earnings history
 import { db }                           from "./firebase.js";
-import { authReadyPromise, isApproved, getCurrentUser } from "./auth.js";
+import { authReadyPromise, isApproved, isCoach, getCurrentUser } from "./auth.js";
 import { esc, fmtDate, fmtTime, setMsg, thisYearRange, lastYearRange } from "./utils.js";
 
 import {
@@ -202,6 +202,12 @@ function wireControls() {
 
 authReadyPromise.then(() => {
   if (!isApproved()) {
+    const guestEl = document.getElementById("earningsGuest");
+    if (guestEl && isCoach()) {
+      guestEl.innerHTML = `<div class="document-note">
+        <p>Earnings tracking is for umpires only. Visit your <a href="coach-portal.html">Coach Portal</a> to manage your games.</p>
+      </div>`;
+    }
     document.getElementById("earningsContent").style.display = "none";
     document.getElementById("earningsGuest").style.display   = "";
     return;

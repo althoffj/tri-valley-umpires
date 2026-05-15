@@ -176,6 +176,12 @@ export async function updateProfile(fields) {
   currentProfile = { ...currentProfile, ...fields };
 }
 
+export async function updateCoachProfile(fields) {
+  if (!currentUser) throw new Error("Not signed in.");
+  await updateDoc(doc(db, "coaches", currentUser.uid), fields);
+  currentCoachDoc = { ...currentCoachDoc, ...fields };
+}
+
 export async function requestNotificationPermission() {
   if (!messaging) return "unsupported";
   try {
@@ -225,7 +231,7 @@ export function applyAuthGate() {
 // ── Auth dropdown ─────────────────────────────────────────────────────────────
 
 function showView(viewId) {
-  ["authLoginView","authResetView","authSignedInView","authProfileView"].forEach(id => {
+  ["authLoginView","authResetView","authSignedInView","authProfileView","authCoachProfileView"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = id === viewId ? "" : "none";
   });
@@ -492,6 +498,32 @@ function initAuthUI() {
           </div>
           <p id="hmProfileMsg" class="signup-message" style="min-height:1.4em;margin-top:8px" aria-live="polite"></p>
         </form>
+      </div>
+
+      <!-- Coach profile edit view -->
+      <div id="authCoachProfileView" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <strong style="font-size:1.05rem">Edit Profile</strong>
+          <button class="auth-dropdown-close" id="authCoachProfileBackBtn" aria-label="Back">&#x2715;</button>
+        </div>
+        <form id="hmCoachProfileForm" novalidate>
+          <label for="coachProfileName">Name</label>
+          <input type="text" id="coachProfileName" autocomplete="name" />
+          <label for="coachProfilePhone">Phone</label>
+          <input type="tel" id="coachProfilePhone" autocomplete="tel" placeholder="(605) 555-1234" />
+          <label for="coachProfileEmailDisplay">Email (read-only)</label>
+          <input type="email" id="coachProfileEmailDisplay" readonly style="opacity:0.55;cursor:not-allowed" />
+          <label for="coachProfileTeamName">Team Name</label>
+          <input type="text" id="coachProfileTeamName" placeholder="e.g. Crooks 10U Red" />
+          <label for="coachProfileDivision">Division</label>
+          <input type="text" id="coachProfileDivision" placeholder="e.g. 10U" />
+          <label for="coachProfileCity">City</label>
+          <input type="text" id="coachProfileCity" placeholder="e.g. Crooks" />
+          <div style="margin-top:16px">
+            <button type="submit" class="btn" style="width:100%">Save Changes</button>
+          </div>
+          <p id="hmCoachProfileMsg" class="signup-message" style="min-height:1.4em;margin-top:8px" aria-live="polite"></p>
+        </form>
       </div>`;
     document.body.appendChild(panel);
   }
@@ -509,6 +541,7 @@ function initAuthUI() {
     document.getElementById(id)?.addEventListener("click", closeDropdown);
   });
   document.getElementById("authProfileBackBtn")?.addEventListener("click", () => showView("authSignedInView"));
+  document.getElementById("authCoachProfileBackBtn")?.addEventListener("click", () => showView("authSignedInView"));
 
   document.getElementById("hmForgotBtn")?.addEventListener("click", () => {
     document.getElementById("hmResetMsg").textContent = "";
@@ -634,8 +667,24 @@ function initAuthUI() {
 
   // Open profile edit
   document.getElementById("hmEditProfileBtn")?.addEventListener("click", () => {
+    const user = getCurrentUser();
+
+    // Coach profile edit branch
+    if (isCoach()) {
+      const coach = getCurrentCoachProfile();
+      if (!coach) return;
+      document.getElementById("coachProfileName").value         = coach.name     || "";
+      document.getElementById("coachProfilePhone").value        = coach.phone    || "";
+      document.getElementById("coachProfileEmailDisplay").value = user?.email    || "";
+      document.getElementById("coachProfileTeamName").value     = coach.teamName || "";
+      document.getElementById("coachProfileDivision").value     = coach.division || "";
+      document.getElementById("coachProfileCity").value         = coach.city     || "";
+      document.getElementById("hmCoachProfileMsg").textContent  = "";
+      showView("authCoachProfileView");
+      return;
+    }
+
     const profile = getCurrentProfile();
-    const user    = getCurrentUser();
     if (!profile) return;
     document.getElementById("profileName").value        = profile.name || "";
     document.getElementById("profilePhone").value       = profile.phone || "";
@@ -685,6 +734,36 @@ function initAuthUI() {
         notes:           document.getElementById("profileNotes").value.trim(),
       };
       await updateProfile(fields);
+      msg.textContent = "Profile updated!";
+      msg.className   = "signup-message success";
+      document.querySelectorAll("[data-auth-name]").forEach(el => el.textContent = fields.name);
+      document.getElementById("authDropdownName").textContent = fields.name;
+      setTimeout(() => showView("authSignedInView"), 1000);
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.className   = "signup-message error";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // Save coach profile
+  document.getElementById("hmCoachProfileForm")?.addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const msg = document.getElementById("hmCoachProfileMsg");
+    const btn = this.querySelector("button[type=submit]");
+    btn.disabled    = true;
+    msg.textContent = "Saving…";
+    msg.className   = "signup-message info";
+    try {
+      const fields = {
+        name:     document.getElementById("coachProfileName").value.trim(),
+        phone:    document.getElementById("coachProfilePhone").value.trim(),
+        teamName: document.getElementById("coachProfileTeamName").value.trim(),
+        division: document.getElementById("coachProfileDivision").value.trim(),
+        city:     document.getElementById("coachProfileCity").value.trim(),
+      };
+      await updateCoachProfile(fields);
       msg.textContent = "Profile updated!";
       msg.className   = "signup-message success";
       document.querySelectorAll("[data-auth-name]").forEach(el => el.textContent = fields.name);
