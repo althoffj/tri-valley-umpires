@@ -1,7 +1,7 @@
 // schedule.js — Firestore-based schedule with multi-slot signups, badges, and pay tracking
 import { getOrgSettings } from "./org.js";
 import { db, auth } from "./firebase.js";
-import { esc, fmtDate, fmtTime, todayISO } from "./utils.js";
+import { esc, fmtDate, fmtTime, todayISO, showToast } from "./utils.js";
 
 import {
   authReadyPromise,
@@ -271,7 +271,7 @@ async function checkIn(gameId, slotType, targetUid) {
     renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "Check In"; }
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -304,7 +304,7 @@ async function adminAssignSelf(gameId, slotType) {
     renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "Assign Me"; }
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -354,7 +354,7 @@ async function adminUnassignSlot(gameId, slotType, targetUid) {
     renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "Unassign"; }
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -381,7 +381,7 @@ async function adminNoShow(gameId, slotType, targetUid) {
     renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "No Show"; }
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -398,7 +398,7 @@ async function adminCancelGame(gameId) {
     renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "Cancel Game"; }
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -1005,7 +1005,7 @@ async function cancelSlot(gameId, slotType) {
   if (!game) return;
 
   if (pendingCancels[key]) {
-    alert("You already have a pending cancellation request for this slot.");
+    showToast("You already have a pending cancellation request for this slot.");
     return;
   }
 
@@ -1041,7 +1041,7 @@ async function cancelSlot(gameId, slotType) {
       pendingCancels[key] = ref.id;
       renderGameRows();
     } catch (err) {
-      alert("Failed to submit cancellation request: " + err.message);
+      showToast("Failed to submit cancellation request: " + err.message);
     }
   } else {
     // Outside the window — self-service cancel
@@ -1065,7 +1065,7 @@ async function cancelSlot(gameId, slotType) {
       if (g) { g.umpireSlots = updatedSlots; g.needsUmpires = updatedSlots.some(s => !s.assignedUid); }
       renderGameRows();
     } catch (err) {
-      alert("Failed to cancel signup: " + err.message);
+      showToast("Failed to cancel signup: " + err.message);
     }
   }
 }
@@ -1083,7 +1083,7 @@ async function withdrawCancellation(gameId, slotType) {
     delete pendingCancels[key];
     renderGameRows();
   } catch (err) {
-    alert("Failed to withdraw: " + err.message);
+    showToast("Failed to withdraw: " + err.message);
   }
 }
 

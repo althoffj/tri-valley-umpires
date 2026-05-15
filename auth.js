@@ -176,11 +176,6 @@ export async function updateProfile(fields) {
   currentProfile = { ...currentProfile, ...fields };
 }
 
-export async function checkIsAdmin(uid) {
-  const snap = await getDoc(doc(db, "admins", uid));
-  return snap.exists();
-}
-
 export async function requestNotificationPermission() {
   if (!messaging) return "unsupported";
   try {

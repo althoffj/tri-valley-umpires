@@ -2,7 +2,7 @@
 
 import { app, db } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin, getCurrentUser } from "./auth.js";
-import { esc, setMsg, csvCell } from "./utils.js";
+import { esc, setMsg, csvCell, showToast } from "./utils.js";
 
 import {
   getFunctions,
@@ -275,17 +275,17 @@ function renderRoster() {
 async function revokeUmpire(uid, name) {
   if (!confirm(`Revoke approval for ${name}?`)) return;
   try { await updateDoc(doc(db, "umpires", uid), { approved: false }); loadRoster(); }
-  catch (err) { alert(err.message); }
+  catch (err) { showToast(err.message); }
 }
 async function setUmpireInactive(uid, name) {
   if (!confirm(`Set ${name} as inactive? They can no longer sign up for games. You can reactivate them at any time.`)) return;
   try { await updateDoc(doc(db, "umpires", uid), { active: false }); loadRoster(); }
-  catch (err) { alert(err.message); }
+  catch (err) { showToast(err.message); }
 }
 async function reactivateUmpire(uid, name) {
   if (!confirm(`Reactivate ${name}?`)) return;
   try { await updateDoc(doc(db, "umpires", uid), { active: true }); loadRoster(); }
-  catch (err) { alert(err.message); }
+  catch (err) { showToast(err.message); }
 }
 async function deleteUmpireAccount(uid, name) {
   if (!confirm(`PERMANENTLY DELETE ${name}'s account?\n\nThis removes their profile and Firebase sign-in credentials. This cannot be undone.`)) return;
@@ -294,7 +294,7 @@ async function deleteUmpireAccount(uid, name) {
     const fns = getFunctions(app, "us-central1");
     await httpsCallable(fns, "deleteUmpireAccount")({ uid });
     loadRoster();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message); }
 }
 
 // ── CSV Export ────────────────────────────────────────────────────────────────
@@ -329,7 +329,7 @@ async function exportRosterCSV() {
     });
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
-  } catch (err) { alert("Export failed: " + err.message); }
+  } catch (err) { showToast("Export failed: " + err.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = "⬇ Export CSV"; } }
 }
 
@@ -459,7 +459,7 @@ async function exportCoachCSV() {
     });
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
-  } catch (err) { alert("Export failed: " + err.message); }
+  } catch (err) { showToast("Export failed: " + err.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = "⬇ Export CSV"; } }
 }
 
@@ -615,7 +615,7 @@ function openEditPermissionsModal(uid) {
 
     renderEditPermModal();
     document.getElementById("editPermModal").style.display = "flex";
-  }).catch(err => alert(err.message));
+  }).catch(err => showToast(err.message));
 }
 
 function renderEditPermModal() {
@@ -651,7 +651,7 @@ async function savePermissions() {
     document.getElementById("editPermModal").style.display = "none";
     await loadAdminUsers();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   } finally {
     btn.disabled = false;
   }
@@ -660,7 +660,7 @@ async function savePermissions() {
 async function removeAdmin(uid) {
   if (!confirm("Remove this admin? They will lose all admin access immediately.")) return;
   try { await deleteDoc(doc(db, "admins", uid)); await loadAdminUsers(); }
-  catch (err) { alert(err.message); }
+  catch (err) { showToast(err.message); }
 }
 
 // ── Add Admin ─────────────────────────────────────────────────────────────────
@@ -1031,7 +1031,7 @@ async function deactivateCoach(uid, name) {
   try {
     await updateDoc(doc(db, "coaches", uid), { active: false });
     loadCoachRoster();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message); }
 }
 
 async function reactivateCoach(uid, name) {
@@ -1039,7 +1039,7 @@ async function reactivateCoach(uid, name) {
   try {
     await updateDoc(doc(db, "coaches", uid), { active: true });
     loadCoachRoster();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message); }
 }
 
 async function deleteCoach(uid, name) {
@@ -1048,7 +1048,7 @@ async function deleteCoach(uid, name) {
     await deleteDoc(doc(db, "coaches", uid));
     loadCoachRoster();
     loadCoachPending();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message); }
 }
 
 document.getElementById("saveCoachBtn")?.addEventListener("click", saveCoachEdits);

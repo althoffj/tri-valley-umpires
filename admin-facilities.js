@@ -1,7 +1,7 @@
 // admin-facilities.js — Facilities CRUD with per-facility fields management
 import { db } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
-import { esc, setMsg } from "./utils.js";
+import { esc, setMsg, showToast } from "./utils.js";
 
 import {
   collection,
@@ -655,7 +655,7 @@ async function deleteFacility(facilityId) {
     await deleteDoc(doc(db, "facilities", facilityId));
     await loadFacilities();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -796,7 +796,7 @@ async function deleteField(facilityId, fieldIndex) {
     await updateDoc(ref, { fields });
     await loadFacilities();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   }
 }
 

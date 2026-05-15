@@ -1,7 +1,7 @@
 // admin-alerts.js — Announcements, Broadcast (push + email), and Slack webhooks
 import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin, getCurrentUser } from "./auth.js";
-import { esc, setMsg } from "./utils.js";
+import { esc, setMsg, showToast } from "./utils.js";
 
 import {
   collection,
@@ -130,7 +130,7 @@ async function toggleAnnouncement(id, currentlyActive) {
     }
     await loadAnnouncements();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -141,7 +141,7 @@ async function deleteAnnouncement(id) {
     await deleteDoc(doc(db, "announcements", id));
     await loadAnnouncements();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   }
 }
 

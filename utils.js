@@ -51,6 +51,36 @@ export function setMsg(id, text, type = "info") {
   el.className   = `signup-message ${type}`;
 }
 
+/**
+ * Show a brief, non-blocking toast notification.
+ * Creates a shared toast element on first call; auto-hides after 4 s.
+ * @param {string} msg  - Message to display
+ * @param {"error"|"success"|"info"} type
+ */
+export function showToast(msg, type = "error") {
+  let toast = document.getElementById("__appToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "__appToast";
+    Object.assign(toast.style, {
+      position: "fixed", bottom: "24px", left: "50%",
+      transform: "translateX(-50%)", zIndex: "99999",
+      padding: "10px 22px", borderRadius: "8px",
+      fontSize: "0.9rem", maxWidth: "420px", textAlign: "center",
+      boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
+      transition: "opacity 0.4s", pointerEvents: "none",
+      color: "#fff", fontFamily: "inherit"
+    });
+    document.body.appendChild(toast);
+  }
+  const bg = type === "success" ? "#1a6b30" : type === "info" ? "#1a3a6b" : "#7a2035";
+  toast.style.background = bg;
+  toast.style.opacity    = "1";
+  toast.textContent      = msg;
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => { toast.style.opacity = "0"; }, 4000);
+}
+
 // ── Phone formatting ──────────────────────────────────────────────────────────
 
 /**

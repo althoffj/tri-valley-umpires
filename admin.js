@@ -1,7 +1,7 @@
 // admin.js — Overview: pending approvals, roster, admin user management
 import { app, db } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin, getCurrentUser } from "./auth.js";
-import { esc, fmtTime, setMsg, csvCell } from "./utils.js";
+import { esc, fmtTime, setMsg, csvCell, showToast } from "./utils.js";
 
 import {
   getFunctions,
@@ -214,7 +214,7 @@ async function revokeUmpire(uid, name) {
     await updateDoc(doc(db, "umpires", uid), { approved: false });
     loadRoster();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -224,7 +224,7 @@ async function setUmpireInactive(uid, name) {
     await updateDoc(doc(db, "umpires", uid), { active: false });
     loadRoster();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -234,7 +234,7 @@ async function reactivateUmpire(uid, name) {
     await updateDoc(doc(db, "umpires", uid), { active: true });
     loadRoster();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -247,7 +247,7 @@ async function deleteUmpireAccount(uid, name) {
     await deleteFn({ uid });
     loadRoster();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -504,7 +504,7 @@ function openEditPermissionsModal(uid) {
 
     renderEditPermModal();
     modal.style.display = "flex";
-  }).catch(err => alert(err.message));
+  }).catch(err => showToast(err.message));
 }
 
 function renderEditPermModal() {
@@ -544,7 +544,7 @@ async function savePermissions() {
     document.getElementById("editPermModal").style.display = "none";
     await loadAdminUsers();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   } finally {
     btn.disabled = false;
   }
@@ -556,7 +556,7 @@ async function removeAdmin(uid) {
     await deleteDoc(doc(db, "admins", uid));
     await loadAdminUsers();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -680,7 +680,7 @@ async function approveCoach(uid, name) {
   try {
     await updateDoc(doc(db, "coaches", uid), { approved: true, approvedAt: serverTimestamp() });
     await loadCoachPending();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message); }
 }
 
 async function denyCoach(uid, name) {
@@ -688,7 +688,7 @@ async function denyCoach(uid, name) {
   try {
     await deleteDoc(doc(db, "coaches", uid));
     await loadCoachPending();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message); }
 }
 
 // ── Event delegation ──────────────────────────────────────────────────────────
@@ -884,7 +884,7 @@ async function exportRosterCSV() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } catch (err) {
-    alert("Export failed: " + err.message);
+    showToast("Export failed: " + err.message);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "⬇ Export CSV"; }
   }

@@ -1,7 +1,7 @@
 // admin-teams.js — Teams & Leagues management
 import { db }                             from "./firebase.js";
 import { authReadyPromise, isAdmin }      from "./auth.js";
-import { esc } from "./utils.js";
+import { esc, showToast } from "./utils.js";
 
 import {
   collection, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
@@ -392,7 +392,7 @@ async function deleteLeague(id) {
     renderLeagueList();
     populateLeagueSelector();
   } catch (err) {
-    alert("Delete failed: " + err.message);
+    showToast("Delete failed: " + err.message);
   }
 }
 

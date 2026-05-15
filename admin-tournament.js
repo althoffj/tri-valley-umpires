@@ -6,7 +6,7 @@ import {
   query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
-import { esc, fmtDate, fmtTime, setMsg } from "./utils.js";
+import { esc, fmtDate, fmtTime, setMsg, showToast } from "./utils.js";
 
 const fns         = getFunctions();
 const notifySwap  = httpsCallable(fns, "notifyTournamentSwap");
@@ -277,7 +277,7 @@ async function setStatus(tid, status) {
     render();
   } catch (err) {
     console.error(err);
-    alert("Failed to update status: " + err.message);
+    showToast("Failed to update status: " + err.message);
   }
 }
 
@@ -427,7 +427,7 @@ async function linkGame(tid, gameId) {
     render();
   } catch (err) {
     console.error(err);
-    alert("Failed to link game: " + err.message);
+    showToast("Failed to link game: " + err.message);
   }
 }
 
@@ -440,7 +440,7 @@ async function unlinkGame(gameId, tid) {
     render();
   } catch (err) {
     console.error(err);
-    alert("Failed to unlink game: " + err.message);
+    showToast("Failed to unlink game: " + err.message);
   }
 }
 
@@ -469,7 +469,7 @@ async function deleteTournament(tid) {
     render();
   } catch (err) {
     console.error(err);
-    alert("Failed to delete tournament: " + err.message);
+    showToast("Failed to delete tournament: " + err.message);
   }
 }
 

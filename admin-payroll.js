@@ -2,7 +2,7 @@
 import { db } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
 import { getOrgSettings, getSeasonRange } from "./org.js";
-import { esc, fmtDate, fmtTime, setMsg, thisYearRange, lastYearRange } from "./utils.js";
+import { esc, fmtDate, fmtTime, setMsg, thisYearRange, lastYearRange, showToast } from "./utils.js";
 
 import {
   collection, getDocs, getDoc, doc, updateDoc, writeBatch, query, orderBy
@@ -190,7 +190,7 @@ async function markAllPaid(uid) {
     renderAll();
   } catch (err) {
     console.error(err);
-    alert("Error marking paid: " + err.message);
+    showToast("Error marking paid: " + err.message);
   }
 }
 
@@ -273,7 +273,7 @@ async function togglePaid(gameId, slotType, uid) {
     renderAll();
   } catch (err) {
     console.error(err);
-    alert("Error updating paid status.");
+    showToast("Error updating paid status.");
   }
 }
 

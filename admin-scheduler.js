@@ -2,7 +2,7 @@
 import { db, app }                       from "./firebase.js";
 import { authReadyPromise, isAdmin }      from "./auth.js";
 import { getFunctions, httpsCallable }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
-import { esc, fmtDate, fmtTime, fmtTime as fmt12, todayISO } from "./utils.js";
+import { esc, fmtDate, fmtTime, fmtTime as fmt12, todayISO, showToast } from "./utils.js";
 
 import {
   collection, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
@@ -1125,7 +1125,7 @@ async function unassignSchedSlot(gameId, slotType) {
     if (idx >= 0) calGamesCache[idx].umpireSlots = slots;
     renderSeSlots();
   } catch (err) {
-    alert("Error: " + err.message);
+    showToast("Error: " + err.message);
   }
 }
 
@@ -2017,7 +2017,7 @@ async function cancelPractice(id) {
     await deleteDoc(doc(db, "practices", id));
     await loadPractices();
   } catch (err) {
-    alert("Error: " + err.message);
+    showToast("Error: " + err.message);
   }
 }
 

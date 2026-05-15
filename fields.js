@@ -2,6 +2,7 @@
 import { db } from "./firebase.js";
 import { authReadyPromise, isApproved, isAdmin } from "./auth.js";
 import { esc } from "./utils.js";
+import { getTimezone } from "./org.js";
 
 import {
   collection,
@@ -50,7 +51,7 @@ async function fetchCurrentWeather(facilityName, address) {
   try {
     const url  = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&current=temperature_2m,weather_code,wind_speed_10m` +
-      `&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago`;
+      `&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=${encodeURIComponent(getTimezone())}`;
     const res  = await fetch(url);
     const data = await res.json();
     const cur  = data.current;

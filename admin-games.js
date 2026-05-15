@@ -1,7 +1,7 @@
 // admin-games.js — Game management: sync, add, list, edit modal, team calendars
 import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin } from "./auth.js";
-import { esc, fmtDate, fmtTime, todayISO, setMsg } from "./utils.js";
+import { esc, fmtDate, fmtTime, todayISO, setMsg, showToast } from "./utils.js";
 
 import {
   getFunctions,
@@ -420,7 +420,7 @@ async function unassignSlot(gameId, slotType) {
     if (g) { g.umpireSlots = updatedSlots; g.needsUmpires = true; }
     renderAdminGames();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -428,7 +428,7 @@ async function notifyOpenSlots(gameId) {
   const game = allGames.find(g => g.id === gameId);
   if (!game) return;
   const open = (game.umpireSlots || []).filter(s => !s.assignedUid);
-  if (open.length === 0) { alert("No open slots on this game."); return; }
+  if (open.length === 0) { showToast("No open slots on this game."); return; }
   const slotTypes = open.map(s => s.type).join(", ");
   const label = `${fmtDate(game.date)} at ${fmtTime(game.time)} — ${[game.league, game.city].filter(Boolean).join(" · ")} ${game.division || ""}${game.field ? " · " + game.field : ""}`;
   if (!confirm(`Send Slack + push notification to all umpires about open slots?\n\n${label}\nOpen: ${slotTypes}`)) return;
@@ -440,7 +440,7 @@ async function notifyOpenSlots(gameId) {
     const btnEl = document.querySelector(`.notify-slots-btn[data-game-id="${gameId}"]`);
     if (btnEl) { btnEl.textContent = "Notified ✓"; btnEl.disabled = true; }
   } catch (err) {
-    alert("Notification failed: " + err.message);
+    showToast("Notification failed: " + err.message);
   }
 }
 
@@ -453,7 +453,7 @@ async function deleteGame(gameId) {
     allGames = allGames.filter(g => g.id !== gameId);
     renderAdminGames();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message);
   }
 }
 
@@ -532,18 +532,27 @@ function openEditModal(gameId) {
 }
 
 async function saveGameEdit() {
-  const gameId = document.getElementById("editGameId").value;
-  const btn    = document.getElementById("saveEditGameBtn");
+  const gameId   = document.getElementById("editGameId").value;
+  const btn      = document.getElementById("saveEditGameBtn");
+  const date     = document.getElementById("editGameDate").value;
+  const division = document.getElementById("editGameDivision").value;
+  const league   = document.getElementById("editGameLeague").value.trim();
+  const city     = document.getElementById("editGameCity").value.trim();
+
+  if (!date)     { setMsg("editGameMessage", "Date is required.", "error"); return; }
+  if (!division) { setMsg("editGameMessage", "Division is required.", "error"); return; }
+  if (!league && !city) { setMsg("editGameMessage", "League or city is required.", "error"); return; }
+
   btn.disabled = true;
   setMsg("editGameMessage", "Saving…", "info");
 
   try {
     const facilityId = document.getElementById("editGameFacility")?.value || "";
     const updates = {
-      league:     document.getElementById("editGameLeague").value,
-      city:       document.getElementById("editGameCity").value,
-      division:   document.getElementById("editGameDivision").value,
-      date:       document.getElementById("editGameDate").value,
+      league,
+      city,
+      division,
+      date,
       time:       document.getElementById("editGameTime").value,
       type:       document.getElementById("editGameType").value,
       field:      getFieldValue("editGameFieldSelect", "editGameField"),
@@ -747,13 +756,17 @@ document.getElementById("addGameForm").addEventListener("submit", async function
   }
   document.getElementById("umpireTypesError").textContent = "";
 
+  const league   = document.getElementById("gameLeague").value.trim();
+  const city     = document.getElementById("gameCity").value.trim();
+  const division = document.getElementById("gameDivision").value;
+  const date     = document.getElementById("gameDate").value;
+
+  if (!date)     { setMsg("addGameMessage", "Date is required.", "error"); return; }
+  if (!division) { setMsg("addGameMessage", "Division is required.", "error"); return; }
+  if (!league && !city) { setMsg("addGameMessage", "League or city is required.", "error"); return; }
+
   btn.disabled = true;
   setMsg("addGameMessage", "Adding game…", "info");
-
-  const league     = document.getElementById("gameLeague").value;
-  const city       = document.getElementById("gameCity").value;
-  const division   = document.getElementById("gameDivision").value;
-  const date       = document.getElementById("gameDate").value;
   const time       = document.getElementById("gameTime").value;
   const type       = document.getElementById("gameType").value;
   const field      = getFieldValue("gameFieldSelect", "gameField");
@@ -1001,7 +1014,7 @@ async function approveCancellation(requestId, gameId, slotType, uid) {
     renderPendingCancellations();
     renderAdminGames();
   } catch (err) {
-    alert("Failed to approve: " + err.message);
+    showToast("Failed to approve: " + err.message);
   }
 }
 
@@ -1015,7 +1028,7 @@ async function denyCancellation(requestId) {
     pendingCancellations = pendingCancellations.filter(r => r.id !== requestId);
     renderPendingCancellations();
   } catch (err) {
-    alert("Failed to deny: " + err.message);
+    showToast("Failed to deny: " + err.message);
   }
 }
 
