@@ -1,6 +1,7 @@
 // admin-games.js — Game management: sync, add, list, edit modal, team calendars
 import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin } from "./auth.js";
+import { downloadIcs } from "./cal.js";
 import { esc, fmtDate, fmtTime, todayISO, setMsg, showToast, showConfirm } from "./utils.js";
 
 import {
@@ -1053,6 +1054,11 @@ function wireGameFilters() {
     ["gfFrom","gfTo","gfLeague","gfDivision","gfTeam","gfFacility","gfField","gfUmpire"]
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
     renderAdminGames();
+  });
+
+  document.getElementById("adminCalExportBtn")?.addEventListener("click", () => {
+    const games = applyGameFilters();
+    downloadIcs(games, "admin-schedule.ics", "Tri-Valley Baseball — Admin Export");
   });
 }
 

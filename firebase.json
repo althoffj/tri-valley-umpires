@@ -58,6 +58,16 @@
           }
         ]
       }
+    ],
+    "rewrites": [
+      {
+        "source": "/ics/games",
+        "run": { "serviceId": "icsgames", "region": "us-central1" }
+      },
+      {
+        "source": "/ics/umpire",
+        "run": { "serviceId": "icsumpire", "region": "us-central1" }
+      }
     ]
   },
   "firestore": {

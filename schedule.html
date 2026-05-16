@@ -33,6 +33,22 @@
       </p>
     </div>
 
+    <!-- Calendar subscribe / export -->
+    <div id="calSubscribeBar" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;padding:12px 16px;background:var(--field);border-radius:8px;border:1px solid #333">
+      <span style="font-size:0.88rem;font-weight:600;color:var(--light-text);flex-shrink:0">📅 Calendar:</span>
+      <button type="button" class="btn print-btn" id="calExportBtn" style="font-size:0.82rem;padding:5px 12px">⬇ Export .ics</button>
+      <button type="button" class="btn print-btn" id="calCopyLinkBtn" style="font-size:0.82rem;padding:5px 12px" title="Copy subscription URL to clipboard">🔗 Copy Subscribe URL</button>
+      <span id="calCopyMsg" style="font-size:0.8rem;color:#86efac;display:none">Copied!</span>
+      <!-- Personal umpire calendar — shown only to signed-in approved umpires -->
+      <span id="calUmpireSection" style="display:none;width:100%;margin-top:4px;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:0.82rem;color:var(--light-text)">My Games:</span>
+        <button type="button" class="btn print-btn" id="calMyExportBtn" style="font-size:0.82rem;padding:5px 12px">⬇ Export My Games</button>
+        <button type="button" class="btn print-btn" id="calMyCopyBtn" style="font-size:0.82rem;padding:5px 12px">🔗 Copy My Subscribe URL</button>
+        <button type="button" class="btn print-btn" id="calMyResetBtn" style="font-size:0.82rem;padding:5px 10px;color:#ffb4b4;border-color:#884444" title="Generates a new private URL, invalidating the old one">↺ Reset URL</button>
+        <span id="calMyCopyMsg" style="font-size:0.8rem;color:#86efac;display:none">Copied!</span>
+      </span>
+    </div>
+
     <!-- Filter bar -->
     <div class="page-actions" id="filterBar">
       <button type="button" class="btn filter-btn filter-active" data-filter="all">All Games</button>
@@ -75,7 +91,8 @@
   </div>
 
   <script type="module" src="auth.js?v=19"></script>
-  <script type="module" src="schedule.js?v=22"></script>
+  <script type="module" src="cal.js?v=1"></script>
+  <script type="module" src="schedule.js?v=23"></script>
   <script type="module" src="/pwa.js?v=2"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=3"></script>

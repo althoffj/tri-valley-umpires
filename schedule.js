@@ -1,6 +1,7 @@
 // schedule.js — Firestore-based schedule with multi-slot signups, badges, and pay tracking
 import { getOrgSettings } from "./org.js";
 import { db, auth } from "./firebase.js";
+import { gamesToIcs, downloadIcs } from "./cal.js";
 import { esc, fmtDate, fmtTime, todayISO, showToast, showConfirm } from "./utils.js";
 
 import {
@@ -1162,6 +1163,67 @@ document.getElementById("confirmSignupBtn").addEventListener("click", () => {
 
 document.getElementById("cancelSignupBtn").addEventListener("click", closeModal);
 
+// ── Calendar bar ──────────────────────────────────────────────────────────────
+
+const BASE_URL = "https://tri-valley-baseball-umpires.web.app";
+
+function initCalendarBar() {
+  // Export currently visible games (respects active filter)
+  document.getElementById("calExportBtn")?.addEventListener("click", () => {
+    const visible = games.filter(g => getSlots(g).length > 0).filter(gameMatchesFilter);
+    downloadIcs(visible, "tri-valley-schedule.ics", "Tri-Valley Baseball Schedule");
+  });
+
+  // Copy subscribe URL (all games endpoint)
+  document.getElementById("calCopyLinkBtn")?.addEventListener("click", () => {
+    navigator.clipboard.writeText(`${BASE_URL}/ics/games`).then(() => {
+      const msg = document.getElementById("calCopyMsg");
+      msg.style.display = ""; setTimeout(() => msg.style.display = "none", 2000);
+    });
+  });
+}
+
+async function initUmpireCalendar(uid) {
+  const sec = document.getElementById("calUmpireSection");
+  if (!sec || !uid) return;
+  sec.style.display = "flex";
+
+  async function getOrCreateToken() {
+    const snap = await getDoc(doc(db, "umpires", uid));
+    let token = snap.data()?.calendarToken;
+    if (!token) {
+      token = crypto.randomUUID();
+      await updateDoc(doc(db, "umpires", uid), { calendarToken: token });
+    }
+    return token;
+  }
+
+  document.getElementById("calMyExportBtn")?.addEventListener("click", () => {
+    const myGames = games.filter(g =>
+      (g.umpireSlots || []).some(s => s.assignedUid === uid)
+    );
+    downloadIcs(myGames, "my-games.ics", "My Umpire Schedule");
+  });
+
+  document.getElementById("calMyCopyBtn")?.addEventListener("click", async () => {
+    const token = await getOrCreateToken();
+    const url   = `${BASE_URL}/ics/umpire?token=${token}`;
+    navigator.clipboard.writeText(url).then(() => {
+      const msg = document.getElementById("calMyCopyMsg");
+      msg.style.display = ""; setTimeout(() => msg.style.display = "none", 2000);
+    });
+  });
+
+  document.getElementById("calMyResetBtn")?.addEventListener("click", async () => {
+    if (!confirm("This will invalidate your current subscription URL. Any calendar apps using the old URL will stop updating. Generate a new URL?")) return;
+    const token = crypto.randomUUID();
+    await updateDoc(doc(db, "umpires", uid), { calendarToken: token });
+    const url = `${BASE_URL}/ics/umpire?token=${token}`;
+    navigator.clipboard.writeText(url);
+    alert("New URL generated and copied to clipboard.");
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 // Load lateCancelHours from scheduling config
@@ -1172,6 +1234,11 @@ getDoc(doc(db, "config", "scheduling")).then(snap => {
 authReadyPromise.then(() => {
   const myGamesBtn = document.getElementById("myGamesBtn");
   if (myGamesBtn) myGamesBtn.style.display = isLoggedIn() ? "" : "none";
+  initCalendarBar();
+  if (isApproved()) {
+    const uid = getCurrentUser()?.uid;
+    if (uid) initUmpireCalendar(uid);
+  }
   loadTeamCalendars();
   loadGames();
 });

@@ -984,6 +984,145 @@ exports.syncTeamNow = onCall(
 
 // ── Phase 12: Slack helpers ───────────────────────────────────────────────────
 
+// ── ICS helpers ───────────────────────────────────────────────────────────────
+
+function p2(n) { return String(n).padStart(2, "0"); }
+function icsEsc(s) {
+  return (s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+}
+const CHICAGO_VTIMEZONE = [
+  "BEGIN:VTIMEZONE",
+  "TZID:America/Chicago",
+  "BEGIN:DAYLIGHT",
+  "TZOFFSETFROM:-0600","TZOFFSETTO:-0500","TZNAME:CDT",
+  "DTSTART:19700308T020000",
+  "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU",
+  "END:DAYLIGHT",
+  "BEGIN:STANDARD",
+  "TZOFFSETFROM:-0500","TZOFFSETTO:-0600","TZNAME:CST",
+  "DTSTART:19701101T020000",
+  "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU",
+  "END:STANDARD",
+  "END:VTIMEZONE",
+].join("\r\n");
+
+function gamesToIcs(games, calName = "Tri-Valley Baseball Schedule") {
+  const now = new Date().toISOString().replace(/[-:.]/g, "").slice(0, 15) + "Z";
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Tri-Valley Baseball Umpires//Schedule//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    `X-WR-CALNAME:${icsEsc(calName)}`,
+    "X-WR-TIMEZONE:America/Chicago",
+    CHICAGO_VTIMEZONE,
+  ];
+
+  for (const g of games) {
+    if (!g.date) continue;
+    const [y, mo, d] = g.date.split("-");
+    let dtstart, dtend;
+    if (g.time) {
+      const [h, m] = g.time.split(":");
+      dtstart = `DTSTART;TZID=America/Chicago:${y}${mo}${d}T${h}${m}00`;
+      const durMin = /HS/i.test(g.division || "") ? 120 : 90;
+      const end = new Date(+y, +mo - 1, +d, +h, +m + durMin);
+      dtend = `DTEND;TZID=America/Chicago:${end.getFullYear()}${p2(end.getMonth()+1)}${p2(end.getDate())}T${p2(end.getHours())}${p2(end.getMinutes())}00`;
+    } else {
+      const next = new Date(+y, +mo - 1, +d + 1);
+      dtstart = `DTSTART;VALUE=DATE:${y}${mo}${d}`;
+      dtend   = `DTEND;VALUE=DATE:${next.getFullYear()}${p2(next.getMonth()+1)}${p2(next.getDate())}`;
+    }
+
+    let summary = "";
+    if (g.homeTeam && g.awayTeam) summary = `${g.homeTeam} vs ${g.awayTeam}`;
+    else if (g.teamName) summary = g.teamName;
+    else summary = `${g.division || "Baseball"} Game`;
+    if (g.cancelled) summary = `CANCELLED: ${summary}`;
+
+    const descParts = [];
+    if (g.division) descParts.push(`Division: ${g.division}`);
+    if (g.field)    descParts.push(`Field: ${g.field}`);
+    const assigned = (g.umpireSlots || []).filter(s => s.assignedName);
+    if (assigned.length) descParts.push(`Umpires: ${assigned.map(s => `${s.type}: ${s.assignedName}`).join(", ")}`);
+
+    const evt = [
+      "BEGIN:VEVENT",
+      `UID:game-${g.id || g.externalId || Math.random()}@tri-valley-baseball-umpires`,
+      `DTSTAMP:${now}`,
+      dtstart,
+      dtend,
+      `SUMMARY:${icsEsc(summary)}`,
+    ];
+    if (descParts.length) evt.push(`DESCRIPTION:${icsEsc(descParts.join("\\n"))}`);
+    if (g.field)          evt.push(`LOCATION:${icsEsc(g.field)}`);
+    evt.push(`STATUS:${g.cancelled ? "CANCELLED" : "CONFIRMED"}`);
+    evt.push("END:VEVENT");
+    lines.push(...evt);
+  }
+
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}
+
+exports.icsGames = onRequest({ cors: false }, async (req, res) => {
+  const db       = getFirestore();
+  const teamId   = req.query.team     || "";
+  const division = req.query.division || "";
+  const facility = req.query.facility || "";
+  const today    = todayISO();
+
+  try {
+    const snap  = await db.collection("games").orderBy("date").get();
+    let games   = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Only future games; include cancelled so subscribed calendars show the cancellation
+    games = games.filter(g => g.date >= today);
+    if (teamId)   games = games.filter(g => g.teamId === teamId || (g.teamName || "").toLowerCase() === teamId.toLowerCase());
+    if (division) games = games.filter(g => g.division === division);
+    if (facility) games = games.filter(g => g.facilityId === facility);
+
+    const icsText = gamesToIcs(games, "Tri-Valley Baseball Schedule");
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", 'inline; filename="tri-valley-schedule.ics"');
+    res.setHeader("Cache-Control", "public, max-age=1800");
+    res.status(200).send(icsText);
+  } catch (err) {
+    res.status(500).send("Error generating calendar: " + err.message);
+  }
+});
+
+exports.icsUmpire = onRequest({ cors: false }, async (req, res) => {
+  const token = req.query.token || "";
+  if (!token) { res.status(401).send("Token required."); return; }
+
+  const db = getFirestore();
+  try {
+    const umpSnap = await db.collection("umpires").where("calendarToken", "==", token).limit(1).get();
+    if (umpSnap.empty) { res.status(401).send("Invalid or expired token."); return; }
+
+    const umpDoc  = umpSnap.docs[0];
+    const umpire  = umpDoc.data();
+    const uid     = umpDoc.id;
+    const today   = todayISO();
+
+    const snap  = await db.collection("games").orderBy("date").get();
+    const games = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(g => g.date >= today)
+      .filter(g => (g.umpireSlots || []).some(s => s.assignedUid === uid));
+
+    const calName = `${umpire.name || "Umpire"} — My Games`;
+    const icsText = gamesToIcs(games, calName);
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", 'inline; filename="my-games.ics"');
+    res.setHeader("Cache-Control", "private, max-age=900");
+    res.status(200).send(icsText);
+  } catch (err) {
+    res.status(500).send("Error generating calendar: " + err.message);
+  }
+});
+
 function postSlack(webhookUrl, text) {
   if (!webhookUrl) return Promise.resolve();
   return new Promise((resolve, reject) => {
