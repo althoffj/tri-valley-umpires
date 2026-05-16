@@ -1829,6 +1829,24 @@ nav > a.active {
   white-space: nowrap;
 }
 
+/* ── Roster table ────────────────────────────────────────────────────────── */
+
+.roster-table { width:100%; border-collapse:collapse; font-size:0.87rem; margin-bottom:4px }
+.roster-table th { text-align:left; padding:6px 8px; border-bottom:2px solid #333;
+                   color:var(--light-text); font-size:0.75rem; text-transform:uppercase;
+                   letter-spacing:0.05em; white-space:nowrap }
+.roster-table td { padding:6px 8px; border-bottom:1px solid #222; vertical-align:middle }
+.roster-table tr:last-child td { border-bottom:none }
+.roster-table .roster-num { width:48px; font-weight:700; color:var(--light-text) }
+.roster-table .roster-pos { width:52px }
+.roster-table .roster-notes { color:var(--light-text); font-size:0.82rem }
+.roster-table .roster-del-btn {
+  background:transparent; color:#ff8a8a; border:1px solid #ff6a6a;
+  border-radius:4px; padding:2px 8px; cursor:pointer; font-size:0.8rem;
+  white-space:nowrap
+}
+.roster-table .roster-del-btn:hover { background:rgba(255,100,100,0.12) }
+
 /* ── CSV drop zone ───────────────────────────────────────────────────────── */
 
 .csv-dropzone {

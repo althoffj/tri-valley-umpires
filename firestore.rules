@@ -155,6 +155,11 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // Player rosters: keyed by team stable ID; admin-only
+    match /rosters/{teamId} {
+      allow read, write: if isAdmin();
+    }
+
     // Sponsors: admin-only (amounts and contact info are internal)
     match /sponsors/{sponsorId} {
       allow read, create, update, delete: if isAdmin();

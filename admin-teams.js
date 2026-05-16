@@ -15,6 +15,7 @@ let leagues              = [];   // [{id, name, division, websiteUrl, notes, con
 let facilitiesForLeagues = [];   // [{id, name, address}]
 let teamCoaches          = [];   // approved coaches for team-form dropdown
 let allSponsors          = [];   // all sponsors (for assign dropdown)
+let rosterPlayers        = [];   // [{id, number, firstName, lastName, position, notes}] for team in edit
 let activeSection        = "teams";
 
 // Generate a stable ID for a team from its name
@@ -145,10 +146,13 @@ function startEditTeam(idx) {
   document.getElementById("teamFormCancelBtn").style.display = "";
   document.getElementById("tName").focus();
   document.getElementById("teamFormWrap").scrollIntoView({ behavior: "smooth" });
-  // Show and load sponsor section for existing teams with a stable ID
+  // Show roster and sponsor sections for existing teams with a stable ID
   if (t.id) {
-    const sec = document.getElementById("tSponsorSection");
-    if (sec) sec.style.display = "";
+    const rosterSec = document.getElementById("tRosterSection");
+    if (rosterSec) rosterSec.style.display = "";
+    loadRosterForTeam(t.id);
+    const sponsorSec = document.getElementById("tSponsorSection");
+    if (sponsorSec) sponsorSec.style.display = "";
     loadSponsorsForTeam(t.id);
   }
 }
@@ -162,8 +166,167 @@ function cancelEditTeam() {
   document.getElementById("teamFormCancelBtn").style.display = "none";
   document.getElementById("teamFormMsg").textContent = "";
   document.getElementById("teamFormMsg").className = "signup-message";
+  hideRosterSection();
   hideSponsorSection();
+  // Hide and clear the add-player form if open
+  const playerForm = document.getElementById("tPlayerFormWrap");
+  if (playerForm) playerForm.style.display = "none";
 }
+
+// ── Roster management ─────────────────────────────────────────────────────────
+
+function hideRosterSection() {
+  const sec = document.getElementById("tRosterSection");
+  if (sec) sec.style.display = "none";
+  rosterPlayers = [];
+}
+
+async function loadRosterForTeam(teamId) {
+  const listEl = document.getElementById("tRosterList");
+  const countEl = document.getElementById("tRosterCount");
+  if (!listEl) return;
+
+  listEl.innerHTML = `<p style="color:var(--light-text);font-size:0.85rem;margin:0">Loading…</p>`;
+
+  try {
+    const snap = await getDoc(doc(db, "rosters", teamId));
+    rosterPlayers = snap.exists() ? (snap.data().players || []) : [];
+  } catch {
+    rosterPlayers = [];
+  }
+
+  renderRosterTable(countEl);
+}
+
+function renderRosterTable(countEl) {
+  countEl = countEl || document.getElementById("tRosterCount");
+  const listEl = document.getElementById("tRosterList");
+  if (!listEl) return;
+
+  const count = rosterPlayers.length;
+  if (countEl) countEl.textContent = count ? ` — ${count} player${count !== 1 ? "s" : ""}` : "";
+
+  if (!count) {
+    listEl.innerHTML = `<p style="color:var(--light-text);font-size:0.85rem;margin:0">No players on this roster yet. Click "+ Add Player" to start.</p>`;
+    return;
+  }
+
+  // Sort: by number (numeric) then last name
+  const sorted = [...rosterPlayers].sort((a, b) => {
+    const numA = parseInt(a.number) || 999, numB = parseInt(b.number) || 999;
+    if (numA !== numB) return numA - numB;
+    return (a.lastName || "").localeCompare(b.lastName || "");
+  });
+
+  listEl.innerHTML = `
+    <table class="roster-table">
+      <thead>
+        <tr>
+          <th class="roster-num">#</th>
+          <th>Name</th>
+          <th class="roster-pos">Pos</th>
+          <th>Notes</th>
+          <th style="width:56px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sorted.map(p => `
+          <tr data-player-id="${esc(p.id)}">
+            <td class="roster-num">${esc(p.number || "—")}</td>
+            <td><strong>${esc(p.firstName)} ${esc(p.lastName)}</strong></td>
+            <td class="roster-pos">${esc(p.position || "—")}</td>
+            <td class="roster-notes">${esc(p.notes || "")}</td>
+            <td><button type="button" class="roster-del-btn" data-player-id="${esc(p.id)}">Remove</button></td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+
+  listEl.querySelectorAll(".roster-del-btn").forEach(btn => {
+    btn.addEventListener("click", () => removeRosterPlayer(btn.dataset.playerId));
+  });
+}
+
+function removeRosterPlayer(playerId) {
+  rosterPlayers = rosterPlayers.filter(p => p.id !== playerId);
+  renderRosterTable();
+}
+
+async function saveRosterForTeam(teamId) {
+  const msgEl = document.getElementById("tRosterMsg");
+  const btn   = document.getElementById("tSaveRosterBtn");
+  if (!teamId) return;
+  btn.disabled = true;
+  msgEl.textContent = "Saving…";
+  msgEl.className   = "signup-message info";
+  try {
+    await setDoc(doc(db, "rosters", teamId), {
+      players:   rosterPlayers,
+      updatedAt: serverTimestamp(),
+    });
+    msgEl.textContent = `✓ Roster saved (${rosterPlayers.length} player${rosterPlayers.length !== 1 ? "s" : ""}).`;
+    msgEl.className   = "signup-message success";
+    setTimeout(() => { msgEl.textContent = ""; msgEl.className = "signup-message"; }, 2500);
+  } catch (err) {
+    msgEl.textContent = "Error: " + err.message;
+    msgEl.className   = "signup-message error";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Wire roster buttons
+document.getElementById("tAddPlayerBtn")?.addEventListener("click", () => {
+  document.getElementById("tPlayerFormWrap").style.display = "";
+  document.getElementById("tPlayerFirst").focus();
+});
+
+document.getElementById("tCancelPlayerBtn")?.addEventListener("click", () => {
+  document.getElementById("tPlayerFormWrap").style.display = "none";
+  ["tPlayerNumber","tPlayerFirst","tPlayerLast","tPlayerNotes"].forEach(id => {
+    document.getElementById(id).value = "";
+  });
+  document.getElementById("tPlayerPosition").value = "";
+});
+
+document.getElementById("tSavePlayerBtn")?.addEventListener("click", () => {
+  const first = document.getElementById("tPlayerFirst").value.trim();
+  const last  = document.getElementById("tPlayerLast").value.trim();
+  if (!first && !last) {
+    document.getElementById("tPlayerFirst").focus();
+    return;
+  }
+  const player = {
+    id:        crypto.randomUUID(),
+    number:    document.getElementById("tPlayerNumber").value.trim(),
+    firstName: first,
+    lastName:  last,
+    position:  document.getElementById("tPlayerPosition").value,
+    notes:     document.getElementById("tPlayerNotes").value.trim(),
+  };
+  rosterPlayers.push(player);
+  renderRosterTable();
+  // Clear and hide form
+  ["tPlayerNumber","tPlayerFirst","tPlayerLast","tPlayerNotes"].forEach(id => {
+    document.getElementById(id).value = "";
+  });
+  document.getElementById("tPlayerPosition").value = "";
+  document.getElementById("tPlayerFormWrap").style.display = "none";
+});
+
+// Allow pressing Enter in the add-player form to submit
+document.getElementById("tPlayerFormWrap")?.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById("tSavePlayerBtn").click();
+  }
+});
+
+document.getElementById("tSaveRosterBtn")?.addEventListener("click", () => {
+  const teamIdx = document.getElementById("teamEditIndex").value;
+  if (teamIdx === "") return;
+  const team = teams[parseInt(teamIdx)];
+  if (team?.id) saveRosterForTeam(team.id);
+});
 
 // ── Team-side sponsor management ──────────────────────────────────────────────
 

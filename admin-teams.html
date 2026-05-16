@@ -120,6 +120,71 @@
             </select>
           </div>
 
+          <!-- ── Roster (edit mode only) ───────────────────────────────────── -->
+          <div id="tRosterSection" style="display:none;border-top:1px solid #333;padding-top:14px;margin-bottom:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+              <label style="margin:0;font-size:0.95rem">
+                Player Roster
+                <span id="tRosterCount" style="font-weight:normal;color:var(--light-text);font-size:0.82rem"></span>
+              </label>
+              <button type="button" class="btn print-btn" id="tAddPlayerBtn"
+                style="font-size:0.82rem;padding:5px 12px">+ Add Player</button>
+            </div>
+
+            <!-- Player table -->
+            <div id="tRosterList" style="margin-bottom:8px">
+              <p style="color:var(--light-text);font-size:0.85rem;margin:0">Loading roster…</p>
+            </div>
+
+            <!-- Inline add-player form (hidden until "+ Add Player") -->
+            <div id="tPlayerFormWrap" style="display:none;padding:12px;background:rgba(255,255,255,0.03);border:1px solid #444;border-radius:6px;margin-bottom:10px">
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+                <div style="flex:0 0 58px">
+                  <label style="font-size:0.75rem;color:var(--light-text);display:block;margin-bottom:3px">#</label>
+                  <input type="text" id="tPlayerNumber" maxlength="3" placeholder="12"
+                    style="width:100%;padding:7px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem" />
+                </div>
+                <div style="flex:1;min-width:110px">
+                  <label style="font-size:0.75rem;color:var(--light-text);display:block;margin-bottom:3px">First Name *</label>
+                  <input type="text" id="tPlayerFirst" placeholder="First"
+                    style="width:100%;padding:7px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem" />
+                </div>
+                <div style="flex:1;min-width:110px">
+                  <label style="font-size:0.75rem;color:var(--light-text);display:block;margin-bottom:3px">Last Name *</label>
+                  <input type="text" id="tPlayerLast" placeholder="Last"
+                    style="width:100%;padding:7px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem" />
+                </div>
+                <div style="flex:0 0 80px">
+                  <label style="font-size:0.75rem;color:var(--light-text);display:block;margin-bottom:3px">Position</label>
+                  <select id="tPlayerPosition"
+                    style="width:100%;padding:7px 6px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.88rem">
+                    <option value="">—</option>
+                    <option>P</option><option>C</option><option>1B</option><option>2B</option>
+                    <option>3B</option><option>SS</option><option>LF</option><option>CF</option>
+                    <option>RF</option><option>OF</option><option>DH</option><option>UT</option>
+                  </select>
+                </div>
+                <div style="flex:2;min-width:130px">
+                  <label style="font-size:0.75rem;color:var(--light-text);display:block;margin-bottom:3px">Notes</label>
+                  <input type="text" id="tPlayerNotes" placeholder="optional"
+                    style="width:100%;padding:7px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem" />
+                </div>
+                <div style="display:flex;gap:6px;flex-shrink:0;padding-bottom:1px">
+                  <button type="button" class="btn" id="tSavePlayerBtn"
+                    style="font-size:0.85rem;padding:7px 16px">Add</button>
+                  <button type="button" class="btn print-btn" id="tCancelPlayerBtn"
+                    style="font-size:0.85rem;padding:7px 12px">Cancel</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <button type="button" class="btn print-btn" id="tSaveRosterBtn"
+                style="font-size:0.85rem;padding:6px 18px">Save Roster</button>
+              <p id="tRosterMsg" class="signup-message" style="margin:0"></p>
+            </div>
+          </div>
+
           <!-- ── Sponsors (edit mode only) ──────────────────────────────────── -->
           <div id="tSponsorSection" style="display:none;border-top:1px solid #333;padding-top:14px;margin-bottom:16px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
@@ -248,7 +313,7 @@
   </div>
 
   <script type="module" src="auth.js?v=19"></script>
-  <script type="module" src="admin-teams.js?v=2"></script>
+  <script type="module" src="admin-teams.js?v=3"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=3"></script>
