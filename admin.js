@@ -691,6 +691,73 @@ async function denyCoach(uid, name) {
   } catch (err) { showToast(err.message); }
 }
 
+// ── Pending Call-Up Requests ──────────────────────────────────────────────────
+
+async function loadCallupPending() {
+  const listEl = document.getElementById("callupPendingList");
+  const noteEl = document.getElementById("callupPendingNote");
+  const badge  = document.getElementById("callupPendingBadge");
+  if (!listEl) return;
+  try {
+    const snap = await getDocs(
+      query(collection(db, "callupRequests"), where("status", "==", "pending"), orderBy("requestedAt", "asc"))
+    );
+    if (badge) {
+      badge.textContent  = snap.size || "";
+      badge.style.display = snap.size ? "" : "none";
+    }
+    if (snap.empty) {
+      noteEl.textContent = "No pending call-up requests.";
+      listEl.innerHTML = "";
+      return;
+    }
+    noteEl.textContent = `${snap.size} pending`;
+    listEl.innerHTML = snap.docs.map(d => {
+      const r = d.data();
+      const dateLine = r.gameDate
+        ? `<span style="color:var(--light-text);font-size:0.82rem">📅 ${esc(r.gameDate)}</span> · ` : "";
+      return `<div class="document-note" style="margin-bottom:10px">
+        <div style="margin-bottom:4px">
+          <strong>${esc(r.playerFirstName)} ${esc(r.playerLastName)}</strong>
+          ${r.playerNumber ? `<span style="color:var(--light-text);font-size:0.85rem"> #${esc(r.playerNumber)}</span>` : ""}
+          ${r.playerPosition ? `<span style="color:var(--light-text);font-size:0.85rem"> · ${esc(r.playerPosition)}</span>` : ""}
+        </div>
+        <div style="font-size:0.85rem;margin-bottom:4px">
+          ${dateLine}
+          <strong>${esc(r.requestingTeamName)}</strong> → <strong>${esc(r.homeTeamName)}</strong>
+        </div>
+        <div style="font-size:0.85rem;color:var(--light-text);margin-bottom:8px">${esc(r.reason || "")}</div>
+        <div class="page-actions" style="margin-top:0">
+          <button class="btn callup-approve-btn"
+            data-id="${esc(d.id)}" style="font-size:0.85rem;padding:5px 14px;background:#1a5a2a;border-color:#2a7a3a">
+            ✓ Approve
+          </button>
+          <button class="btn print-btn callup-decline-btn"
+            data-id="${esc(d.id)}" style="font-size:0.85rem;padding:5px 14px;color:#ffb4b4;border-color:#7a2a2a">
+            ✗ Decline
+          </button>
+        </div>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    noteEl.textContent = "Error loading call-up requests.";
+    console.error(err);
+  }
+}
+
+async function adminOverrideCallup(id, status) {
+  const label = status === "approved" ? "approve" : "decline";
+  if (!await showConfirm(`Admin ${label} this call-up request?`)) return;
+  try {
+    await updateDoc(doc(db, "callupRequests", id), {
+      status,
+      responseNote: "[Admin override]",
+      respondedAt:  serverTimestamp(),
+    });
+    loadCallupPending();
+  } catch (err) { showToast("Error: " + err.message); }
+}
+
 // ── Event delegation ──────────────────────────────────────────────────────────
 
 document.addEventListener("click", e => {
@@ -705,6 +772,12 @@ document.addEventListener("click", e => {
 
   const denyCoachBtn = e.target.closest(".deny-coach-btn");
   if (denyCoachBtn) { denyCoach(denyCoachBtn.dataset.uid, denyCoachBtn.dataset.name); return; }
+
+  const callupApproveBtn = e.target.closest(".callup-approve-btn");
+  if (callupApproveBtn) { adminOverrideCallup(callupApproveBtn.dataset.id, "approved"); return; }
+
+  const callupDeclineBtn = e.target.closest(".callup-decline-btn");
+  if (callupDeclineBtn) { adminOverrideCallup(callupDeclineBtn.dataset.id, "declined"); return; }
 
   const revokeBtn = e.target.closest(".revoke-btn");
   if (revokeBtn) { revokeUmpire(revokeBtn.dataset.uid, revokeBtn.dataset.name); return; }
@@ -1031,6 +1104,7 @@ authReadyPromise.then(async () => {
   loadAdminQuickStats();
   loadPending();
   loadCoachPending();
+  loadCallupPending();
   loadRoster();
 
   if (isSuperAdmin()) {
