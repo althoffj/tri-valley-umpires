@@ -154,5 +154,10 @@ service cloud.firestore {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
+
+    // Sponsors: admin-only (amounts and contact info are internal)
+    match /sponsors/{sponsorId} {
+      allow read, create, update, delete: if isAdmin();
+    }
   }
 }

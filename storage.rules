@@ -17,5 +17,16 @@ service firebase.storage {
                       firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
     }
 
+    // Sponsor logos — public read; admin-only upload (max 2 MB, images only)
+    match /sponsor-logos/{allPaths=**} {
+      allow read:   if true;
+      allow create: if request.auth != null &&
+                      firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
+                      request.resource.size < 2 * 1024 * 1024 &&
+                      request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null &&
+                      firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+
   }
 }
