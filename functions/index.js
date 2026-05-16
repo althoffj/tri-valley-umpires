@@ -2592,6 +2592,94 @@ exports.onPracticeRequest = onDocumentWritten("practiceRequests/{requestId}", as
   await Promise.allSettled(urls.map(url => postSlack(url, msg)));
 });
 
+// ── Call-up request notifications ────────────────────────────────────────────
+// • New request  → email home coach, Slack admin channel
+// • Status change (approved / declined) → email requesting coach
+
+exports.onCallupRequest = onDocumentWritten(
+  { document: "callupRequests/{requestId}", secrets: [GMAIL_USER, GMAIL_PASS] },
+  async (event) => {
+    if (!event.data.after.exists) return;          // deletion — ignore
+    const before = event.data.before.exists ? event.data.before.data() : null;
+    const r      = event.data.after.data();
+    const db     = getFirestore();
+    const APP_URL = "https://tri-valley-baseball-umpires.web.app";
+
+    // ── New request → notify home coach ──────────────────────────────────────
+    if (!before && r.status === "pending") {
+      const homeEmail = r.homeCoachEmail;
+      if (homeEmail) {
+        const transport = buildTransport();
+        const dateLine  = r.gameDate ? ` for ${r.gameDate}` : "";
+        const subject   = `Call-Up Request: ${r.playerFirstName} ${r.playerLastName}${dateLine}`;
+        const text = [
+          `Hi ${r.homeCoachName || "Coach"},`,
+          ``,
+          `${r.requestingCoachName || "A coach"} from ${r.requestingTeamName} is requesting to call up`,
+          `${r.playerFirstName} ${r.playerLastName}${r.playerNumber ? ` (#${r.playerNumber})` : ""}${r.playerPosition ? `, ${r.playerPosition}` : ""} from your roster.`,
+          ``,
+          r.gameDate  ? `Game / Event Date: ${r.gameDate}` : "",
+          r.reason    ? `Reason: ${r.reason}` : "",
+          ``,
+          `Please log in to the Coach Portal to approve or decline this request:`,
+          `${APP_URL}/coach-callup.html`,
+          ``,
+          `— Tri-Valley Baseball`,
+        ].filter(l => l !== null).join("\n");
+        await transport.sendMail({
+          from:    `"Tri-Valley Baseball" <${GMAIL_USER.value()}>`,
+          to:      homeEmail,
+          subject,
+          text,
+        }).catch(err => console.error("callup email to home coach failed:", err.message));
+      }
+
+      // Slack admin notification
+      const config = await loadWebhookConfig(db).catch(() => null);
+      if (config) {
+        const urls = getTargetWebhooks(config, "callupRequests");
+        if (urls.length) {
+          const datePart = r.gameDate ? ` · ${r.gameDate}` : "";
+          const msg = `⬆️ *Call-Up Request* — ${r.requestingCoachName || r.requestingTeamName} wants to call up ` +
+            `*${r.playerFirstName} ${r.playerLastName}* from ${r.homeTeamName}${datePart}\n` +
+            `Reason: ${r.reason || "—"}\n` +
+            `Review: ${APP_URL}/admin-callup.html`;
+          await Promise.allSettled(urls.map(url => postSlack(url, msg)));
+        }
+      }
+      return;
+    }
+
+    // ── Status change → notify requesting coach ───────────────────────────────
+    if (before && before.status === "pending" &&
+        (r.status === "approved" || r.status === "declined")) {
+      const toEmail = r.requestingCoachEmail;
+      if (!toEmail) return;
+      const transport = buildTransport();
+      const approved  = r.status === "approved";
+      const subject   = `Call-Up ${approved ? "Approved" : "Declined"}: ${r.playerFirstName} ${r.playerLastName}`;
+      const text = [
+        `Hi ${r.requestingCoachName || "Coach"},`,
+        ``,
+        `${r.homeCoachName || "The home coach"} has ${approved ? "approved" : "declined"} your request to call up`,
+        `${r.playerFirstName} ${r.playerLastName}${r.playerNumber ? ` (#${r.playerNumber})` : ""} from ${r.homeTeamName}.`,
+        ``,
+        r.responseNote ? `Their note: "${r.responseNote}"` : "",
+        ``,
+        `View your requests: ${APP_URL}/coach-callup.html`,
+        ``,
+        `— Tri-Valley Baseball`,
+      ].filter(l => l !== null).join("\n");
+      await transport.sendMail({
+        from:    `"Tri-Valley Baseball" <${GMAIL_USER.value()}>`,
+        to:      toEmail,
+        subject,
+        text,
+      }).catch(err => console.error("callup email to requesting coach failed:", err.message));
+    }
+  }
+);
+
 // ── fetchOrgIcs ───────────────────────────────────────────────────────────────
 // Fetches the org-level field use calendar (stored in config/orgSettings.fieldCalendarUrl),
 // parses future events, auto-detects which facility each event belongs to by matching
