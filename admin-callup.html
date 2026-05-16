@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Admin: Call-Up Requests - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=16" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+  <style>
+    .acu-status-pill {
+      display:inline-block;border-radius:4px;padding:2px 8px;font-size:0.75rem;font-weight:700
+    }
+    .acu-status-pill.pending  { background:#2a2a12;color:#fde68a;border:1px solid #7a6a00 }
+    .acu-status-pill.approved { background:#1a2a1a;color:#86efac;border:1px solid #2a5a3a }
+    .acu-status-pill.declined { background:#2a1a1a;color:#ffb4b4;border:1px solid #7a2a2a }
+    .acu-status-pill.withdrawn{ background:#222;color:#888;border:1px solid #444 }
+    .acu-table { width:100%;border-collapse:collapse;font-size:0.87rem }
+    .acu-table th { text-align:left;padding:8px 10px;border-bottom:2px solid #333;
+                    color:var(--light-text);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em }
+    .acu-table td { padding:9px 10px;border-bottom:1px solid #222;vertical-align:top }
+    .acu-table tr:hover td { background:rgba(255,255,255,0.02) }
+    .acu-filters { display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:center }
+    .acu-filter-sel { padding:7px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.88rem }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <div class="container" id="adminContent" style="display:none">
+    <nav class="admin-subnav">
+      <a href="admin.html">Overview</a>
+      <a href="admin-games.html">Games</a>
+      <a href="admin-scheduler.html">Scheduler</a>
+      <a href="admin-teams.html">Teams</a>
+      <a href="admin-tournament.html">Tournaments</a>
+      <a href="admin-payroll.html">Payroll</a>
+      <a href="admin-facilities.html">Facilities</a>
+      <a href="admin-sponsors.html">Sponsors</a>
+      <a href="admin-callup.html" class="admin-subnav-active">Call-Ups</a>
+      <a href="admin-incidents.html">Incidents</a>
+      <a href="admin-alerts.html">Alerts</a>
+      <a href="admin-config.html">Config</a>
+      <a href="admin-analytics.html">Analytics</a>
+      <a href="admin-users.html">Users</a>
+    </nav>
+
+    <h2 style="margin-bottom:4px">Player Call-Up Requests</h2>
+    <div class="document-note" style="margin-bottom:16px">
+      <p style="margin:0">Full log of all coach-to-coach player call-up requests. Admins can approve or decline on behalf of the home coach if needed.</p>
+    </div>
+
+    <div class="acu-filters">
+      <select class="acu-filter-sel" id="acuFilterStatus">
+        <option value="">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="declined">Declined</option>
+        <option value="withdrawn">Withdrawn</option>
+      </select>
+      <select class="acu-filter-sel" id="acuFilterTeam">
+        <option value="">All teams</option>
+      </select>
+      <span id="acuCount" style="font-size:0.85rem;color:var(--light-text);margin-left:4px"></span>
+    </div>
+
+    <div style="overflow-x:auto">
+      <table class="acu-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>From Team</th>
+            <th>To Team</th>
+            <th>Game Date</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Requested</th>
+            <th style="width:100px"></th>
+          </tr>
+        </thead>
+        <tbody id="acuTableBody">
+          <tr><td colspan="8" style="color:var(--light-text);text-align:center;padding:24px">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <!-- Respond modal -->
+  <div id="acuRespondOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#1a1a1a;border:1px solid #444;border-radius:10px;padding:24px;max-width:440px;width:100%">
+      <h3 style="margin:0 0 12px">Override Decision</h3>
+      <div id="acuRespondInfo" style="padding:10px;background:rgba(255,255,255,0.04);border-radius:6px;margin-bottom:14px;font-size:0.9rem"></div>
+      <input type="hidden" id="acuRespondId" />
+      <div class="form-group" style="margin-bottom:14px">
+        <label for="acuRespondNote">Admin Note (optional)</label>
+        <textarea id="acuRespondNote" rows="2"
+          style="width:100%;padding:9px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
+      </div>
+      <div class="page-actions" style="margin:0">
+        <button type="button" class="btn" id="acuApproveBtn" style="background:#1a5a2a;border-color:#2a7a3a">✓ Approve</button>
+        <button type="button" class="btn" id="acuDeclineBtn" style="background:#5a1a1a;border-color:#7a2a2a">✗ Decline</button>
+        <button type="button" class="btn print-btn" id="acuRespondCancelBtn">Cancel</button>
+      </div>
+      <p id="acuRespondMsg" class="signup-message" style="margin-top:8px"></p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | <span data-org-text="coordinatorName">Jeff Althoff</span>: <span data-org-text="coordinatorPhone">605-380-0229</span>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=19"></script>
+  <script type="module" src="admin-callup.js?v=1"></script>
+  <script type="module" src="/pwa.js?v=1"></script>
+  <script type="module" src="/tabs.js?v=5"></script>
+  <script type="module" src="nav.js?v=3"></script>
+</body>
+</html>

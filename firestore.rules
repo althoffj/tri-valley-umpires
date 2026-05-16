@@ -15,6 +15,12 @@ service cloud.firestore {
       return isSignedIn() && d.approved == true && d.get('active', true) != false;
     }
 
+    function isApprovedCoach() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/coaches/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/coaches/$(request.auth.uid)).data.approved == true;
+    }
+
     function isSuperAdmin() {
       let d = get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
       // Accept superAdmin:true OR roles:[] — the latter covers accounts created before the
@@ -155,9 +161,28 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    // Player rosters: keyed by team stable ID; admin-only
+    // Player rosters: keyed by team stable ID; admins and approved coaches can read
     match /rosters/{teamId} {
-      allow read, write: if isAdmin();
+      allow read:  if isAdmin() || isApprovedCoach();
+      allow write: if isAdmin();
+    }
+
+    // Player call-up requests: coach-to-coach workflow
+    match /callupRequests/{requestId} {
+      // Any approved coach or admin can create a request
+      allow create: if isApprovedCoach() || isAdmin();
+      // Requesting coach, home coach, or admin can read
+      allow read: if isAdmin() ||
+        (isSignedIn() && (
+          resource.data.requestingCoachId == request.auth.uid ||
+          resource.data.homeCoachId == request.auth.uid
+        ));
+      // Home coach can approve/decline; requesting coach can withdraw (pending only)
+      allow update: if isAdmin() ||
+        (isSignedIn() && resource.data.homeCoachId == request.auth.uid) ||
+        (isSignedIn() && resource.data.requestingCoachId == request.auth.uid &&
+         resource.data.status == "pending" && request.resource.data.status == "withdrawn");
+      allow delete: if isAdmin();
     }
 
     // Sponsors: admin-only (amounts and contact info are internal)

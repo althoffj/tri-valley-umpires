@@ -15,6 +15,7 @@ const section = (() => {
   if (["incident.html"].includes(page)) return "reports";
   if (["expectations.html", "principles_of_umpiring.html", "rule_breakdown.html",
        "pregame-meeting.html", "training.html"].includes(page)) return "training";
+  if (["coach-portal.html", "coach-callup.html"].includes(page)) return "coach";
   if (["form.html", "coach-form.html"].includes(page)) return "join";
   if (["request-umpire.html", "practice-request.html"].includes(page)) return "request";
   if (page.startsWith("admin")) return "admin";
@@ -102,7 +103,10 @@ function adminNav() {
 function coachNav() {
   return `
     ${navLink("index.html",        "Home")}
-    ${navLink("coach-portal.html", "Coach Portal")}
+    ${navTrigger("coach", "Coach",
+      navLink("coach-portal.html", "Coach Portal") +
+      navLink("coach-callup.html", "Player Call-Ups")
+    )}
     ${fieldsDropdown()}
     ${navLink("incident.html",     "Incident Report")}
     ${trainingDropdown()}
