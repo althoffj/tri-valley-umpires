@@ -1,6 +1,6 @@
 // coach-callup.js — Player call-up portal for coaches
 import { db }                           from "./firebase.js";
-import { authReadyPromise }             from "./auth.js";
+import { authReadyPromise, getCurrentUser } from "./auth.js";
 import { esc }                          from "./utils.js";
 
 import {
@@ -232,17 +232,27 @@ function openRequestModal(playerId, teamId) {
 
   pendingRequest = { player, team };
 
-  const myTeam = myTeams[0]; // Use primary team for display
   document.getElementById("cuModalPlayerInfo").innerHTML = `
-    <div style="margin-bottom:8px">
+    <div style="margin-bottom:6px">
       <strong>${esc(player.firstName)} ${esc(player.lastName)}</strong>
       ${player.number ? `<span style="color:var(--light-text);margin-left:6px">#${esc(player.number)}</span>` : ""}
       ${player.position ? `<span style="color:var(--light-text);margin-left:6px">${esc(player.position)}</span>` : ""}
     </div>
     <div style="font-size:0.85rem;color:var(--light-text)">
       From: <strong style="color:var(--text)">${esc(team.name)}</strong> (${esc(team.division)})
-      &nbsp;→&nbsp; To: <strong style="color:var(--text)">${esc(myTeam?.name || "your team")}</strong>
     </div>`;
+
+  // Show team selector only when coach coaches multiple teams
+  const teamGroup = document.getElementById("cuReqTeamGroup");
+  const teamSel   = document.getElementById("cuReqTeamSel");
+  if (myTeams.length > 1) {
+    teamSel.innerHTML = myTeams.map(t =>
+      `<option value="${esc(t.id)}">${esc(t.name)} (${esc(t.division)})</option>`
+    ).join("");
+    teamGroup.style.display = "";
+  } else {
+    teamGroup.style.display = "none";
+  }
 
   document.getElementById("cuReqReason").value = "";
   document.getElementById("cuReqDate").value = "";
@@ -276,7 +286,11 @@ document.getElementById("cuModalSubmitBtn").addEventListener("click", async () =
   msgEl.className   = "signup-message info";
 
   const { player, team: homeTeam } = pendingRequest;
-  const myTeam = myTeams[0];
+  // Resolve requesting team — use selector when coaching multiple teams
+  const selTeamId = document.getElementById("cuReqTeamSel").value;
+  const myTeam = (myTeams.length > 1 && selTeamId)
+    ? myTeams.find(t => t.id === selTeamId) || myTeams[0]
+    : myTeams[0];
   try {
     await addDoc(collection(db, "callupRequests"), {
       requestingCoachId:   currentUid,
@@ -473,7 +487,8 @@ document.getElementById("cuDeclineBtn").addEventListener("click", () => respondT
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-authReadyPromise.then(user => {
+authReadyPromise.then(() => {
+  const user = getCurrentUser();
   if (!user) {
     document.getElementById("cuContent").style.display = "none";
     document.getElementById("cuNoAccess").style.display = "";
