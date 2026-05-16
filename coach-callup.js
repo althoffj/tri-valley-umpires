@@ -81,10 +81,17 @@ async function loadAll() {
   const myDivIndices = myTeams.map(t => divIdx(t.division));
   const maxMyDiv = Math.max(...myDivIndices);
 
-  eligibleTeams = allTeams.filter(t =>
-    !myTeams.some(m => m.id === t.id) &&      // exclude my own team(s)
-    divIdx(t.division) <= maxMyDiv            // same division or younger
-  );
+  eligibleTeams = allTeams.filter(t => {
+    if (myTeams.some(m => m.id === t.id)) return false;         // exclude own team(s)
+    if (divIdx(t.division) > maxMyDiv) return false;             // too old a division
+    // Same division + same league → competitors; call-ups not permitted
+    if (myTeams.some(m =>
+      m.division === t.division &&
+      m.leagueId && t.leagueId &&
+      m.leagueId === t.leagueId
+    )) return false;
+    return true;
+  });
 
   // Build division filter options
   const divs = [...new Set(eligibleTeams.map(t => t.division))]
