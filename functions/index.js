@@ -469,16 +469,20 @@ async function runSync() {
     }
   }
 
-  // Execute all collected writes in parallel
-  {
-    const writeBatch = db.batch();
-    toPracticeAdd.forEach(data => writeBatch.set(db.collection("practices").doc(), data));
-    toGameAdd.forEach(data     => writeBatch.set(db.collection("games").doc(), data));
-    await Promise.all([
-      ...toDelete.map(ref => ref.delete()),
-      ...toGamePatch.map(({ ref, patch }) => ref.update(patch)),
-      ...(toPracticeAdd.length + toGameAdd.length > 0 ? [writeBatch.commit()] : []),
-    ]);
+  // Execute all collected writes: deletes + patches in parallel, sets in chunked batches
+  // (Firestore batch limit is 500 ops — chunking guards against large initial imports)
+  await Promise.all([
+    ...toDelete.map(ref => ref.delete()),
+    ...toGamePatch.map(({ ref, patch }) => ref.update(patch)),
+  ]);
+  const allSets = [
+    ...toPracticeAdd.map(data => ({ col: "practices", data })),
+    ...toGameAdd.map(data     => ({ col: "games",     data })),
+  ];
+  for (let i = 0; i < allSets.length; i += 499) {
+    const b = db.batch();
+    allSets.slice(i, i + 499).forEach(({ col, data }) => b.set(db.collection(col).doc(), data));
+    await b.commit();
   }
 
   // ── Match / monitor city-schedule games against ICS events ───────────────────
@@ -982,16 +986,20 @@ async function runSyncForTeam(team, teamIndex) {
     added++;
   }
 
-  // Execute all collected writes in parallel
-  {
-    const writeBatch = db.batch();
-    toPracticeAdd.forEach(data => writeBatch.set(db.collection("practices").doc(), data));
-    toGameAdd.forEach(data     => writeBatch.set(db.collection("games").doc(), data));
-    await Promise.all([
-      ...toDelete.map(ref => ref.delete()),
-      ...toGamePatch.map(({ ref, patch }) => ref.update(patch)),
-      ...(toPracticeAdd.length + toGameAdd.length > 0 ? [writeBatch.commit()] : []),
-    ]);
+  // Execute all collected writes: deletes + patches in parallel, sets in chunked batches
+  // (Firestore batch limit is 500 ops — chunking guards against large initial imports)
+  await Promise.all([
+    ...toDelete.map(ref => ref.delete()),
+    ...toGamePatch.map(({ ref, patch }) => ref.update(patch)),
+  ]);
+  const allSets = [
+    ...toPracticeAdd.map(data => ({ col: "practices", data })),
+    ...toGameAdd.map(data     => ({ col: "games",     data })),
+  ];
+  for (let i = 0; i < allSets.length; i += 499) {
+    const b = db.batch();
+    allSets.slice(i, i + 499).forEach(({ col, data }) => b.set(db.collection(col).doc(), data));
+    await b.commit();
   }
 
   // ── City-schedule matching — build one merged update per game, then parallel-write ──

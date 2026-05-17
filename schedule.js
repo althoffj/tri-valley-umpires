@@ -980,7 +980,8 @@ async function claimSlot(gameId, slotType) {
       updatedSlots = slots.map((s, i) =>
         i === slotIdx ? { ...s, assignedUid: user.uid, assignedName: profile.name } : s
       );
-      tx.update(gameRef, { umpireSlots: updatedSlots });
+      const allFilled = updatedSlots.every(s => s.assignedUid);
+      tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires: !allFilled });
     });
 
     const g = games.find(g => g.id === gameId);

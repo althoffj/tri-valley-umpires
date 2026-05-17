@@ -109,6 +109,9 @@ export function getLoggedInName() {
 
 export async function login(email, password) {
   const credential = await signInWithEmailAndPassword(auth, email, password);
+  // Set flag before the Promise.all so onAuthStateChanged (which fires immediately
+  // after sign-in) sees it and skips its own redundant fetch
+  _skipAuthFetch = true;
   const [umpireSnap, adminSnap, coachSnap] = await Promise.all([
     getDoc(doc(db, "umpires", credential.user.uid)),
     getDoc(doc(db, "admins", credential.user.uid)),
@@ -120,30 +123,28 @@ export async function login(email, password) {
     currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
     currentIsAdmin  = true;
     currentAdminDoc = adminSnap.data();
-    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
 
   // Check umpire profile
   if (umpireSnap.exists()) {
     const profile = umpireSnap.data();
-    if (profile.approved === false) { await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
-    if (profile.active === false)   { await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
+    if (profile.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
+    if (profile.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
     currentProfile = profile;
-    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
 
   // Check coach profile
   if (coachSnap.exists()) {
     const coach = coachSnap.data();
-    if (coach.approved === false) { await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
-    if (coach.active === false)   { await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
+    if (coach.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
+    if (coach.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
     currentCoachDoc = coach;
-    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
 
+  _skipAuthFetch = false;
   await signOut(auth);
   throw new Error("Account profile not found. Please contact the league administrator.");
 }
@@ -156,6 +157,8 @@ export async function googleSignIn() {
   const provider = new GoogleAuthProvider();
   const credential = await signInWithPopup(auth, provider);
   const user = credential.user;
+  // Set flag before the Promise.all so onAuthStateChanged sees it immediately
+  _skipAuthFetch = true;
 
   const [umpireSnap, adminSnap, coachSnap] = await Promise.all([
     getDoc(doc(db, "umpires", user.uid)),
@@ -168,29 +171,29 @@ export async function googleSignIn() {
     currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
     currentIsAdmin  = true;
     currentAdminDoc = adminSnap.data();
-    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
 
   // Has umpire profile
   if (umpireSnap.exists()) {
     const profile = umpireSnap.data();
-    if (profile.approved === false) { await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
-    if (profile.active === false)   { await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
+    if (profile.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
+    if (profile.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
     currentProfile = profile;
-    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
 
   // Has coach profile
   if (coachSnap.exists()) {
     const coach = coachSnap.data();
-    if (coach.approved === false) { await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
-    if (coach.active === false)   { await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
+    if (coach.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
+    if (coach.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
     currentCoachDoc = coach;
-    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
+
+  // No profile — new user navigating to registration; clear flag (no profiles to skip)
+  _skipAuthFetch = false;
 
   // No profile at all — new user, hand off to coach registration form
   window.location.href = "coach-form.html?google=1";
