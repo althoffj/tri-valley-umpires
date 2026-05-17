@@ -16,6 +16,7 @@
     .acu-status-pill.approved { background:#1a2a1a;color:#86efac;border:1px solid #2a5a3a }
     .acu-status-pill.declined { background:#2a1a1a;color:#ffb4b4;border:1px solid #7a2a2a }
     .acu-status-pill.withdrawn{ background:#222;color:#888;border:1px solid #444 }
+    .acu-admin-badge { display:inline-block;background:#2a1a3a;color:#c4a8f0;border:1px solid #6a3aaa;border-radius:3px;padding:1px 5px;font-size:0.7rem;font-weight:700;vertical-align:middle;margin-left:4px }
     .acu-table { width:100%;border-collapse:collapse;font-size:0.87rem }
     .acu-table th { text-align:left;padding:8px 10px;border-bottom:2px solid #333;
                     color:var(--light-text);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em }
@@ -23,6 +24,8 @@
     .acu-table tr:hover td { background:rgba(255,255,255,0.02) }
     .acu-filters { display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:center }
     .acu-filter-sel { padding:7px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.88rem }
+    .acu-modal-field { width:100%;padding:9px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.95rem;box-sizing:border-box }
+    .acu-modal-field:disabled { opacity:0.5;cursor:not-allowed }
   </style>
 </head>
 <body>
@@ -51,9 +54,12 @@
       <a href="admin-users.html">Users</a>
     </nav>
 
-    <h2 style="margin-bottom:4px">Player Call-Up Requests</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px">
+      <h2 style="margin:0">Player Call-Up Requests</h2>
+      <button type="button" class="btn" id="acuOpenCreateBtn" style="font-size:0.9rem;padding:7px 16px">+ Create Call-Up</button>
+    </div>
     <div class="document-note" style="margin-bottom:16px">
-      <p style="margin:0">Full log of all coach-to-coach player call-up requests. Admins can approve or decline on behalf of the home coach if needed.</p>
+      <p style="margin:0">Full log of all coach-to-coach player call-up requests. Admins can approve or decline on behalf of the home coach, or create a new call-up directly.</p>
     </div>
 
     <div class="acu-filters">
@@ -98,7 +104,60 @@
     </div>
   </div>
 
-  <!-- Respond modal -->
+  <!-- Create Call-Up modal -->
+  <div id="acuCreateOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center;padding:16px;overflow-y:auto">
+    <div style="background:#1a1a1a;border:1px solid #444;border-radius:10px;padding:24px;max-width:500px;width:100%;margin:auto">
+      <h3 style="margin:0 0 4px">Create Call-Up</h3>
+      <p style="margin:0 0 18px;font-size:0.85rem;color:var(--light-text)">Admin-created call-ups are recorded as approved immediately.</p>
+
+      <div class="form-group" style="margin-bottom:14px">
+        <label for="acuCreateHomeTeam">Player's Team *</label>
+        <select id="acuCreateHomeTeam" class="acu-modal-field">
+          <option value="">— Select team —</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px">
+        <label for="acuCreatePlayer">Player *</label>
+        <select id="acuCreatePlayer" class="acu-modal-field" disabled>
+          <option value="">— Select a team first —</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px">
+        <label for="acuCreateReqTeam">Calling-Up Team *</label>
+        <select id="acuCreateReqTeam" class="acu-modal-field">
+          <option value="">— Select team —</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px">
+        <label for="acuCreateDate">Game Date (optional)</label>
+        <input type="date" id="acuCreateDate" class="acu-modal-field" />
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px">
+        <label for="acuCreateReason">Reason *</label>
+        <textarea id="acuCreateReason" rows="2" class="acu-modal-field"
+          style="font-family:inherit;resize:vertical"></textarea>
+      </div>
+
+      <div class="form-group" style="margin-bottom:18px">
+        <label for="acuCreateNote">Admin Note (optional)</label>
+        <input type="text" id="acuCreateNote" class="acu-modal-field"
+          placeholder="Appended to record for reference" />
+      </div>
+
+      <div class="page-actions" style="margin:0">
+        <button type="button" class="btn" id="acuCreateSubmitBtn"
+          style="background:#1a5a2a;border-color:#2a7a3a">✓ Create &amp; Approve</button>
+        <button type="button" class="btn print-btn" id="acuCreateCancelBtn">Cancel</button>
+      </div>
+      <p id="acuCreateMsg" class="signup-message" style="margin-top:10px" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <!-- Override / respond modal -->
   <div id="acuRespondOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center;padding:16px">
     <div style="background:#1a1a1a;border:1px solid #444;border-radius:10px;padding:24px;max-width:440px;width:100%">
       <h3 style="margin:0 0 12px">Override Decision</h3>
@@ -126,7 +185,7 @@
   </div>
 
   <script type="module" src="auth.js?v=23"></script>
-  <script type="module" src="admin-callup.js?v=1"></script>
+  <script type="module" src="admin-callup.js?v=2"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=3"></script>
