@@ -365,10 +365,22 @@ async function runSync() {
   const eventsByDivDate = {}; // "DIVISION|DATE" → [{uid, teamName, location}]
   let added = 0, corrected = 0, failed = 0;
 
-  for (const team of teams) {
-    let icsText;
-    try { icsText = await fetchICS(team.icsUrl); }
-    catch (err) { console.error(`Failed: ${team.name}: ${err.message}`); failed++; continue; }
+  // Pre-fetch all ICS feeds in parallel — avoids N serial network round-trips
+  const icsResults = await Promise.allSettled(teams.map(t => fetchICS(t.icsUrl)));
+
+  // Collect all Firestore writes during event processing, then execute in parallel
+  const toDelete      = []; // document refs to delete
+  const toPracticeAdd = []; // plain objects to batch-add to practices
+  const toGamePatch   = []; // { ref, patch } to update in parallel
+  const toGameAdd     = []; // plain objects to batch-add to games
+
+  for (let ti = 0; ti < teams.length; ti++) {
+    const team = teams[ti];
+    const icsResult = icsResults[ti];
+    if (icsResult.status === "rejected") {
+      console.error(`Failed: ${team.name}: ${icsResult.reason?.message}`); failed++; continue;
+    }
+    const icsText = icsResult.value;
 
     const division = inferDivision(team.name);
 
@@ -383,13 +395,13 @@ async function runSync() {
             d.data().externalId === ev.uid && d.data().needsUmpires === false
           );
           if (staleDoc) {
-            await staleDoc.ref.delete();
+            toDelete.push(staleDoc.ref);
             existingExtIds.delete(ev.uid);
-            console.log(`Deleted stale game entry for practice externalId: ${ev.uid}`);
+            console.log(`Will delete stale game entry for practice externalId: ${ev.uid}`);
           }
         }
         if (!existingPracticeExtIds.has(ev.uid)) {
-          await db.collection("practices").add({
+          toPracticeAdd.push({
             teamName:   team.name,
             date:       ev.date,
             startTime:  ev.time || "",
@@ -428,15 +440,15 @@ async function runSync() {
           if (eData.homeTeam !== ev.homeTeam)        patch.homeTeam = ev.homeTeam;
           if (eData.awayTeam !== ev.awayTeam)        patch.awayTeam = ev.awayTeam;
           if (Object.keys(patch).length) {
-            await existingDoc.ref.update(patch);
+            toGamePatch.push({ ref: existingDoc.ref, patch });
             corrected++;
           }
         }
         continue;
       }
 
-      // Save as reference game if not already stored
-      await db.collection("games").add({
+      // Queue new reference game
+      toGameAdd.push({
         teamName:     team.name,
         division,
         date:         ev.date,
@@ -457,49 +469,66 @@ async function runSync() {
     }
   }
 
+  // Execute all collected writes in parallel
+  {
+    const writeBatch = db.batch();
+    toPracticeAdd.forEach(data => writeBatch.set(db.collection("practices").doc(), data));
+    toGameAdd.forEach(data     => writeBatch.set(db.collection("games").doc(), data));
+    await Promise.all([
+      ...toDelete.map(ref => ref.delete()),
+      ...toGamePatch.map(({ ref, patch }) => ref.update(patch)),
+      ...(toPracticeAdd.length + toGameAdd.length > 0 ? [writeBatch.commit()] : []),
+    ]);
+  }
+
   // ── Match / monitor city-schedule games against ICS events ───────────────────
   let linked = 0, flagged = 0;
 
+  // Build one merged update per city-schedule game, then execute all in parallel
+  const cityUpdates = []; // { ref, update }
   for (const game of cityGames) {
     if (game.date < today || game.cancelled) continue;
     const key     = `${game.division}|${game.date}`;
     const matches = eventsByDivDate[key] || [];
+    const gameUpdate = {};
 
     if (!game.icsLinks || game.icsLinks.length === 0) {
       if (matches.length > 0) {
-        const update = { icsLinks: matches.map(e => ({ uid: e.uid, teamName: e.teamName })) };
+        gameUpdate.icsLinks = matches.map(e => ({ uid: e.uid, teamName: e.teamName }));
         // Copy team names and away flag from first matching ICS event if not already set
         const first = matches[0];
-        if (!game.homeTeam && first.homeTeam) update.homeTeam = first.homeTeam;
-        if (!game.awayTeam && first.awayTeam) update.awayTeam = first.awayTeam;
-        if (first.isAway !== undefined && (game.isAway || false) !== first.isAway) update.isAway = first.isAway;
-        await game.ref.update(update);
+        if (!game.homeTeam && first.homeTeam) gameUpdate.homeTeam = first.homeTeam;
+        if (!game.awayTeam && first.awayTeam) gameUpdate.awayTeam = first.awayTeam;
+        if (first.isAway !== undefined && (game.isAway || false) !== first.isAway) gameUpdate.isAway = first.isAway;
         linked++;
       }
     } else {
       const liveUids = new Set(matches.map(e => e.uid));
       const missing  = game.icsLinks.filter(l => !liveUids.has(l.uid));
       if (missing.length > 0 && !game.possibleChange) {
-        await game.ref.update({ possibleChange: true }); flagged++;
+        gameUpdate.possibleChange = true; flagged++;
       } else if (missing.length === 0 && game.possibleChange) {
-        await game.ref.update({ possibleChange: false });
+        gameUpdate.possibleChange = false;
       }
       // Pick up team names, location, and away flag if GameChanger fills them in later
       const locatedMatch = matches.find(e =>
         /crooks,\s*sd/i.test(e.location) || /colton,\s*sd/i.test(e.location)
       );
-      const teamUpdate = {};
-      if (locatedMatch) teamUpdate.field = locatedMatch.location;
+      if (locatedMatch) gameUpdate.field = locatedMatch.location;
       const namedMatch = matches.find(e => e.homeTeam);
       if (namedMatch && !game.homeTeam) {
-        teamUpdate.homeTeam = namedMatch.homeTeam;
-        teamUpdate.awayTeam = namedMatch.awayTeam;
+        gameUpdate.homeTeam = namedMatch.homeTeam;
+        gameUpdate.awayTeam = namedMatch.awayTeam;
       }
       // Always sync isAway from the ICS match (away status can change if schedule changes)
       const awayMatch = matches.find(e => e.isAway !== undefined);
-      if (awayMatch && (game.isAway || false) !== awayMatch.isAway) teamUpdate.isAway = awayMatch.isAway;
-      if (Object.keys(teamUpdate).length) await game.ref.update(teamUpdate);
+      if (awayMatch && (game.isAway || false) !== awayMatch.isAway) gameUpdate.isAway = awayMatch.isAway;
     }
+
+    if (Object.keys(gameUpdate).length) cityUpdates.push({ ref: game.ref, update: gameUpdate });
+  }
+  if (cityUpdates.length > 0) {
+    await Promise.all(cityUpdates.map(({ ref, update }) => ref.update(update)));
   }
 
   await db.doc("config/syncState").set(
@@ -797,29 +826,42 @@ exports.importCitySchedule = onCall(
       ? rates.defaultSlotTypes
       : ["Plate", "Field"];
 
+    // Build all externalIds upfront
+    const cityEntries = CITY_SCHEDULE.map(g => ({
+      ...g,
+      externalId: `city-2026-${g.city.replace(/\s+/g,"").toLowerCase()}-${g.division}-${g.date}-${g.field.replace(/\s+/g,"")}`
+    }));
+
+    // Fetch all existing city-schedule games in one query (instead of N per-game queries)
+    const existingSnap = await db.collection("games")
+      .where("source", "==", "city-schedule").get();
+    const existingExtIds = new Set(existingSnap.docs.map(d => d.data().externalId).filter(Boolean));
+
+    // Batch-write all new games
     let added = 0, skipped = 0;
-    for (const g of CITY_SCHEDULE) {
-      const externalId = `city-2026-${g.city.replace(/\s+/g,"").toLowerCase()}-${g.division}-${g.date}-${g.field.replace(/\s+/g,"")}`;
-      const existing = await db.collection("games").where("externalId", "==", externalId).limit(1).get();
-      if (!existing.empty) { skipped++; continue; }
-      await db.collection("games").add({
-        city:         g.city,
-        division:     g.division,
-        date:         g.date,
-        time:         g.time,
+    const batch = db.batch();
+    for (const entry of cityEntries) {
+      if (existingExtIds.has(entry.externalId)) { skipped++; continue; }
+      const newRef = db.collection("games").doc();
+      batch.set(newRef, {
+        city:         entry.city,
+        division:     entry.division,
+        date:         entry.date,
+        time:         entry.time,
         type:         "Regular",
-        field:        g.field,
+        field:        entry.field,
         needsUmpires: true,
         umpireSlots:  defaultSlotTypes.map(t => ({
           type: t, assignedUid: null, assignedName: null, payRate: rateMap[t] || 0
         })),
         cancelled:  false,
-        externalId,
+        externalId: entry.externalId,
         source:     "city-schedule",
         createdAt:  FieldValue.serverTimestamp()
       });
       added++;
     }
+    if (added > 0) await batch.commit();
     return { added, skipped };
   }
 );
@@ -829,9 +871,15 @@ exports.importCitySchedule = onCall(
 async function runSyncForTeam(team, teamIndex) {
   const db = getFirestore();
 
-  const gamesSnap      = await db.collection("games").get();
-  const practicesSnap  = await db.collection("practices").get();
-  const existingExtIds = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
+  // Fetch games + practices + ICS feed in parallel
+  const [[gamesSnap, practicesSnap], icsText] = await Promise.all([
+    Promise.all([db.collection("games").get(), db.collection("practices").get()]),
+    fetchICS(team.icsUrl).catch(err => {
+      throw new Error(`Failed to fetch ICS for ${team.name}: ${err.message}`);
+    }),
+  ]);
+
+  const existingExtIds         = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
   const existingPracticeExtIds = new Set(practicesSnap.docs.map(d => d.data().externalId).filter(Boolean));
   const linkedUids     = new Set();
   const cityGames      = [];
@@ -844,10 +892,6 @@ async function runSyncForTeam(team, teamIndex) {
   }
 
   const division = inferDivision(team.name);
-  let icsText;
-  try { icsText = await fetchICS(team.icsUrl); }
-  catch (err) { throw new Error(`Failed to fetch ICS for ${team.name}: ${err.message}`); }
-
   const events = parseVEvents(icsText);
   const eventsByDivDate = {};
   const extIdToDoc = {};
@@ -857,6 +901,12 @@ async function runSyncForTeam(team, teamIndex) {
   }
   const today = todayISO();
   let added = 0, corrected = 0;
+
+  // Collect writes during event processing, then execute in parallel
+  const toDelete      = [];
+  const toPracticeAdd = [];
+  const toGamePatch   = [];
+  const toGameAdd     = [];
 
   for (const ev of events) {
     if (!ev.uid) continue;
@@ -869,13 +919,13 @@ async function runSyncForTeam(team, teamIndex) {
           d.data().externalId === ev.uid && d.data().needsUmpires === false
         );
         if (staleDoc) {
-          await staleDoc.ref.delete();
+          toDelete.push(staleDoc.ref);
           existingExtIds.delete(ev.uid);
-          console.log(`Deleted stale game entry for practice externalId: ${ev.uid}`);
+          console.log(`Will delete stale game entry for practice externalId: ${ev.uid}`);
         }
       }
       if (!existingPracticeExtIds.has(ev.uid)) {
-        await db.collection("practices").add({
+        toPracticeAdd.push({
           teamName:   team.name,
           date:       ev.date,
           startTime:  ev.time || "",
@@ -913,13 +963,14 @@ async function runSyncForTeam(team, teamIndex) {
         if (eData.homeTeam !== ev.homeTeam)        patch.homeTeam = ev.homeTeam;
         if (eData.awayTeam !== ev.awayTeam)        patch.awayTeam = ev.awayTeam;
         if (Object.keys(patch).length) {
-          await existingDoc.ref.update(patch);
+          toGamePatch.push({ ref: existingDoc.ref, patch });
           corrected++;
         }
       }
       continue;
     }
-    await db.collection("games").add({
+
+    toGameAdd.push({
       teamName: team.name, division,
       date: ev.date, time: ev.time, location: ev.location,
       homeTeam: ev.homeTeam, awayTeam: ev.awayTeam, isAway: ev.isAway || false,
@@ -931,32 +982,51 @@ async function runSyncForTeam(team, teamIndex) {
     added++;
   }
 
+  // Execute all collected writes in parallel
+  {
+    const writeBatch = db.batch();
+    toPracticeAdd.forEach(data => writeBatch.set(db.collection("practices").doc(), data));
+    toGameAdd.forEach(data     => writeBatch.set(db.collection("games").doc(), data));
+    await Promise.all([
+      ...toDelete.map(ref => ref.delete()),
+      ...toGamePatch.map(({ ref, patch }) => ref.update(patch)),
+      ...(toPracticeAdd.length + toGameAdd.length > 0 ? [writeBatch.commit()] : []),
+    ]);
+  }
+
+  // ── City-schedule matching — build one merged update per game, then parallel-write ──
   let linked = 0, flagged = 0;
+  const cityUpdates = [];
   for (const game of cityGames) {
     if (game.division !== division) continue;
     if (game.date < today || game.cancelled) continue;
     const key     = `${division}|${game.date}`;
     const matches = eventsByDivDate[key] || [];
+    const gameUpdate = {};
+
     if (!game.icsLinks || game.icsLinks.length === 0) {
       if (matches.length > 0) {
-        const update = { icsLinks: matches.map(e => ({ uid: e.uid, teamName: e.teamName })) };
-        const first  = matches[0];
-        if (!game.homeTeam && first.homeTeam) update.homeTeam = first.homeTeam;
-        if (!game.awayTeam && first.awayTeam) update.awayTeam = first.awayTeam;
-        if (first.isAway !== undefined && (game.isAway || false) !== first.isAway) update.isAway = first.isAway;
-        await game.ref.update(update); linked++;
+        gameUpdate.icsLinks = matches.map(e => ({ uid: e.uid, teamName: e.teamName }));
+        const first = matches[0];
+        if (!game.homeTeam && first.homeTeam) gameUpdate.homeTeam = first.homeTeam;
+        if (!game.awayTeam && first.awayTeam) gameUpdate.awayTeam = first.awayTeam;
+        if (first.isAway !== undefined && (game.isAway || false) !== first.isAway) gameUpdate.isAway = first.isAway;
+        linked++;
       }
     } else {
       const liveUids = new Set(matches.map(e => e.uid));
       const missing  = game.icsLinks.filter(l => !liveUids.has(l.uid));
-      if (missing.length > 0 && !game.possibleChange) { await game.ref.update({ possibleChange: true }); flagged++; }
-      else if (missing.length === 0 && game.possibleChange) { await game.ref.update({ possibleChange: false }); }
-      // Always sync isAway from the ICS match
+      if (missing.length > 0 && !game.possibleChange) { gameUpdate.possibleChange = true; flagged++; }
+      else if (missing.length === 0 && game.possibleChange) { gameUpdate.possibleChange = false; }
+      // Always sync isAway from the ICS match (merged into single update)
       const awayMatch = matches.find(e => e.isAway !== undefined);
-      if (awayMatch && (game.isAway || false) !== awayMatch.isAway) {
-        await game.ref.update({ isAway: awayMatch.isAway });
-      }
+      if (awayMatch && (game.isAway || false) !== awayMatch.isAway) gameUpdate.isAway = awayMatch.isAway;
     }
+
+    if (Object.keys(gameUpdate).length) cityUpdates.push({ ref: game.ref, update: gameUpdate });
+  }
+  if (cityUpdates.length > 0) {
+    await Promise.all(cityUpdates.map(({ ref, update }) => ref.update(update)));
   }
 
   return { added, corrected, linked, flagged };
@@ -1213,7 +1283,9 @@ function gameLabel(g) {
 
 // ── Phase 12: onGameWrite trigger ─────────────────────────────────────────────
 
-exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
+exports.onGameWrite = onDocumentWritten(
+  { document: "games/{gameId}", secrets: [GMAIL_USER, GMAIL_PASS] },
+  async event => {
   const before = event.data.before?.data() ?? null;
   const after  = event.data.after?.data()  ?? null;
 
@@ -1250,12 +1322,14 @@ exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
     const afterSlots  = after.umpireSlots  || [];
     const signups  = [];
     const cancels  = [];
+    const newlyAssignedUids = [];
 
     for (let i = 0; i < afterSlots.length; i++) {
       const b = beforeSlots[i] || {};
       const a = afterSlots[i];
       if (!b.assignedUid && a.assignedUid) {
         signups.push(`${a.type}: ${a.assignedName || a.assignedUid}`);
+        newlyAssignedUids.push(a.assignedUid);
       } else if (b.assignedUid && !a.assignedUid) {
         cancels.push(`${b.type}: ${b.assignedName || b.assignedUid}`);
       }
@@ -1282,6 +1356,88 @@ exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
   }
 
   if (sends.length) await Promise.allSettled(sends);
+
+  // ── 3. Direct push to newly assigned umpires ────────────────────────────────
+  let section3TokenSnaps = null; // reused by section 4 to avoid re-fetching
+  if (newlyAssignedUids.length > 0) {
+    try {
+      const tokenSnaps = await Promise.all(
+        newlyAssignedUids.map(uid => db.doc(`notifications/${uid}`).get())
+      );
+      section3TokenSnaps = tokenSnaps; // share with section 4
+      const tokens = tokenSnaps.map(s => s.exists ? s.data()?.token : null).filter(Boolean);
+      if (tokens.length > 0) {
+        const label = gameLabel(after);
+        const result = await getMessaging().sendEachForMulticast({
+          tokens,
+          notification: {
+            title: "⚾ Game Assignment",
+            body: `You've been assigned: ${label}`,
+          },
+          webpush: { fcmOptions: { link: "https://tri-valley-baseball-umpires.web.app/schedule.html" } },
+        });
+        // Prune stale tokens
+        const stale = result.responses.map((r, i) => r.error ? tokens[i] : null).filter(Boolean);
+        if (stale.length > 0) {
+          const batch = db.batch();
+          for (const snap of tokenSnaps) {
+            if (snap.exists && stale.includes(snap.data()?.token)) batch.delete(snap.ref);
+          }
+          await batch.commit();
+        }
+      }
+    } catch (e) {
+      console.error("Assignment push error:", e);
+    }
+  }
+
+  // ── 4. Email fallback for umpires without a push token ──────────────────────
+  if (newlyAssignedUids.length > 0) {
+    try {
+      await Promise.allSettled(newlyAssignedUids.map(async (uid, i) => {
+        // Reuse the token snap already fetched in section 3 — avoid re-reading Firestore
+        const tokenSnap = (section3TokenSnaps && section3TokenSnaps[i]) || null;
+        if (tokenSnap?.exists && tokenSnap.data()?.token) return; // push covered it
+
+        const umpSnap = await db.doc(`umpires/${uid}`).get();
+        if (!umpSnap.exists) return;
+        const ump = umpSnap.data();
+        if (!ump.email) return;
+
+        const label     = gameLabel(after);
+        const slotTypes = (after.umpireSlots ?? [])
+          .filter(s => s.assignedUid === uid)
+          .map(s => s.type)
+          .join(", ") || "Umpire";
+        const APP_URL   = "https://tri-valley-baseball-umpires.web.app";
+
+        const transport = buildTransport();
+        await transport.sendMail({
+          from:    `"Tri-Valley Baseball" <${GMAIL_USER.value()}>`,
+          to:      ump.email,
+          subject: `⚾ Game Assignment — ${fmtDateSlack(after.date)}`,
+          text: [
+            `Hi ${ump.name || "Umpire"},`,
+            ``,
+            `You've been assigned to a game:`,
+            `  Role: ${slotTypes}`,
+            `  ${label}`,
+            ``,
+            `View your schedule: ${APP_URL}/schedule.html`,
+          ].join("\n"),
+          html: `<p>Hi ${ump.name || "Umpire"},</p>
+<p>You've been assigned to a game:</p>
+<table style="border-collapse:collapse;margin:8px 0">
+  <tr><td style="color:#888;padding:2px 12px 2px 0">Role</td><td><strong>${slotTypes}</strong></td></tr>
+  <tr><td style="color:#888;padding:2px 12px 2px 0">Game</td><td>${label}</td></tr>
+</table>
+<p><a href="${APP_URL}/schedule.html" style="background:#601929;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px">View Schedule</a></p>`,
+        });
+      }));
+    } catch (e) {
+      console.error("Assignment email error:", e);
+    }
+  }
 });
 
 // ── Cancellation request notifications ───────────────────────────────────────
@@ -1311,39 +1467,70 @@ exports.onCancellationRequest = onDocumentWritten("cancellationRequests/{request
 // ── Incident report notifications ────────────────────────────────────────────
 
 exports.onIncidentReport = onDocumentWritten("incidentReports/{reportId}", async event => {
-  // Only fire on new documents
-  if (event.data.before?.exists || !event.data.after?.exists) return;
+  const before = event.data.before?.data() ?? null;
+  const after  = event.data.after?.data()  ?? null;
+  if (!after) return;
 
-  const r   = event.data.after.data();
-  const db  = getFirestore();
-  const config = await loadWebhookConfig(db);
-  const targets = getTargetWebhooks(config, "incidentReports");
-  if (!targets.length) return;
+  const db     = getFirestore();
+  const isNew  = !before;
+  const statusChanged = !isNew &&
+    (before.status ?? "open") !== (after.status ?? "open") &&
+    (after.status === "reviewed" || after.status === "closed");
 
-  const gameLabel = [
-    r.gameDate ? fmtDateSlack(r.gameDate) : "",
-    r.gameCity,
-    r.gameDivision
-  ].filter(Boolean).join(" · ");
+  // ── New report → Slack admin notification ─────────────────────────────────
+  if (isNew) {
+    const config  = await loadWebhookConfig(db);
+    const targets = getTargetWebhooks(config, "incidentReports");
+    if (targets.length) {
+      const gLabel = [
+        after.gameDate ? fmtDateSlack(after.gameDate) : "",
+        after.gameCity,
+        after.gameDivision,
+      ].filter(Boolean).join(" · ");
 
-  let details = "";
-  if (r.ejection) {
-    const ej = r.ejection;
-    details = `\nEjected: ${ej.role || "?"}${ej.name ? " — " + ej.name : ""}${ej.team ? " (" + ej.team + ")" : ""}`;
-    if (ej.reason) details += `\nReason: ${ej.reason}`;
-  } else if (r.injury) {
-    const inj = r.injury;
-    details = `\nInjured: ${inj.party || "?"}${inj.name ? " — " + inj.name : ""}`;
-    if (inj.description) details += ` · ${inj.description}`;
-    details += `\nEMS: ${inj.emsCalled || "No"}`;
-  } else if (r.unsafeConditions) {
-    const uc = r.unsafeConditions;
-    details = `\nCondition: ${uc.conditionType || "?"}`;
-    if (uc.gameStatus) details += ` · Game: ${uc.gameStatus}`;
+      let details = "";
+      if (after.ejection) {
+        const ej = after.ejection;
+        details = `\nEjected: ${ej.role || "?"}${ej.name ? " — " + ej.name : ""}${ej.team ? " (" + ej.team + ")" : ""}`;
+        if (ej.reason) details += `\nReason: ${ej.reason}`;
+      } else if (after.injury) {
+        const inj = after.injury;
+        details = `\nInjured: ${inj.party || "?"}${inj.name ? " — " + inj.name : ""}`;
+        if (inj.description) details += ` · ${inj.description}`;
+        details += `\nEMS: ${inj.emsCalled || "No"}`;
+      } else if (after.unsafeConditions) {
+        const uc = after.unsafeConditions;
+        details = `\nCondition: ${uc.conditionType || "?"}`;
+        if (uc.gameStatus) details += ` · Game: ${uc.gameStatus}`;
+      }
+
+      const msg = `🚨 Incident Report — *${after.incidentType || "Incident"}* · ${after.reporterName || after.reportedBy}${gLabel ? " · " + gLabel : ""}${details}\nReview: https://tri-valley-baseball-umpires.web.app/admin-incidents.html`;
+      await Promise.allSettled(targets.map(url => postSlack(url, msg)));
+    }
   }
 
-  const msg = `🚨 Incident Report — *${r.incidentType || "Incident"}* · ${r.reporterName || r.reportedBy}${gameLabel ? " · " + gameLabel : ""}${details}`;
-  await Promise.allSettled(targets.map(url => postSlack(url, msg)));
+  // ── Status change → push notification to reporter ─────────────────────────
+  if (statusChanged && after.reportedBy) {
+    try {
+      const tokenSnap = await db.doc(`notifications/${after.reportedBy}`).get();
+      const token = tokenSnap.exists ? tokenSnap.data()?.token : null;
+      if (token) {
+        const statusLabel = after.status === "reviewed" ? "Reviewed" : "Closed";
+        const noteStr = after.adminNotes ? ` — ${after.adminNotes}` : "";
+        const result = await getMessaging().sendEachForMulticast({
+          tokens: [token],
+          notification: {
+            title: `📋 Report ${statusLabel}`,
+            body: `Your ${after.incidentType || "incident"} report has been ${statusLabel.toLowerCase()}${noteStr}`,
+          },
+          webpush: { fcmOptions: { link: "https://tri-valley-baseball-umpires.web.app/incident.html" } },
+        });
+        if (result.responses[0]?.error) await tokenSnap.ref.delete();
+      }
+    } catch (e) {
+      console.error("Incident status push error:", e);
+    }
+  }
 });
 
 // ── Notify umpires about open slots ──────────────────────────────────────────
@@ -1583,6 +1770,147 @@ exports.sendBroadcastEmail = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PA
   return { sent, failed };
 });
 
+// ── Email pay stub to an individual umpire ───────────────────────────────────
+
+exports.emailPayStub = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PASS] }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db       = getFirestore();
+  const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { uid, fromDate, toDate } = request.data || {};
+  if (!uid) throw new HttpsError("invalid-argument", "uid required.");
+
+  // Fetch umpire profile + config in parallel
+  const [umpSnap, ratesSnap, orgSnap, gamesSnap] = await Promise.all([
+    db.doc(`umpires/${uid}`).get(),
+    db.doc("config/payRates").get(),
+    db.doc("config/orgSettings").get(),
+    db.collection("games").orderBy("date", "asc").get(),
+  ]);
+
+  if (!umpSnap.exists) throw new HttpsError("not-found", "Umpire not found.");
+  const ump = umpSnap.data();
+  if (!ump.email) throw new HttpsError("failed-precondition", "Umpire has no email address on file.");
+
+  const rates = ratesSnap.exists()
+    ? { plate: Number(ratesSnap.data().plate ?? 0), field: Number(ratesSnap.data().field ?? 0), extra: Number(ratesSnap.data().extra ?? 0) }
+    : { plate: 0, field: 0, extra: 0 };
+  const org   = orgSnap.exists() ? orgSnap.data() : {};
+  const brand = org.accentColor || "#601929";
+
+  // Build rows for this umpire, filtered by date range
+  const rows = [];
+  gamesSnap.forEach(d => {
+    const g = { id: d.id, ...d.data() };
+    if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") return;
+    if (fromDate && g.date < fromDate) return;
+    if (toDate   && g.date > toDate)   return;
+    (g.umpireSlots ?? []).forEach(slot => {
+      if (slot.assignedUid !== uid || slot.noShow) return;
+      const configRate = rates[slot.type?.toLowerCase()] ?? 0;
+      const pay = Number(slot.payRate ?? configRate);
+      rows.push({ date: g.date, division: g.division ?? "", city: g.city ?? "", field: g.field ?? "",
+        slotType: slot.type ?? "—", pay, paid: slot.paid === true });
+    });
+  });
+
+  if (!rows.length) throw new HttpsError("not-found", "No payroll rows found for this umpire in the selected period.");
+
+  rows.sort((a, b) => a.date.localeCompare(b.date));
+  const owed    = rows.reduce((s, r) => s + r.pay, 0);
+  const paid    = rows.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
+  const balance = owed - paid;
+  const today   = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+  function fmtMoney(n) { return `$${n.toFixed(2)}`; }
+  function fmtDt(iso) {
+    if (!iso) return "—";
+    const [y, m, d2] = iso.split("-");
+    return `${Number(m)}/${Number(d2)}/${y}`;
+  }
+
+  const periodFrom = fromDate ? fmtDt(fromDate) : "All time";
+  const periodTo   = toDate   ? fmtDt(toDate)   : today;
+  const orgName    = org.assocName || "Tri-Valley Baseball";
+  const coordName  = org.coordinatorName || "";
+  const coordPhone = org.coordinatorPhone || "";
+  const APP_URL    = "https://tri-valley-baseball-umpires.web.app";
+
+  const gameRowsHtml = rows.map(r => `
+    <tr>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee">${fmtDt(r.date)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee">${r.division}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee">${r.city}${r.field ? " · " + r.field : ""}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee">${r.slotType}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${fmtMoney(r.pay)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;color:${r.paid ? "#2a7a3a" : "#b00"}">
+        ${r.paid ? "Paid" : "Unpaid"}
+      </td>
+    </tr>`).join("");
+
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><title>Pay Stub — ${ump.name}</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111;background:#fff;padding:32px 40px;max-width:720px;margin:0 auto">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${brand};padding-bottom:14px;margin-bottom:20px">
+    <div>
+      <div style="font-size:20px;font-weight:700;color:${brand}">${orgName}</div>
+      <div style="font-size:12px;color:#555;margin-top:3px">Umpire Pay Statement</div>
+    </div>
+    <div style="text-align:right;font-size:12px;color:#555">
+      <div>Issued: <strong>${today}</strong></div>
+      <div>Period: ${periodFrom} – ${periodTo}</div>
+    </div>
+  </div>
+  <div style="background:#f9f9f9;border-radius:6px;padding:14px 18px;margin-bottom:20px">
+    <div style="font-size:16px;font-weight:600">${ump.name || ""}</div>
+    ${ump.email ? `<div style="font-size:13px;color:#555">${ump.email}</div>` : ""}
+  </div>
+  <div style="display:flex;gap:16px;margin-bottom:20px">
+    <div style="flex:1;background:#f0f0f0;border-radius:6px;padding:12px 16px;text-align:center">
+      <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.05em">Total Earned</div>
+      <div style="font-size:22px;font-weight:700;margin-top:4px">${fmtMoney(owed)}</div>
+    </div>
+    <div style="flex:1;background:#f0f0f0;border-radius:6px;padding:12px 16px;text-align:center">
+      <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.05em">Total Paid</div>
+      <div style="font-size:22px;font-weight:700;margin-top:4px;color:#2a7a3a">${fmtMoney(paid)}</div>
+    </div>
+    <div style="flex:1;background:${balance > 0 ? "#fff3f3" : "#f0fff4"};border-radius:6px;padding:12px 16px;text-align:center;border:1px solid ${balance > 0 ? "#fca5a5" : "#86efac"}">
+      <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.05em">Balance Due</div>
+      <div style="font-size:22px;font-weight:700;margin-top:4px;color:${balance > 0 ? "#b91c1c" : "#15803d"}">${fmtMoney(balance)}</div>
+    </div>
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead>
+      <tr style="background:${brand};color:#fff">
+        <th style="padding:8px 10px;text-align:left">Date</th>
+        <th style="padding:8px 10px;text-align:left">Division</th>
+        <th style="padding:8px 10px;text-align:left">Location</th>
+        <th style="padding:8px 10px;text-align:left">Role</th>
+        <th style="padding:8px 10px;text-align:right">Pay</th>
+        <th style="padding:8px 10px;text-align:center">Status</th>
+      </tr>
+    </thead>
+    <tbody>${gameRowsHtml}</tbody>
+  </table>
+  <div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd;font-size:11px;color:#888">
+    <p>This is a payment record for officiating services rendered. It is not a tax document. Retain for your records.</p>
+    ${coordName ? `<p>Questions? Contact ${coordName}${coordPhone ? " at " + coordPhone : ""} or visit <a href="${APP_URL}">${APP_URL}</a></p>` : ""}
+  </div>
+</body></html>`;
+
+  const transport = buildTransport();
+  await transport.sendMail({
+    from:    `"${orgName}" <${GMAIL_USER.value()}>`,
+    to:      ump.email,
+    subject: `Pay Stub — ${ump.name} · ${periodFrom}${toDate ? " – " + periodTo : ""}`,
+    html,
+    text: `Pay Stub for ${ump.name}\nPeriod: ${periodFrom} – ${periodTo}\n\nTotal Earned: ${fmtMoney(owed)}\nTotal Paid: ${fmtMoney(paid)}\nBalance Due: ${fmtMoney(balance)}\n\nGames: ${rows.length}\n\nView your earnings: ${APP_URL}/earnings.html`,
+  });
+
+  return { sent: true, to: ump.email, rows: rows.length };
+});
+
 // ── FCM broadcast ─────────────────────────────────────────────────────────────
 
 exports.sendBroadcast = onCall({ cors: CORS }, async request => {
@@ -1640,36 +1968,101 @@ async function dayOfRemindersCore(db) {
   const anyDayOf = Array.isArray(config.webhooks)
     ? config.webhooks.some(w => w.active !== false && w.url && (w.events||[]).includes("dayOfReminders"))
     : !!(config.jeff || config.ch10u || config.ch12u);
-  if (!anyDayOf) return { sent: 0 };
 
   const today = todayISO();
-  const snap  = await db.collection("games")
+
+  // Slack only needs games with open slots (needsUmpires === true)
+  const openSnap = await db.collection("games")
     .where("date", "==", today)
     .where("needsUmpires", "==", true)
     .get();
 
+  // Push reminders go to ALL assigned umpires today, regardless of fill status
+  const allTodaySnap = await db.collection("games")
+    .where("date", "==", today)
+    .get();
+
+  // ── Slack channel reminders ──────────────────────────────────────────────
   let sent = 0;
-  for (const d of snap.docs) {
-    const g      = d.data();
+  if (anyDayOf) {
+    for (const d of openSnap.docs) {
+      const g = d.data();
+      if (g.cancelled) continue;
+      const slots = (g.umpireSlots ?? [])
+        .map(s => s.assignedName ? `${s.type}: ${s.assignedName}` : `${s.type}: OPEN`)
+        .join(" | ");
+      const msg     = `⚾ *Game today:* ${gameLabel(g)}\n${slots}`;
+      const targets = getTargetWebhooks(config, "dayOfReminders", g.division ?? "");
+      await Promise.allSettled(targets.map(url => postSlack(url, msg)));
+      sent++;
+    }
+    if (sent === 0) {
+      const targets = getTargetWebhooks(config, "dayOfReminders");
+      await Promise.allSettled(targets.map(url =>
+        postSlack(url, `📋 *${fmtDateSlack(today)}* — No games scheduled today.`)
+      ));
+    }
+  }
+
+  // ── Direct push to each assigned umpire ─────────────────────────────────
+  // Collect uid → list of game summaries (all today's games, not just open ones)
+  const uidGames = {};
+  for (const d of allTodaySnap.docs) {
+    const g = d.data();
     if (g.cancelled) continue;
-    const slots   = (g.umpireSlots ?? [])
-      .map(s => s.assignedName ? `${s.type}: ${s.assignedName}` : `${s.type}: OPEN`)
-      .join(" | ");
-    const msg = `⚾ *Game today:* ${gameLabel(g)}\n${slots}`;
-
-    const targets = getTargetWebhooks(config, "dayOfReminders", g.division ?? "");
-    await Promise.allSettled(targets.map(url => postSlack(url, msg)));
-    sent++;
+    for (const slot of (g.umpireSlots ?? [])) {
+      if (!slot.assignedUid) continue;
+      if (!uidGames[slot.assignedUid]) uidGames[slot.assignedUid] = [];
+      uidGames[slot.assignedUid].push({
+        slotType: slot.type,
+        game:     g,
+      });
+    }
   }
 
-  if (sent === 0) {
-    const targets = getTargetWebhooks(config, "dayOfReminders");
-    await Promise.allSettled(targets.map(url =>
-      postSlack(url, `📋 *${fmtDateSlack(today)}* — No games scheduled today.`)
-    ));
+  const uids = Object.keys(uidGames);
+  if (uids.length > 0) {
+    try {
+      const tokenSnaps = await Promise.all(uids.map(uid => db.doc(`notifications/${uid}`).get()));
+      const messages   = [];
+      const validSnaps = [];
+
+      uids.forEach((uid, i) => {
+        const snap2 = tokenSnaps[i];
+        const token = snap2.exists ? snap2.data()?.token : null;
+        if (!token) return;
+        const entries = uidGames[uid];
+        const body = entries.map(e => {
+          const g = e.game;
+          return `${e.slotType} · ${fmtTimeSlack(g.time)} · ${g.city ?? ""}${g.field ? " · " + g.field : ""}`;
+        }).join("\n");
+        messages.push({
+          token,
+          notification: {
+            title: `⚾ Game${entries.length > 1 ? "s" : ""} Today`,
+            body,
+          },
+          webpush: { fcmOptions: { link: "https://tri-valley-baseball-umpires.web.app/schedule.html" } },
+        });
+        validSnaps.push(snap2);
+      });
+
+      if (messages.length > 0) {
+        const result = await getMessaging().sendEach(messages);
+        // Prune stale tokens
+        const stale = result.responses.map((r, i) => r.error ? validSnaps[i] : null).filter(Boolean);
+        if (stale.length > 0) {
+          const batch = db.batch();
+          stale.forEach(s => batch.delete(s.ref));
+          await batch.commit();
+        }
+      }
+    } catch (e) {
+      console.error("Day-of push error:", e);
+    }
   }
 
-  return { sent };
+  return { sent, pushed: uids.length };
 }
 
 exports.sendDayOfReminders = onSchedule("0 7 * * *", async () => {
@@ -1832,12 +2225,12 @@ exports.notifyTournamentSwap = onCall({ cors: CORS }, async request => {
     }
   });
   if (stale.length) {
-    const notifSnap = await db.collection("notifications").get();
-    await Promise.all(
-      notifSnap.docs
-        .filter(d => stale.includes(d.data().token))
-        .map(d => d.ref.delete())
-    );
+    // tokenDocs already fetched above — no need to scan the full notifications collection
+    const batch = db.batch();
+    tokenDocs.forEach(d => {
+      if (d.exists && stale.includes(d.data()?.token)) batch.delete(d.ref);
+    });
+    await batch.commit();
   }
 
   return { sent: result.successCount };
@@ -1863,7 +2256,9 @@ exports.updateUmpireAccount = onCall({ cors: CORS }, async request => {
     firstName, lastName, email, phone,
     street, city, state, zip,
     certifications, notes, approved,
-    parentName, parentEmail, parentPhone
+    parents,
+    parentName, parentEmail, parentPhone,
+    emergencyContactName, emergencyContactPhone
   } = request.data;
 
   if (!uid) throw new HttpsError("invalid-argument", "uid is required.");
@@ -1895,9 +2290,27 @@ exports.updateUmpireAccount = onCall({ cors: CORS }, async request => {
   if (certifications !== undefined)  firestoreUpdate.certifications = certifications;
   if (notes       !== undefined)     firestoreUpdate.notes       = notes.trim();
   if (approved    !== undefined)     firestoreUpdate.approved    = approved;
+  if (Array.isArray(parents))        firestoreUpdate.parents     = parents;
   if (parentName  !== undefined)     firestoreUpdate.parentName  = parentName.trim();
   if (parentEmail !== undefined)     firestoreUpdate.parentEmail = parentEmail.trim().toLowerCase();
   if (parentPhone !== undefined)     firestoreUpdate.parentPhone = parentPhone.trim();
+  // Sync flat backward-compat fields from parents[0] when the full array is being saved
+  if (Array.isArray(parents)) {
+    const fp = parents[0] || null;
+    firestoreUpdate.parentName  = fp?.name  || "";
+    firestoreUpdate.parentEmail = fp?.email || "";
+    firestoreUpdate.parentPhone = fp?.phone || "";
+  }
+  // If a parent/guardian is set, they are always the emergency contact
+  const resolvedParentName  = (firestoreUpdate.parentName  ?? parentName  ?? "").trim();
+  const resolvedParentPhone = (firestoreUpdate.parentPhone ?? parentPhone ?? "").trim();
+  if (resolvedParentName) {
+    firestoreUpdate.emergencyContactName  = resolvedParentName;
+    firestoreUpdate.emergencyContactPhone = resolvedParentPhone || (emergencyContactPhone?.trim() ?? "");
+  } else {
+    if (emergencyContactName  !== undefined) firestoreUpdate.emergencyContactName  = emergencyContactName.trim();
+    if (emergencyContactPhone !== undefined) firestoreUpdate.emergencyContactPhone = emergencyContactPhone.trim();
+  }
 
   if (Object.keys(firestoreUpdate).length > 0) {
     await db.doc(`umpires/${uid}`).update(firestoreUpdate);
@@ -2824,4 +3237,42 @@ exports.fetchOrgIcs = onCall({ cors: CORS }, async request => {
     newCount: events.filter(e => !e.alreadyImported).length,
     facilities,
   };
+});
+
+// ── Field issue status change → push reporter ─────────────────────────────────
+
+exports.onFieldIssue = onDocumentWritten("fieldIssues/{issueId}", async event => {
+  const before = event.data.before?.data() ?? null;
+  const after  = event.data.after?.data()  ?? null;
+  if (!after || !before) return; // Only care about updates, not creates
+
+  const prevStatus = before.status ?? "Open";
+  const newStatus  = after.status  ?? "Open";
+  if (prevStatus === newStatus) return; // Status unchanged
+  if (!after.reportedBy) return;
+
+  try {
+    const db        = getFirestore();
+    const tokenSnap = await db.doc(`notifications/${after.reportedBy}`).get();
+    const token     = tokenSnap.exists ? tokenSnap.data()?.token : null;
+    if (!token) return;
+
+    const loc      = after.fieldName ? `${after.facilityName} — ${after.fieldName}` : (after.facilityName || "");
+    const noteStr  = after.adminNotes ? ` — ${after.adminNotes}` : "";
+    const emoji    = newStatus === "Resolved"    ? "✅"
+                   : newStatus === "In Progress" ? "🔧"
+                   : "📋";
+
+    const result = await getMessaging().sendEachForMulticast({
+      tokens: [token],
+      notification: {
+        title: `${emoji} Field Issue ${newStatus}`,
+        body:  `${after.title || "Your field issue"}${loc ? " at " + loc : ""}${noteStr}`,
+      },
+      webpush: { fcmOptions: { link: "https://tri-valley-baseball-umpires.web.app/field-issues.html" } },
+    });
+    if (result.responses[0]?.error) await tokenSnap.ref.delete();
+  } catch (e) {
+    console.error("Field issue push error:", e);
+  }
 });

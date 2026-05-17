@@ -100,6 +100,14 @@
       ]
     },
     {
+      "collectionGroup": "incidentReports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "reportedBy",  "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "callupRequests",
       "queryScope": "COLLECTION",
       "fields": [

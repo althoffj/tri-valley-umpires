@@ -11,6 +11,10 @@ import {
 
 function val(id) { return (document.getElementById(id)?.value || "").trim(); }
 
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function fieldError(id, msg) {
   const el = document.getElementById(id);
   if (el) el.textContent = msg;
@@ -74,51 +78,87 @@ async function loadSchedule() {
   }
 }
 
+function buildSlotHtml(g) {
+  const slots = Array.isArray(g.umpireSlots) ? g.umpireSlots : [];
+
+  if (!slots.length) {
+    return `<span style="color:var(--light-text);font-size:0.82rem">No umpire slots configured</span>`;
+  }
+
+  return slots.map(s => {
+    const assigned = !!s.assignedUid;
+    const label    = assigned ? (s.assignedName || "Assigned") : `Open — ${esc(s.type || "")}`;
+    const bgColor  = assigned ? "rgba(184,242,196,0.15)" : "rgba(255,200,100,0.12)";
+    const border   = assigned ? "#b8f2c4" : "#ffcc80";
+    const color    = assigned ? "#b8f2c4" : "#ffcc80";
+
+    return `<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;font-size:0.78rem;margin:2px;background:${bgColor};border:1px solid ${border};color:${color}">${esc(label)}</span>`;
+  }).join("");
+}
+
+function buildGameCard(g) {
+  const today    = todayISO();
+  const isToday  = g.date === today;
+  const cancelled = g.cancelled
+    ? `<span class="badge badge-cancelled" style="margin-left:6px">Cancelled</span>` : "";
+  const todayBadge = isToday && !g.cancelled
+    ? `<span style="margin-left:6px;font-size:0.72rem;font-weight:700;background:#1a3a1a;color:#b8f2c4;border:1px solid #2a5a2a;border-radius:4px;padding:1px 7px">TODAY</span>`
+    : "";
+  const borderStyle = isToday && !g.cancelled ? "border-left-color:#b8f2c4" : "";
+
+  return `<div class="document-note" style="margin-bottom:10px;${g.cancelled ? "opacity:0.6" : ""}${borderStyle}">
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:4px">
+      <strong style="font-size:0.95rem">${esc(fmtDate(g.date))}</strong>
+      ${g.time ? `<span style="color:var(--light-text);font-size:0.85rem">${esc(fmtTime(g.time))}</span>` : ""}
+      <span class="badge" style="background:#1a2a1a;color:#c9a0ff;border:1px solid #6b3fa0">${esc(g.division || "—")}</span>
+      ${todayBadge}${cancelled}
+    </div>
+    <div style="font-size:0.9rem;margin-bottom:4px">
+      ${g.homeTeam && g.awayTeam ? `${esc(g.homeTeam)} <span style="color:var(--light-text)">vs</span> ${esc(g.awayTeam)}` : "—"}
+    </div>
+    <div style="font-size:0.82rem;color:var(--light-text);margin-bottom:6px">${esc(g.facility || g.field || "—")}</div>
+    <div>${buildSlotHtml(g)}</div>
+  </div>`;
+}
+
 function renderSchedule() {
   const listEl = document.getElementById("cpScheduleList");
   if (!listEl) return;
 
-  const profile  = getCurrentCoachProfile();
-  const myDiv    = profile?.division ?? null;
+  const profile = getCurrentCoachProfile();
+  const myDiv   = profile?.division ?? null;
+  const today   = todayISO();
 
   const visible = showAll ? allGames : allGames.filter(g => !myDiv || g.division === myDiv);
 
+  // Split into upcoming (today+) and past
+  const upcoming = visible.filter(g => (g.date || "") >= today).reverse(); // asc
+  const past     = visible.filter(g => (g.date || "") <  today);           // already desc
+
   let html = "";
 
-  // ── Games ─────────────────────────────────────────────────────────────────
-  if (visible.length === 0) {
+  // ── Upcoming ──────────────────────────────────────────────────────────────
+  if (upcoming.length === 0 && past.length === 0) {
     html += `<div class="document-note"><p style="margin:0;color:var(--light-text);text-align:center">No games found${!showAll && myDiv ? ` for ${myDiv}` : ""}.</p></div>`;
   } else {
-    html += visible.map(g => {
-    const slots = Array.isArray(g.umpireSlots) ? g.umpireSlots : [];
-    const slotHtml = slots.length
-      ? slots.map(s => {
-          const assigned = !!s.assignedUid;
-          const cls = assigned ? "assigned" : "open";
-          const label = assigned
-            ? (s.assignedName || "Assigned")
-            : `Open — ${esc(s.type || "")}`;
-          return `<span class="umpire-chip ${cls}" style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.78rem;margin:2px;background:${assigned ? "rgba(184,242,196,0.15)" : "rgba(255,200,100,0.12)"};border:1px solid ${assigned ? "#b8f2c4" : "#ffcc80"};color:${assigned ? "#b8f2c4" : "#ffcc80"}">${esc(label)}</span>`
-        }).join("")
-      : `<span style="color:var(--light-text);font-size:0.82rem">No umpire slots configured</span>`;
+    if (upcoming.length) {
+      html += upcoming.map(buildGameCard).join("");
+    } else {
+      html += `<p style="color:var(--light-text);font-size:0.88rem">No upcoming games.</p>`;
+    }
 
-    const cancelled = g.cancelled
-      ? `<span class="badge badge-cancelled" style="margin-left:6px">Cancelled</span>` : "";
-
-    return `<div class="document-note" style="margin-bottom:10px;${g.cancelled ? "opacity:0.6" : ""}">
-      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:4px">
-        <strong style="font-size:0.95rem">${esc(fmtDate(g.date))}</strong>
-        ${g.time ? `<span style="color:var(--light-text);font-size:0.85rem">${esc(fmtTime(g.time))}</span>` : ""}
-        <span class="badge" style="background:#1a2a1a;color:#c9a0ff;border:1px solid #6b3fa0">${esc(g.division || "—")}</span>
-        ${cancelled}
-      </div>
-      <div style="font-size:0.9rem;margin-bottom:4px">
-        ${g.homeTeam && g.awayTeam ? `${esc(g.homeTeam)} <span style="color:var(--light-text)">vs</span> ${esc(g.awayTeam)}` : "—"}
-      </div>
-      <div style="font-size:0.82rem;color:var(--light-text);margin-bottom:6px">${esc(g.facility || g.field || "—")}</div>
-      <div>${slotHtml}</div>
-    </div>`;
-    }).join("");
+    // ── Past (collapsible) ──────────────────────────────────────────────────
+    if (past.length) {
+      html += `
+        <details style="margin-top:16px">
+          <summary style="cursor:pointer;color:var(--light-text);font-size:0.88rem;user-select:none;list-style:none;padding:8px 0">
+            ▸ Past Games (${past.length})
+          </summary>
+          <div style="margin-top:8px">
+            ${past.map(buildGameCard).join("")}
+          </div>
+        </details>`;
+    }
   }
 
   // ── Approved Practices ────────────────────────────────────────────────────

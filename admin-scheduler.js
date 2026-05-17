@@ -1059,7 +1059,7 @@ function renderSchedAssignList(filter = "") {
       style="padding:10px 16px;cursor:pointer;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center">
       <div>
         <div style="font-weight:bold;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${esc(u.name)}${badges ? ` ${badges}` : ""}</div>
-        ${u.email ? `<div style="font-size:0.8rem;color:var(--light-text)">${esc(u.email)}</div>` : ""}
+        ${u.phone ? `<div style="font-size:0.8rem;color:var(--light-text)">${esc(u.phone)}</div>` : (u.email ? `<div style="font-size:0.8rem;color:var(--light-text)">${esc(u.email)}</div>` : "")}
       </div>
       <button class="btn print-btn" style="font-size:0.8rem;padding:4px 12px;flex-shrink:0">Assign</button>
     </div>`;

@@ -18,6 +18,7 @@ import {
   query,
   orderBy,
   where,
+  limit,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -380,10 +381,11 @@ async function loadAdminUsers() {
       return;
     }
 
-    // For each admin, try to look up their umpire profile for name/email
-    const umpireSnaps = await getDocs(collection(db, "umpires"));
+    // Fetch only the umpire docs for known admin UIDs — avoids reading the full collection
+    const adminUids  = snap.docs.map(d => d.id);
+    const umpireSnaps = await Promise.all(adminUids.map(uid => getDoc(doc(db, "umpires", uid))));
     const umpireMap = {};
-    umpireSnaps.forEach(d => { umpireMap[d.id] = d.data(); });
+    umpireSnaps.forEach((s, i) => { if (s.exists()) umpireMap[adminUids[i]] = s.data(); });
 
     tbody.innerHTML = snap.docs.map(d => {
       const uid  = d.id;
@@ -745,6 +747,69 @@ async function loadCallupPending() {
   }
 }
 
+// ── Pending (open) incident reports ──────────────────────────────────────────
+
+async function loadIncidentsPending() {
+  const listEl = document.getElementById("incidentPendingList");
+  const noteEl = document.getElementById("incidentPendingNote");
+  const badge  = document.getElementById("incidentPendingBadge");
+  if (!listEl) return;
+  try {
+    // Two-pronged query: explicit open status + limited fallback for legacy docs without a status field
+    const [openSnap, legacySnap] = await Promise.all([
+      getDocs(query(collection(db, "incidentReports"),
+        where("status", "==", "open"),
+        orderBy("submittedAt", "desc"))),
+      getDocs(query(collection(db, "incidentReports"),
+        orderBy("submittedAt", "desc"),
+        limit(25)))
+    ]);
+    // Merge, filter to open/no-status, deduplicate by ID
+    const seen = new Set();
+    const openDocs = [...openSnap.docs, ...legacySnap.docs].filter(d => {
+      if (seen.has(d.id)) return false;
+      seen.add(d.id);
+      const s = d.data().status;
+      return !s || s === "open";
+    });
+    if (badge) {
+      badge.textContent   = openDocs.length || "";
+      badge.style.display = openDocs.length ? "" : "none";
+    }
+    if (openDocs.length === 0) {
+      noteEl.textContent = "No open incident reports.";
+      listEl.innerHTML   = "";
+      return;
+    }
+    noteEl.textContent = `${openDocs.length} open`;
+    listEl.innerHTML = openDocs.map(d => {
+      const r    = d.data();
+      const typeColor = r.incidentType === "Ejection"          ? "#ff9999"
+                      : r.incidentType === "Injury"            ? "#ffcc80"
+                      : r.incidentType === "Unsafe Conditions" ? "#ffe066"
+                      : "#f7c87e";
+      const gameLine = [r.gameDate, r.gameCity, r.gameDivision].filter(Boolean).join(" · ");
+      const submitted = r.submittedAt?.toDate
+        ? r.submittedAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        : "";
+      return `<div class="document-note" style="border-left-color:${typeColor};margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
+          <strong style="color:${typeColor}">${esc(r.incidentType || "Incident")}</strong>
+          <span style="color:var(--light-text);font-size:0.82rem">${esc(submitted)}</span>
+        </div>
+        <div style="font-size:0.85rem;color:var(--light-text)">By: ${esc(r.reporterName || "")}</div>
+        ${gameLine ? `<div style="font-size:0.85rem;margin-top:2px">${esc(gameLine)}</div>` : ""}
+        <div class="page-actions" style="margin-top:8px">
+          <a href="admin-incidents.html" class="btn print-btn" style="font-size:0.82rem;padding:4px 12px">Review →</a>
+        </div>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    if (noteEl) noteEl.textContent = "Error loading.";
+    console.error(err);
+  }
+}
+
 async function adminOverrideCallup(id, status) {
   const label = status === "approved" ? "approve" : "decline";
   if (!await showConfirm(`Admin ${label} this call-up request?`)) return;
@@ -988,7 +1053,8 @@ async function loadAdminQuickStats() {
         where("needsUmpires", "==", true),
         orderBy("date"), orderBy("time"))),
       getDocs(query(collection(db, "games"),
-        where("needsUmpires", "==", true))),
+        where("needsUmpires", "==", true),
+        where("date", ">=", `${new Date().getFullYear()}-01-01`))),
     ]);
 
     const upcoming = upcomingSnap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -1105,6 +1171,7 @@ authReadyPromise.then(async () => {
   loadPending();
   loadCoachPending();
   loadCallupPending();
+  loadIncidentsPending();
   loadRoster();
 
   if (isSuperAdmin()) {

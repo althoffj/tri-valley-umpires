@@ -95,17 +95,17 @@ async function saveAvailability() {
   if (!user) return;
   const btn = document.getElementById("saveAvailBtn");
   btn.disabled = true;
-  setMsg("Saving…", "info");
+  setMsg("availMsg", "Saving…", "info");
   try {
     await setDoc(doc(db, "availability", user.uid), {
       unavailableDates: Array.from(unavailableDates).sort(),
       updatedAt: new Date().toISOString()
     });
     dirty = false;
-    setMsg("Saved!", "success");
-    setTimeout(() => setMsg(""), 2500);
+    setMsg("availMsg", "Saved!", "success");
+    setTimeout(() => setMsg("availMsg", ""), 2500);
   } catch (err) {
-    setMsg(err.message, "error");
+    setMsg("availMsg", err.message, "error");
   } finally {
     btn.disabled = false;
   }

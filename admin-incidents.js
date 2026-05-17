@@ -1,14 +1,31 @@
-// admin-incidents.js — view all incident reports
+// admin-incidents.js — view and manage incident reports
 import { db } from "./firebase.js";
-import { authReadyPromise, isAdmin } from "./auth.js";
+import { authReadyPromise, isAdmin, getCurrentUser } from "./auth.js";
 import { esc, fmtDate, setMsg } from "./utils.js";
 
 import {
   collection,
   getDocs,
+  doc,
+  updateDoc,
   query,
-  orderBy
+  orderBy,
+  serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+
+const STATUS_LABELS = { open: "Open", reviewed: "Reviewed", closed: "Closed" };
+const STATUS_COLORS = { open: "#60a5fa", reviewed: "#fbbf24", closed: "#6ee7b7" };
+
+function statusBadge(status) {
+  const s    = status || "open";
+  const color = STATUS_COLORS[s] || "#ccc";
+  const label = STATUS_LABELS[s] || s;
+  return `<span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:0.75rem;font-weight:700;background:${color}22;color:${color};border:1px solid ${color}55">${esc(label)}</span>`;
+}
+
+// ── Load & render ─────────────────────────────────────────────────────────────
 
 async function loadIncidents() {
   const listEl = document.getElementById("incidentList");
@@ -22,27 +39,36 @@ async function loadIncidents() {
 
     if (snap.empty) {
       noteEl.textContent = "No incident reports submitted yet.";
-      listEl.innerHTML = "";
+      listEl.innerHTML   = "";
       return;
     }
 
     noteEl.textContent = `${snap.size} report${snap.size === 1 ? "" : "s"} on file.`;
 
     listEl.innerHTML = snap.docs.map(d => {
-      const r = d.data();
-      const date = r.submittedAt?.toDate
+      const r   = d.data();
+      const rid = d.id;
+
+      const submitted = r.submittedAt?.toDate
         ? r.submittedAt.toDate().toLocaleDateString("en-US", {
             month: "short", day: "numeric", year: "numeric",
-            hour: "numeric", minute: "2-digit"
+            hour: "numeric", minute: "2-digit",
           })
         : "—";
-      const gameLabel = [
+
+      const reviewed = r.reviewedAt?.toDate
+        ? r.reviewedAt.toDate().toLocaleDateString("en-US", {
+            month: "short", day: "numeric", year: "numeric",
+            hour: "numeric", minute: "2-digit",
+          })
+        : null;
+
+      const gameInfo = [
         r.gameDate ? fmtDate(r.gameDate) : "",
         r.gameCity,
-        r.gameDivision
+        r.gameDivision,
       ].filter(Boolean).join(" · ");
 
-      // Build structured detail lines based on incident type
       const structuredLines = [];
       if (r.ejection) {
         const ej = r.ejection;
@@ -66,17 +92,30 @@ async function loadIncidents() {
                       : r.incidentType === "Unsafe Conditions" ? "#ffe066"
                       : "#f7c87e";
 
+      const curStatus = r.status || "open";
+      const statusOpts = ["open", "reviewed", "closed"]
+        .map(s => `<option value="${s}"${curStatus === s ? " selected" : ""}>${STATUS_LABELS[s]}</option>`)
+        .join("");
+
       return `
-        <div class="document-note" style="border-left-color:${typeColor};margin-bottom:16px">
+        <div class="document-note incident-card" data-id="${esc(rid)}"
+             style="border-left-color:${typeColor};margin-bottom:16px">
+          <!-- ── Header row ────────────────────────────────────────── -->
           <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-            <strong style="color:${typeColor}">${esc(r.incidentType ?? "Incident")}</strong>
-            <span style="color:var(--light-text);font-size:0.85rem">${esc(date)}</span>
+            <div style="display:flex;align-items:center;gap:10px">
+              <strong style="color:${typeColor}">${esc(r.incidentType ?? "Incident")}</strong>
+              ${statusBadge(curStatus)}
+            </div>
+            <span style="color:var(--light-text);font-size:0.85rem">${esc(submitted)}</span>
           </div>
+
+          <!-- ── Report body ───────────────────────────────────────── -->
           <p style="margin:0 0 4px"><span style="color:var(--light-text)">Reported by:</span> ${esc(r.reporterName ?? "")}</p>
-          ${gameLabel ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Game:</span> ${esc(gameLabel)}</p>` : ""}
+          ${gameInfo ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Game:</span> ${esc(gameInfo)}</p>` : ""}
           ${structuredLines.map(l => `<p style="margin:0 0 3px;font-size:0.92rem">${l}</p>`).join("")}
           ${r.involvedParties ? `<p style="margin:0 0 4px"><span style="color:var(--light-text)">Involved:</span> ${esc(r.involvedParties)}</p>` : ""}
           <p style="margin:8px 0 0;white-space:pre-wrap">${esc(r.description ?? "")}</p>
+
           ${Array.isArray(r.photoUrls) && r.photoUrls.length > 0
             ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
                 ${r.photoUrls.map(url => `<a href="${esc(url)}" target="_blank" rel="noopener">
@@ -85,11 +124,97 @@ async function loadIncidents() {
                 </a>`).join("")}
                </div>`
             : ""}
+
+          <!-- ── Admin resolution panel ────────────────────────────── -->
+          <details style="margin-top:16px" class="incident-resolve">
+            <summary style="cursor:pointer;color:var(--light-text);font-size:0.88rem;user-select:none;list-style:none">
+              ▸ Admin Notes${r.adminNotes ? " (has notes)" : ""}
+              ${reviewed ? `<span style="margin-left:8px;font-size:0.8rem">Last updated ${esc(reviewed)}${r.reviewedByName ? " by " + esc(r.reviewedByName) : ""}</span>` : ""}
+            </summary>
+            <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <label style="font-size:0.88rem;color:var(--light-text)">Status:</label>
+                <select class="incident-status-sel"
+                  style="padding:6px 10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:0.9rem">
+                  ${statusOpts}
+                </select>
+              </div>
+              <div>
+                <label style="font-size:0.88rem;color:var(--light-text)">Admin Notes:</label>
+                <textarea class="incident-notes-ta" rows="3"
+                  style="width:100%;margin-top:4px;padding:8px 10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:0.9rem;box-sizing:border-box;resize:vertical;font-family:inherit"
+                  placeholder="Internal notes visible only to admins…">${esc(r.adminNotes || "")}</textarea>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button type="button" class="btn incident-save-btn"
+                        style="font-size:0.85rem;padding:6px 14px">Save</button>
+                <span class="incident-save-msg" style="font-size:0.82rem;color:var(--light-text)"></span>
+              </div>
+            </div>
+          </details>
         </div>`;
     }).join("");
+
+    // Wire up save buttons
+    listEl.querySelectorAll(".incident-save-btn").forEach(btn => {
+      btn.addEventListener("click", () => saveIncidentUpdate(btn));
+    });
+
   } catch (err) {
     console.error(err);
     listEl.innerHTML = '<p style="color:#ffb4b4">Error loading incident reports.</p>';
+  }
+}
+
+// ── Save status + admin notes ─────────────────────────────────────────────────
+
+async function saveIncidentUpdate(btn) {
+  const card    = btn.closest(".incident-card");
+  const id      = card?.dataset.id;
+  const statusEl = card?.querySelector(".incident-status-sel");
+  const notesEl  = card?.querySelector(".incident-notes-ta");
+  const msgEl    = card?.querySelector(".incident-save-msg");
+  if (!id || !statusEl) return;
+
+  const status     = statusEl.value;
+  const adminNotes = notesEl?.value.trim() || "";
+  const user       = getCurrentUser();
+
+  btn.disabled = true;
+  if (msgEl) msgEl.textContent = "Saving…";
+
+  try {
+    await updateDoc(doc(db, "incidentReports", id), {
+      status,
+      adminNotes,
+      reviewedAt:       serverTimestamp(),
+      reviewedBy:       user?.uid    || null,
+      reviewedByName:   user?.displayName || null,
+    });
+    if (msgEl) {
+      msgEl.textContent = "Saved ✓";
+      setTimeout(() => { if (msgEl) msgEl.textContent = ""; }, 3000);
+    }
+    // Update the badge in-place
+    const badge = card?.querySelector(".incident-card > div:first-child span:last-child");
+    if (badge) badge.outerHTML = statusBadge(status);
+
+    // Update the summary line
+    const summary = card?.querySelector("details.incident-resolve summary");
+    if (summary) {
+      const noteHint = adminNotes ? " (has notes)" : "";
+      const now = new Date().toLocaleDateString("en-US", {
+        month: "short", day: "numeric", year: "numeric",
+        hour: "numeric", minute: "2-digit",
+      });
+      const nameStr = user?.displayName ? ` by ${user.displayName}` : "";
+      summary.innerHTML = `▸ Admin Notes${noteHint} <span style="margin-left:8px;font-size:0.8rem">Last updated ${esc(now)}${esc(nameStr)}</span>`;
+    }
+  } catch (err) {
+    console.error(err);
+    if (msgEl) msgEl.textContent = "Error saving.";
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -98,10 +223,10 @@ async function loadIncidents() {
 authReadyPromise.then(() => {
   if (!isAdmin()) {
     document.getElementById("adminContent").style.display = "none";
-    document.getElementById("noAccess").style.display = "";
+    document.getElementById("noAccess").style.display     = "";
     return;
   }
   document.getElementById("adminContent").style.display = "";
-  document.getElementById("noAccess").style.display = "none";
+  document.getElementById("noAccess").style.display     = "none";
   loadIncidents();
 });

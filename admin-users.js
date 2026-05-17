@@ -99,7 +99,9 @@ async function approveUmpire(uid) {
     await updateDoc(doc(db, "umpires", uid), { approved: true, denied: false });
     setMsg(`pendingMsg_${uid}`, "Approved!", "success");
     setTimeout(loadPending, 1000);
-    loadRoster();
+    const idx = allUmpires.findIndex(u => u.id === uid);
+    if (idx !== -1) allUmpires[idx] = { ...allUmpires[idx], approved: true, denied: false };
+    renderRoster();
   } catch (err) {
     setMsg(`pendingMsg_${uid}`, err.message, "error");
   }
@@ -111,7 +113,9 @@ async function denyUmpire(uid, name) {
     await updateDoc(doc(db, "umpires", uid), { denied: true });
     setMsg(`pendingMsg_${uid}`, "Marked as denied.", "warning");
     setTimeout(loadPending, 1000);
-    loadRoster();
+    const idx = allUmpires.findIndex(u => u.id === uid);
+    if (idx !== -1) allUmpires[idx] = { ...allUmpires[idx], denied: true };
+    renderRoster();
   } catch (err) {
     setMsg(`pendingMsg_${uid}`, err.message, "error");
   }
@@ -183,11 +187,22 @@ function renderRoster() {
     const equipHtml  = equipList
       ? `<div style="color:var(--light-text);font-size:0.78rem;margin-top:2px">${esc(equipList)}${maxGames ? " · " + esc(maxGames) : ""}</div>`
       : (maxGames ? `<div style="color:var(--light-text);font-size:0.78rem;margin-top:2px">${esc(maxGames)}</div>` : "");
-    const parentHtml = p.parentName
+    const allParents = normalizeParents(p);
+    const parentHtml = allParents.length
       ? `<div style="background:rgba(255,200,100,0.1);border:1px solid rgba(255,200,100,0.3);border-radius:4px;padding:4px 8px;margin-top:6px;font-size:0.78rem">
-           👤 <strong style="color:#ffd580">Minor</strong> — Parent: ${esc(p.parentName)}
-           ${p.parentPhone ? ` · <a href="tel:${esc(p.parentPhone)}" style="color:#ffd580">${esc(p.parentPhone)}</a>` : ""}
-           ${p.parentEmail ? ` · <a href="mailto:${esc(p.parentEmail)}" style="color:#ffd580">${esc(p.parentEmail)}</a>` : ""}
+           👤 <strong style="color:#ffd580">Minor</strong>
+           ${allParents.map(par => `
+             <div style="margin-top:3px">
+               ${esc(par.name || "—")}
+               ${par.phone ? ` · <a href="tel:${esc(par.phone)}" style="color:#ffd580">${esc(par.phone)}</a>` : ""}
+               ${par.email ? ` · <a href="mailto:${esc(par.email)}" style="color:#ffd580">${esc(par.email)}</a>` : ""}
+             </div>`).join("")}
+         </div>`
+      : "";
+    const emergencyHtml = p.emergencyContactName
+      ? `<div style="background:rgba(255,80,80,0.07);border:1px solid rgba(255,80,80,0.2);border-radius:4px;padding:4px 8px;margin-top:4px;font-size:0.78rem">
+           🆘 Emergency: ${esc(p.emergencyContactName)}
+           ${p.emergencyContactPhone ? ` · <a href="tel:${esc(p.emergencyContactPhone)}" style="color:#ff9999">${esc(p.emergencyContactPhone)}</a>` : ""}
          </div>`
       : "";
 
@@ -243,25 +258,11 @@ function renderRoster() {
     if (superAdmin) {
       actionBtns += `<button class="btn print-btn edit-account-btn"
         data-uid="${esc(p.id)}"
-        data-firstname="${esc(p.firstName || "")}"
-        data-lastname="${esc(p.lastName || "")}"
-        data-email="${esc(p.email || "")}"
-        data-phone="${esc(p.phone || "")}"
-        data-street="${esc(p.street || "")}"
-        data-city="${esc(p.city || "")}"
-        data-state="${esc(p.state || "")}"
-        data-zip="${esc(p.zip || "")}"
-        data-certifications="${esc((p.certifications || []).join(", "))}"
-        data-notes="${esc(p.notes || "")}"
-        data-approved="${p.approved ? "1" : "0"}"
-        data-parentname="${esc(p.parentName || "")}"
-        data-parentemail="${esc(p.parentEmail || "")}"
-        data-parentphone="${esc(p.parentPhone || "")}"
         style="font-size:0.78rem">Edit</button>`;
     }
 
     return `<tr>
-      <td>${esc(p.name || `${p.firstName||""} ${p.lastName||""}`)}${certHtml}${equipHtml}${noteText}${parentHtml}</td>
+      <td>${esc(p.name || `${p.firstName||""} ${p.lastName||""}`)}${certHtml}${equipHtml}${noteText}${parentHtml}${emergencyHtml}</td>
       <td><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></td>
       <td>${esc(p.phone || "—")}</td>
       <td style="font-size:0.85rem">${[p.street, p.city, p.state, p.zip].filter(Boolean).join(", ") || "—"}</td>
@@ -274,18 +275,30 @@ function renderRoster() {
 // Roster action handlers
 async function revokeUmpire(uid, name) {
   if (!await showConfirm(`Revoke approval for ${name}?`)) return;
-  try { await updateDoc(doc(db, "umpires", uid), { approved: false }); loadRoster(); }
-  catch (err) { showToast(err.message); }
+  try {
+    await updateDoc(doc(db, "umpires", uid), { approved: false });
+    const idx = allUmpires.findIndex(u => u.id === uid);
+    if (idx !== -1) allUmpires[idx] = { ...allUmpires[idx], approved: false };
+    renderRoster();
+  } catch (err) { showToast(err.message); }
 }
 async function setUmpireInactive(uid, name) {
   if (!await showConfirm(`Set ${name} as inactive? They can no longer sign up for games. You can reactivate them at any time.`)) return;
-  try { await updateDoc(doc(db, "umpires", uid), { active: false }); loadRoster(); }
-  catch (err) { showToast(err.message); }
+  try {
+    await updateDoc(doc(db, "umpires", uid), { active: false });
+    const idx = allUmpires.findIndex(u => u.id === uid);
+    if (idx !== -1) allUmpires[idx] = { ...allUmpires[idx], active: false };
+    renderRoster();
+  } catch (err) { showToast(err.message); }
 }
 async function reactivateUmpire(uid, name) {
   if (!await showConfirm(`Reactivate ${name}?`)) return;
-  try { await updateDoc(doc(db, "umpires", uid), { active: true }); loadRoster(); }
-  catch (err) { showToast(err.message); }
+  try {
+    await updateDoc(doc(db, "umpires", uid), { active: true });
+    const idx = allUmpires.findIndex(u => u.id === uid);
+    if (idx !== -1) allUmpires[idx] = { ...allUmpires[idx], active: true };
+    renderRoster();
+  } catch (err) { showToast(err.message); }
 }
 async function deleteUmpireAccount(uid, name) {
   if (!await showConfirm(`PERMANENTLY DELETE ${name}'s account?\n\nThis removes their profile and Firebase sign-in credentials. This cannot be undone.`)) return;
@@ -293,7 +306,8 @@ async function deleteUmpireAccount(uid, name) {
   try {
     const fns = getFunctions(app, "us-central1");
     await httpsCallable(fns, "deleteUmpireAccount")({ uid });
-    loadRoster();
+    allUmpires = allUmpires.filter(u => u.id !== uid);
+    renderRoster();
   } catch (err) { showToast(err.message); }
 }
 
@@ -307,7 +321,9 @@ async function exportRosterCSV() {
     const headers = [
       "UID","Last Name","First Name","Full Name","Email","Phone",
       "Street","City","State","ZIP","Approved","Active","Certifications",
-      "Equipment","Max Games/Week","Notes","Parent Name","Parent Email","Parent Phone"
+      "Equipment","Max Games/Week","Notes",
+      "Emergency Contact Name","Emergency Contact Phone",
+      "Parent Name","Parent Email","Parent Phone"
     ];
     const rows = [headers.map(csvCell).join(",")];
     snap.docs.forEach(d => {
@@ -318,7 +334,11 @@ async function exportRosterCSV() {
         p.approved?"Yes":"No", p.active===false?"No":"Yes",
         (p.certifications||[]).join("; "), (p.equipment||[]).join("; "),
         p.maxGamesPerWeek??""  , p.notes||"",
-        p.parentName||"", p.parentEmail||"", p.parentPhone||""
+        p.emergencyContactName||"", p.emergencyContactPhone||"",
+        // All parents as semicolon-delimited "Name (phone, email)" entries
+        normalizeParents(p).map(par =>
+          [par.name, par.phone, par.email].filter(Boolean).join(", ")
+        ).join("; ")
       ].map(csvCell).join(","));
     });
     const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -516,20 +536,18 @@ async function loadAdminUsers() {
   const tbody = document.getElementById("adminUsersBody");
   if (!tbody) return;
   try {
-    // Fetch admins + all umpire profiles in parallel (one query each, not N+1)
-    const [adminSnap, umpireSnap] = await Promise.all([
-      getDocs(collection(db, "admins")),
-      getDocs(collection(db, "umpires")),
-    ]);
+    const adminSnap = await getDocs(collection(db, "admins"));
 
     if (adminSnap.empty) {
       tbody.innerHTML = `<tr><td colspan="4" style="color:var(--light-text);text-align:center">No admin accounts found.</td></tr>`;
       return;
     }
 
-    // Build umpire lookup map
-    const umpireMap = {};
-    umpireSnap.forEach(d => { umpireMap[d.id] = d.data(); });
+    // Fetch only the umpire docs for known admin UIDs — avoids reading the full collection
+    const adminUids   = adminSnap.docs.map(d => d.id);
+    const umpireSnaps = await Promise.all(adminUids.map(uid => getDoc(doc(db, "umpires", uid))));
+    const umpireMap   = {};
+    umpireSnaps.forEach((s, i) => { if (s.exists()) umpireMap[adminUids[i]] = s.data(); });
 
     const currentUid = getCurrentUser()?.uid;
 
@@ -596,9 +614,10 @@ function renderPermissionCards(grantedRoles, isSA, interactive = false) {
 
 // ── Edit permissions modal ────────────────────────────────────────────────────
 
-let editPermUid     = null;
-let editPermGranted = new Set();
-let editPermIsSA    = false;
+let editPermUid                = null;
+let editPermGranted            = new Set();
+let editPermIsSA               = false;
+let _editPermListenerAttached  = false;
 
 function openEditPermissionsModal(uid) {
   editPermUid = uid;
@@ -614,6 +633,24 @@ function openEditPermissionsModal(uid) {
     if (titleEl) titleEl.textContent = `Edit Permissions — ${name}`;
 
     renderEditPermModal();
+
+    // Attach delegated listener once — survives innerHTML re-renders
+    if (!_editPermListenerAttached) {
+      const c = document.getElementById("editPermCards");
+      if (c) {
+        c.addEventListener("click", e => {
+          const card = e.target.closest(".perm-card-interactive");
+          if (card) togglePermCard(card.dataset.roleKey);
+        });
+        c.addEventListener("keydown", e => {
+          if (e.key !== " " && e.key !== "Enter") return;
+          const card = e.target.closest(".perm-card-interactive");
+          if (card) { e.preventDefault(); togglePermCard(card.dataset.roleKey); }
+        });
+        _editPermListenerAttached = true;
+      }
+    }
+
     document.getElementById("editPermModal").style.display = "flex";
   }).catch(err => showToast(err.message));
 }
@@ -622,10 +659,6 @@ function renderEditPermModal() {
   const container = document.getElementById("editPermCards");
   if (!container) return;
   container.innerHTML = renderPermissionCards([...editPermGranted], editPermIsSA, true);
-  container.querySelectorAll(".perm-card-interactive").forEach(card => {
-    card.addEventListener("click",   () => togglePermCard(card.dataset.roleKey));
-    card.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") togglePermCard(card.dataset.roleKey); });
-  });
 }
 
 function togglePermCard(key) {
@@ -741,39 +774,125 @@ document.getElementById("addAdminForm")?.addEventListener("submit", async functi
 
 let editAccountUid = null;
 
-function openEditAccountModal(data) {
-  editAccountUid = data.uid;
-  document.getElementById("editAccountTitle").textContent = `Edit Account`;
-  document.getElementById("editFirstName").value      = data.firstname    || "";
-  document.getElementById("editLastName").value       = data.lastname     || "";
-  document.getElementById("editEmail").value          = data.email        || "";
-  document.getElementById("editPhone").value          = data.phone        || "";
-  document.getElementById("editStreet").value         = data.street       || "";
-  document.getElementById("editCity").value           = data.city         || "";
-  document.getElementById("editState").value          = data.state        || "";
-  document.getElementById("editZip").value            = data.zip          || "";
-  document.getElementById("editCertifications").value = data.certifications || "";
-  document.getElementById("editNotes").value          = data.notes        || "";
-  document.getElementById("editApproved").checked     = data.approved     === "1";
+// ── Parent list helpers for the edit modal ───────────────────────────────────
 
-  const isMinor = !!(data.parentname);
-  document.getElementById("editIsMinor").checked                       = isMinor;
-  document.getElementById("editParentSection").style.display           = isMinor ? "" : "none";
-  document.getElementById("editParentName").value                      = data.parentname  || "";
-  document.getElementById("editParentEmail").value                     = data.parentemail || "";
-  document.getElementById("editParentPhone").value                     = data.parentphone || "";
-  document.getElementById("editAccountMsg").textContent                = "";
-  document.getElementById("editAccountMsg").className                  = "signup-message";
-  document.getElementById("editAccountModal").style.display            = "flex";
+function normalizeParents(p) {
+  if (Array.isArray(p.parents) && p.parents.length) return p.parents;
+  if (p.parentName) return [{ name: p.parentName, email: p.parentEmail || "", phone: p.parentPhone || "" }];
+  return [];
+}
+
+function makeEditParentRow(par = {}) {
+  const S = "width:100%;padding:7px 9px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.88rem;box-sizing:border-box";
+  const row = document.createElement("div");
+  row.className = "edit-parent-row";
+  row.style.cssText = "display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;margin-bottom:8px;align-items:center";
+  row.innerHTML = `
+    <input type="text"  class="epr-name"  placeholder="Name"             value="${(par.name  || "").replace(/"/g,'&quot;')}" style="${S}" />
+    <input type="tel"   class="epr-phone" placeholder="Phone"            value="${(par.phone || "").replace(/"/g,'&quot;')}" style="${S}" />
+    <input type="email" class="epr-email" placeholder="Email (optional)" value="${(par.email || "").replace(/"/g,'&quot;')}" style="${S}" />
+    <button type="button" class="epr-remove" title="Remove"
+      style="padding:4px 8px;background:transparent;color:#ff8a8a;border:1px solid #884444;border-radius:5px;cursor:pointer;font-size:1rem;line-height:1;flex-shrink:0">×</button>`;
+  return row;
+}
+
+function renderEditParents(parents) {
+  const c = document.getElementById("editParentsContainer");
+  if (!c) return;
+  c.innerHTML = "";
+  (parents.length ? parents : [{}]).forEach(par => c.appendChild(makeEditParentRow(par)));
+  updateEditRemoveBtns();
+}
+
+function updateEditRemoveBtns() {
+  const rows = document.querySelectorAll("#editParentsContainer .edit-parent-row");
+  rows.forEach(row => {
+    row.querySelector(".epr-remove").style.visibility = rows.length > 1 ? "" : "hidden";
+  });
+}
+
+function syncFirstEditParentToEmergency() {
+  if (!document.getElementById("editIsMinor")?.checked) return;
+  const first = document.querySelector("#editParentsContainer .edit-parent-row");
+  if (!first) return;
+  const name  = first.querySelector(".epr-name").value.trim();
+  const phone = first.querySelector(".epr-phone").value.trim();
+  if (name)  document.getElementById("editEmergencyName").value  = name;
+  if (phone) document.getElementById("editEmergencyPhone").value = phone;
+}
+
+function collectEditParents() {
+  return [...document.querySelectorAll("#editParentsContainer .edit-parent-row")]
+    .map(row => ({
+      name:  row.querySelector(".epr-name").value.trim(),
+      phone: row.querySelector(".epr-phone").value.trim(),
+      email: row.querySelector(".epr-email").value.trim(),
+    }))
+    .filter(par => par.name || par.phone);
+}
+
+// Wire parent container events once (survives modal re-opens)
+document.getElementById("editParentsContainer")?.addEventListener("input", e => {
+  if (e.target.matches(".epr-name, .epr-phone")) syncFirstEditParentToEmergency();
+});
+document.getElementById("editParentsContainer")?.addEventListener("click", e => {
+  if (!e.target.matches(".epr-remove")) return;
+  const rows = document.querySelectorAll("#editParentsContainer .edit-parent-row");
+  if (rows.length > 1) {
+    e.target.closest(".edit-parent-row").remove();
+    updateEditRemoveBtns();
+    syncFirstEditParentToEmergency();
+  }
+});
+document.getElementById("editAddParentBtn")?.addEventListener("click", () => {
+  document.getElementById("editParentsContainer").appendChild(makeEditParentRow());
+  updateEditRemoveBtns();
+});
+
+// ── Open edit modal (lookup full profile from allUmpires by UID) ─────────────
+
+function openEditAccountModal(uid) {
+  const p = allUmpires.find(u => u.id === uid);
+  if (!p) return;
+  editAccountUid = uid;
+
+  document.getElementById("editAccountTitle").textContent = "Edit Account";
+  document.getElementById("editFirstName").value      = p.firstName || "";
+  document.getElementById("editLastName").value       = p.lastName  || "";
+  document.getElementById("editEmail").value          = p.email     || "";
+  document.getElementById("editPhone").value          = p.phone     || "";
+  document.getElementById("editStreet").value         = p.street    || "";
+  document.getElementById("editCity").value           = p.city      || "";
+  document.getElementById("editState").value          = p.state     || "";
+  document.getElementById("editZip").value            = p.zip       || "";
+  document.getElementById("editCertifications").value = (p.certifications || []).join(", ");
+  document.getElementById("editNotes").value          = p.notes     || "";
+  document.getElementById("editApproved").checked     = p.approved  === true;
+
+  const parents = normalizeParents(p);
+  const isMinor = parents.length > 0;
+  document.getElementById("editIsMinor").checked                    = isMinor;
+  document.getElementById("editParentSection").style.display        = isMinor ? "" : "none";
+  renderEditParents(parents);
+
+  // Emergency contact: first parent wins for minors
+  const firstPar = parents[0];
+  document.getElementById("editEmergencyName").value  = firstPar?.name  || p.emergencyContactName  || "";
+  document.getElementById("editEmergencyPhone").value = firstPar?.phone || p.emergencyContactPhone || "";
+
+  document.getElementById("editAccountMsg").textContent = "";
+  document.getElementById("editAccountMsg").className   = "signup-message";
+  document.getElementById("editAccountModal").style.display = "flex";
 
   document.getElementById("editIsMinor").onchange = () => {
     const checked = document.getElementById("editIsMinor").checked;
     document.getElementById("editParentSection").style.display = checked ? "" : "none";
     if (!checked) {
-      document.getElementById("editParentName").value  = "";
-      document.getElementById("editParentEmail").value = "";
-      document.getElementById("editParentPhone").value = "";
+      renderEditParents([]);
+    } else if (!document.querySelectorAll("#editParentsContainer .edit-parent-row").length) {
+      renderEditParents([{}]);
     }
+    syncFirstEditParentToEmergency();
   };
 }
 
@@ -807,12 +926,46 @@ async function saveAccountEdits() {
       certifications,
       notes:         document.getElementById("editNotes").value.trim(),
       approved:      document.getElementById("editApproved").checked,
-      parentName:    isMinor ? document.getElementById("editParentName").value.trim()              : "",
-      parentEmail:   isMinor ? document.getElementById("editParentEmail").value.trim().toLowerCase(): "",
-      parentPhone:   isMinor ? document.getElementById("editParentPhone").value.trim()             : "",
+      ...(() => {
+        const eParents   = isMinor ? collectEditParents() : [];
+        const firstEPar  = eParents[0] || null;
+        return {
+          parents:    eParents,
+          parentName:  firstEPar?.name  || "",
+          parentEmail: firstEPar?.email || "",
+          parentPhone: firstEPar?.phone || "",
+          emergencyContactName:  firstEPar?.name  || document.getElementById("editEmergencyName").value.trim(),
+          emergencyContactPhone: firstEPar?.phone || document.getElementById("editEmergencyPhone").value.trim(),
+        };
+      })(),
     });
     msg.textContent = "Saved successfully."; msg.className = "signup-message success";
-    await loadRoster();
+    // Update the local cache in place — avoids re-fetching the full collection
+    const eParents  = isMinor ? collectEditParents() : [];
+    const firstEPar = eParents[0] || null;
+    const updatedFields = {
+      firstName:             document.getElementById("editFirstName").value.trim(),
+      lastName:              document.getElementById("editLastName").value.trim(),
+      email:                 document.getElementById("editEmail").value.trim().toLowerCase(),
+      phone:                 document.getElementById("editPhone").value.trim(),
+      street:                document.getElementById("editStreet").value.trim(),
+      city:                  document.getElementById("editCity").value.trim(),
+      state:                 document.getElementById("editState").value.trim().toUpperCase(),
+      zip:                   document.getElementById("editZip").value.trim(),
+      certifications,
+      notes:                 document.getElementById("editNotes").value.trim(),
+      approved:              document.getElementById("editApproved").checked,
+      parents:               eParents,
+      parentName:            firstEPar?.name  || "",
+      parentEmail:           firstEPar?.email || "",
+      parentPhone:           firstEPar?.phone || "",
+      emergencyContactName:  firstEPar?.name  || document.getElementById("editEmergencyName").value.trim(),
+      emergencyContactPhone: firstEPar?.phone || document.getElementById("editEmergencyPhone").value.trim(),
+    };
+    updatedFields.name = [updatedFields.firstName, updatedFields.lastName].filter(Boolean).join(" ");
+    const idx = allUmpires.findIndex(u => u.id === editAccountUid);
+    if (idx !== -1) allUmpires[idx] = { ...allUmpires[idx], ...updatedFields };
+    renderRoster();
     setTimeout(closeEditAccountModal, 1200);
   } catch (err) {
     msg.textContent = err.message || "Error saving changes."; msg.className = "signup-message error";
@@ -1085,7 +1238,7 @@ document.addEventListener("click", e => {
   if (delAdminBtn)   { removeAdmin(delAdminBtn.dataset.uid); return; }
 
   const editAccBtn    = e.target.closest(".edit-account-btn");
-  if (editAccBtn)    { openEditAccountModal(editAccBtn.dataset); return; }
+  if (editAccBtn)    { openEditAccountModal(editAccBtn.dataset.uid); return; }
 
   const appCoachBtn = e.target.closest(".approve-coach-pending-btn");
   if (appCoachBtn)  { approveCoachPending(appCoachBtn.dataset.uid, appCoachBtn.dataset.name); return; }

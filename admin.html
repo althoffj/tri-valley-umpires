@@ -86,6 +86,18 @@
           <div><div style="font-weight:600">Alerts</div><div style="font-size:0.8rem;color:var(--light-text)">Announcements &amp; notifications</div></div>
         </div>
       </a>
+      <a href="admin-incidents.html" style="text-decoration:none">
+        <div style="background:var(--container);border:1px solid #444;border-radius:10px;padding:16px 18px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.4rem">🚨</span>
+          <div>
+            <div style="font-weight:600;display:flex;align-items:center;gap:6px">
+              Incidents
+              <span id="incidentPendingBadge" style="display:none;background:#e05;color:#fff;border-radius:10px;font-size:0.7rem;font-weight:700;padding:1px 6px;line-height:1.7"></span>
+            </div>
+            <div style="font-size:0.8rem;color:var(--light-text)">Ejections &amp; reports</div>
+          </div>
+        </div>
+      </a>
       <a href="admin-callup.html" style="text-decoration:none">
         <div style="background:var(--container);border:1px solid #444;border-radius:10px;padding:16px 18px;display:flex;align-items:center;gap:10px">
           <span style="font-size:1.4rem">⬆️</span>
@@ -123,6 +135,11 @@
     <p id="callupPendingNote" class="schedule-source"></p>
     <div id="callupPendingList" style="margin-bottom:28px"></div>
 
+    <!-- ── Open Incident Reports ──────────────────────────────────────────── -->
+    <h2>🚨 Open Incident Reports</h2>
+    <p id="incidentPendingNote" class="schedule-source"></p>
+    <div id="incidentPendingList" style="margin-bottom:28px"></div>
+
   </div>
 
   <!-- Not-admin fallback -->
@@ -140,8 +157,8 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=19"></script>
-  <script type="module" src="admin.js?v=21"></script>
+  <script type="module" src="auth.js?v=22"></script>
+  <script type="module" src="admin.js?v=23"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=3"></script>

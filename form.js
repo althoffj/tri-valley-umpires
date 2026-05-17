@@ -173,17 +173,88 @@ function validateForm(data) {
     showError("signatureError", "Electronic signature is required."); valid = false;
   } else clearError("signatureError");
 
-  if (data.parentEmail && !EMAIL_RE.test(data.parentEmail)) {
-    showError("parentEmailError", "Please enter a valid parent email address."); valid = false;
-  } else clearError("parentEmailError");
+  // Validate each parent's email (optional field, but must be valid if filled)
+  let parentEmailValid = true;
+  document.querySelectorAll("#parentsContainer .form-parent-row").forEach(row => {
+    const emailEl = row.querySelector(".fpr-email");
+    const errEl   = row.querySelector(".fpr-email-error");
+    if (emailEl.value && !EMAIL_RE.test(emailEl.value)) {
+      errEl.textContent = "Please enter a valid email address.";
+      parentEmailValid = false;
+    } else {
+      errEl.textContent = "";
+    }
+  });
+  if (!parentEmailValid) valid = false;
 
   return valid;
 }
 
+// ── Dynamic parent row helpers ────────────────────────────────────────────────
+
+function makeParentRow(p = {}) {
+  const row = document.createElement("div");
+  row.className = "form-parent-row";
+  row.style.cssText = "display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:10px;align-items:start";
+  row.innerHTML = `
+    <div>
+      <input type="text"  class="fpr-name"  placeholder="Name"             value="${(p.name  || "").replace(/"/g,'&quot;')}" autocomplete="name" />
+    </div>
+    <div>
+      <input type="tel"   class="fpr-phone" placeholder="(605) 555-1234"   value="${(p.phone || "").replace(/"/g,'&quot;')}" maxlength="14" autocomplete="tel" />
+    </div>
+    <div>
+      <input type="email" class="fpr-email" placeholder="Email (optional)"  value="${(p.email || "").replace(/"/g,'&quot;')}" autocomplete="email" />
+      <p class="field-error fpr-email-error"></p>
+    </div>
+    <button type="button" class="fpr-remove" title="Remove"
+      style="padding:6px 8px;background:transparent;color:#ff8a8a;border:1px solid #884444;border-radius:5px;cursor:pointer;font-size:1rem;line-height:1;align-self:start">×</button>`;
+  // Phone formatting on the tel input
+  row.querySelector(".fpr-phone").addEventListener("input", function() { formatPhoneInput(this); });
+  return row;
+}
+
+function updateParentRemoveBtns() {
+  const rows = document.querySelectorAll("#parentsContainer .form-parent-row");
+  rows.forEach(row => {
+    row.querySelector(".fpr-remove").style.visibility = rows.length > 1 ? "" : "hidden";
+  });
+}
+
+function collectParents() {
+  return [...document.querySelectorAll("#parentsContainer .form-parent-row")]
+    .map(row => ({
+      name:  row.querySelector(".fpr-name").value.trim(),
+      phone: row.querySelector(".fpr-phone").value.trim(),
+      email: row.querySelector(".fpr-email").value.trim().toLowerCase(),
+    }))
+    .filter(p => p.name || p.phone);
+}
+
+// Seed with one empty row on load
+const _parentsContainer = document.getElementById("parentsContainer");
+if (_parentsContainer) {
+  _parentsContainer.appendChild(makeParentRow());
+  updateParentRemoveBtns();
+}
+
+document.getElementById("addParentBtn")?.addEventListener("click", () => {
+  document.getElementById("parentsContainer").appendChild(makeParentRow());
+  updateParentRemoveBtns();
+});
+
+document.getElementById("parentsContainer")?.addEventListener("click", e => {
+  if (!e.target.matches(".fpr-remove")) return;
+  const rows = document.querySelectorAll("#parentsContainer .form-parent-row");
+  if (rows.length > 1) {
+    e.target.closest(".form-parent-row").remove();
+    updateParentRemoveBtns();
+  }
+});
+
 // ── Phone formatting ─────────────────────────────────────────────────────────
 
 document.getElementById("phone").addEventListener("input", function() { formatPhoneInput(this); });
-document.getElementById("parent_phone").addEventListener("input", function() { formatPhoneInput(this); });
 
 // Inline email validation on blur
 document.getElementById("email").addEventListener("blur", function() {
@@ -210,9 +281,6 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
     zip:         document.getElementById("zip").value.trim(),
     password:    document.getElementById("password").value,
     signature:   document.getElementById("signature").value.trim(),
-    parentName:  document.getElementById("parent_name").value.trim(),
-    parentEmail: document.getElementById("parent_email").value.trim().toLowerCase(),
-    parentPhone: document.getElementById("parent_phone").value.trim()
   };
 
   if (!validateForm(data)) return;
@@ -241,6 +309,10 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
       uid = userCredential.user.uid;
     }
 
+    // Collect parents from dynamic rows
+    const parents     = collectParents();
+    const firstParent = parents[0] || null;
+
     // Write Firestore profile
     await setDoc(doc(db, "umpires", uid), {
       name:        fullName,
@@ -253,9 +325,13 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
       state:       data.state,
       zip:         data.zip,
       signature:   data.signature,
-      parentName:  data.parentName  || "",
-      parentEmail: data.parentEmail || "",
-      parentPhone: data.parentPhone || "",
+      parents:     parents,
+      parentName:  firstParent?.name  || "",
+      parentEmail: firstParent?.email || "",
+      parentPhone: firstParent?.phone || "",
+      // If a parent/guardian is provided, they are automatically the emergency contact
+      emergencyContactName:  firstParent?.name  || "",
+      emergencyContactPhone: firstParent?.phone || "",
       teamsPlayed: [...document.querySelectorAll("[name='teamAffiliation']:checked")].map(cb => cb.value),
       approved:    false,
       submittedAt: serverTimestamp()

@@ -1,5 +1,5 @@
 // admin-payroll.js — Payroll summary with per-umpire grouping and mark-paid
-import { db } from "./firebase.js";
+import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
 import { getOrgSettings, getSeasonRange } from "./org.js";
 import { esc, fmtDate, fmtTime, setMsg, thisYearRange, lastYearRange, showToast } from "./utils.js";
@@ -7,6 +7,10 @@ import { esc, fmtDate, fmtTime, setMsg, thisYearRange, lastYearRange, showToast 
 import {
   collection, getDocs, getDoc, doc, updateDoc, writeBatch, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+  getFunctions,
+  httpsCallable,
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -140,7 +144,11 @@ function renderSummary() {
               </button>` : ""}
             <button class="btn print-btn pay-stub-btn" data-uid="${esc(uid)}"
               style="font-size:0.78rem;padding:4px 12px;width:100%">
-              📄 Pay Stub
+              📄 Print Stub
+            </button>
+            <button class="btn print-btn email-stub-btn" data-uid="${esc(uid)}"
+              style="font-size:0.78rem;padding:4px 12px;width:100%">
+              ✉️ Email Stub
             </button>
           </div>
         </div>`;
@@ -153,6 +161,9 @@ function renderSummary() {
   });
   el.querySelectorAll(".pay-stub-btn").forEach(btn => {
     btn.addEventListener("click", () => generatePayStub(btn.dataset.uid));
+  });
+  el.querySelectorAll(".email-stub-btn").forEach(btn => {
+    btn.addEventListener("click", () => emailPayStub(btn));
   });
 }
 
@@ -551,6 +562,32 @@ async function generatePayStub(uid) {
   if (win) {
     win.document.write(html);
     win.document.close();
+  }
+}
+
+// ── Email pay stub ────────────────────────────────────────────────────────────
+
+async function emailPayStub(btn) {
+  const uid = btn.dataset.uid;
+  if (!uid) return;
+
+  btn.disabled    = true;
+  btn.textContent = "Sending…";
+
+  try {
+    const fns         = getFunctions(app, "us-central1");
+    const emailStubFn = httpsCallable(fns, "emailPayStub");
+    const result      = await emailStubFn({
+      uid,
+      fromDate: payrollFromFilter || null,
+      toDate:   payrollToFilter   || null,
+    });
+    showToast(`✉️ Pay stub emailed to ${result.data.to}`);
+  } catch (err) {
+    showToast("Error sending email: " + (err.message || err.code));
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = "✉️ Email Stub";
   }
 }
 

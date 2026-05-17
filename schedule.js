@@ -37,6 +37,8 @@ let activeFilter    = "all";
 let pendingGameId   = null;
 let pendingSlotType = null;
 
+let _gameDayBarCache = null; // { date: "YYYY-MM-DD", data: { todayGames, facilities, shedCodes, weatherMap } }
+
 // Pending cancellation requests for the current user: "gameId|slotType" → requestDocId
 let pendingCancels = {};
 
@@ -269,6 +271,7 @@ async function checkIn(gameId, slotType, targetUid) {
     });
     const g = games.find(g => g.id === gameId);
     if (g) g.umpireSlots = updatedSlots;
+    _gameDayBarCache = null;
     renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "Check In"; }
@@ -302,6 +305,7 @@ async function adminAssignSelf(gameId, slotType) {
     // Update local cache if the game is in the main list
     const g = games.find(g => g.id === gameId);
     if (g) g.umpireSlots = updatedSlots;
+    _gameDayBarCache = null;
     renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "Assign Me"; }
@@ -352,6 +356,7 @@ async function adminUnassignSlot(gameId, slotType, targetUid) {
     });
     const g = games.find(g => g.id === gameId);
     if (g) { g.umpireSlots = updatedSlots; g.needsUmpires = true; }
+    _gameDayBarCache = null;
     renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "Unassign"; }
@@ -379,6 +384,7 @@ async function adminNoShow(gameId, slotType, targetUid) {
     });
     const g = games.find(g => g.id === gameId);
     if (g) g.umpireSlots = updatedSlots;
+    _gameDayBarCache = null;
     renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "No Show"; }
@@ -396,6 +402,7 @@ async function adminCancelGame(gameId) {
     await updateDoc(doc(db, "games", gameId), { cancelled: true });
     const g = games.find(g => g.id === gameId);
     if (g) g.cancelled = true;
+    _gameDayBarCache = null;
     renderGameDayBar();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "Cancel Game"; }
@@ -539,6 +546,21 @@ function renderAdminGameCard(game, facility, shedCodes, wx) {
   </div>`;
 }
 
+function _renderGameDayBarFromCache(uid, admin) {
+  const bar = document.getElementById("gameDayBar");
+  if (!bar) return;
+  const { todayGames, facilities, shedCodes, weatherMap } = _gameDayBarCache;
+  if (todayGames.length === 0) { bar.style.display = "none"; return; }
+  bar.style.display = "";
+  bar.innerHTML = todayGames.map(game => {
+    const facility = matchFacility(facilities, game.city);
+    const wx       = weatherMap[game.id];
+    return admin
+      ? renderAdminGameCard(game, facility, shedCodes, wx)
+      : renderUmpireGameCard(game, uid, facility, shedCodes, wx);
+  }).join("");
+}
+
 async function renderGameDayBar() {
   const bar = document.getElementById("gameDayBar");
   if (!bar) return;
@@ -548,6 +570,12 @@ async function renderGameDayBar() {
   if (!isLoggedIn() || (!isApproved() && !admin) || !uid) { bar.style.display = "none"; return; }
 
   const today = todayISO();
+
+  // Serve from cache if already loaded today
+  if (_gameDayBarCache?.date === today) {
+    _renderGameDayBarFromCache(uid, admin);
+    return;
+  }
 
   // Query all today's games regardless of needsUmpires — a fully-assigned game
   // has needsUmpires=false and would otherwise be invisible to the umpire or admin.
@@ -566,8 +594,6 @@ async function renderGameDayBar() {
     return;
   }
 
-  if (todayGames.length === 0) { bar.style.display = "none"; return; }
-
   const [facilities, shedCodes] = await Promise.all([getFacilities(), getShedCodes()]);
 
   const weatherMap = {};
@@ -575,14 +601,8 @@ async function renderGameDayBar() {
     weatherMap[g.id] = await fetchWeather(g.city, g.date, g.time);
   }));
 
-  bar.style.display = "";
-  bar.innerHTML = todayGames.map(game => {
-    const facility = matchFacility(facilities, game.city);
-    const wx       = weatherMap[game.id];
-    return admin
-      ? renderAdminGameCard(game, facility, shedCodes, wx)
-      : renderUmpireGameCard(game, uid, facility, shedCodes, wx);
-  }).join("");
+  _gameDayBarCache = { date: today, todayGames, facilities, shedCodes, weatherMap };
+  _renderGameDayBarFromCache(uid, admin);
 }
 
 // ── Row rendering ─────────────────────────────────────────────────────────────
@@ -1231,6 +1251,25 @@ getDoc(doc(db, "config", "scheduling")).then(snap => {
   if (snap.exists()) _lateCancelHours = snap.data().lateCancelHours ?? 4;
 }).catch(() => {});
 
+function checkProfileCompleteness() {
+  const profile = getCurrentProfile();
+  if (!isApproved() || !profile) return;
+  const missing = [];
+  if (!profile.phone) missing.push("phone number");
+  if (!profile.emergencyContactName && !profile.emergencyContactPhone) missing.push("emergency contact");
+  const banner = document.getElementById("profileWarningBanner");
+  if (!banner) return;
+  if (!missing.length) { banner.style.display = "none"; return; }
+  banner.style.display = "";
+  banner.innerHTML = `
+    <div class="document-note" style="border-left-color:#f5a623;margin-bottom:16px">
+      <p style="margin:0;font-size:0.9rem">
+        📋 <strong>Your profile is incomplete</strong> — missing: ${missing.join(" and ")}.
+        Tap <strong>☰ → Edit Profile</strong> to update so coordinators and co-umpires can reach you in an emergency.
+      </p>
+    </div>`;
+}
+
 authReadyPromise.then(() => {
   const myGamesBtn = document.getElementById("myGamesBtn");
   if (myGamesBtn) myGamesBtn.style.display = isLoggedIn() ? "" : "none";
@@ -1238,6 +1277,7 @@ authReadyPromise.then(() => {
   if (isApproved()) {
     const uid = getCurrentUser()?.uid;
     if (uid) initUmpireCalendar(uid);
+    checkProfileCompleteness();
   }
   loadTeamCalendars();
   loadGames();

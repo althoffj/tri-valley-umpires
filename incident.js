@@ -14,6 +14,7 @@ import {
   collection,
   addDoc,
   getDocs,
+  where,
   query,
   orderBy,
   serverTimestamp
@@ -251,10 +252,90 @@ async function handleSubmit(e) {
     document.getElementById("photoPreview").innerHTML = "";
     updateTypeFields("");
     await loadMyGames();
+    loadMyReports();
   } catch (err) {
     console.error(err);
     setMsg("Error submitting report. Please try again.", "error");
     btn.disabled = false;
+  }
+}
+
+// ── My submitted reports ──────────────────────────────────────────────────────
+
+const STATUS_COLORS = { open: "#60a5fa", reviewed: "#fbbf24", closed: "#6ee7b7" };
+const STATUS_LABELS = { open: "Open", reviewed: "Reviewed", closed: "Closed" };
+
+function incidentStatusBadge(status) {
+  const s     = (status || "open").toLowerCase();
+  const color = STATUS_COLORS[s] || "#aaa";
+  const label = STATUS_LABELS[s] || status;
+  return `<span style="display:inline-block;padding:1px 9px;border-radius:10px;font-size:0.75rem;font-weight:700;background:${color}22;color:${color};border:1px solid ${color}55">${esc(label)}</span>`;
+}
+
+async function loadMyReports() {
+  const section = document.getElementById("myReportsSection");
+  const listEl  = document.getElementById("myReportsList");
+  const noteEl  = document.getElementById("myReportsNote");
+  if (!section || !listEl) return;
+
+  const user = getCurrentUser();
+  if (!user) return;
+
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, "incidentReports"),
+        where("reportedBy", "==", user.uid),
+        orderBy("submittedAt", "desc")
+      )
+    );
+
+    if (snap.empty) {
+      noteEl.textContent = "You have not submitted any incident reports yet.";
+      listEl.innerHTML   = "";
+      section.style.display = "";
+      return;
+    }
+
+    noteEl.textContent = `${snap.size} report${snap.size === 1 ? "" : "s"} submitted.`;
+
+    listEl.innerHTML = snap.docs.map(d => {
+      const r = d.data();
+      const status = r.status || "open";
+      const typeColor = r.incidentType === "Ejection"          ? "#ff9999"
+                      : r.incidentType === "Injury"            ? "#ffcc80"
+                      : r.incidentType === "Unsafe Conditions" ? "#ffe066"
+                      : "#f7c87e";
+      const gameInfo = [r.gameDate, r.gameCity, r.gameDivision].filter(Boolean).join(" · ");
+      const submitted = r.submittedAt?.toDate
+        ? r.submittedAt.toDate().toLocaleDateString("en-US", {
+            month: "short", day: "numeric", year: "numeric" })
+        : "—";
+
+      return `
+        <div class="document-note" style="border-left-color:${typeColor};margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <strong style="color:${typeColor}">${esc(r.incidentType || "Incident")}</strong>
+              ${incidentStatusBadge(status)}
+            </div>
+            <span style="color:var(--light-text);font-size:0.82rem">${esc(submitted)}</span>
+          </div>
+          ${gameInfo ? `<div style="font-size:0.87rem;color:var(--light-text);margin-bottom:4px">${esc(gameInfo)}</div>` : ""}
+          <div style="font-size:0.9rem;color:#ccc;white-space:pre-wrap">${esc((r.description || "").substring(0, 200))}${r.description?.length > 200 ? "…" : ""}</div>
+          ${r.adminNotes
+            ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(255,255,255,0.05);border-radius:6px;border-left:2px solid #555;font-size:0.85rem;color:#bbb">
+                <span style="color:var(--light-text);font-size:0.78rem">Admin note:</span> ${esc(r.adminNotes)}
+               </div>`
+            : ""}
+        </div>`;
+    }).join("");
+
+    section.style.display = "";
+  } catch (err) {
+    console.error(err);
+    noteEl.textContent = "Error loading your reports.";
+    section.style.display = "";
   }
 }
 
@@ -281,6 +362,7 @@ async function init() {
   }
 
   await loadMyGames();
+  loadMyReports();
 
   document.getElementById("incidentType")?.addEventListener("change", function () {
     updateTypeFields(this.value);

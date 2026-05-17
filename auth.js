@@ -27,6 +27,22 @@ let currentProfile = null; // umpires/{uid} document data
 let currentIsAdmin = false;
 let currentAdminDoc = null; // admins/{uid} document data
 let currentCoachDoc = null; // coaches/{uid} document data
+let _skipAuthFetch = false; // set by login()/googleSignIn() to avoid duplicate Firestore reads
+
+// Cache auth-gated element collections — populated once at module init
+let _authEls = null;
+function getAuthEls() {
+  if (_authEls) return _authEls;
+  _authEls = {
+    required: document.querySelectorAll("[data-auth-required]"),
+    guest:    document.querySelectorAll("[data-auth-guest]"),
+    approved: document.querySelectorAll("[data-auth-approved]"),
+    name:     document.querySelectorAll("[data-auth-name]"),
+    admin:    document.querySelectorAll("[data-auth-admin]"),
+    coach:    document.querySelectorAll("[data-auth-coach]"),
+  };
+  return _authEls;
+}
 
 // Resolves once the initial auth state check completes
 let authReadyResolve;
@@ -35,20 +51,25 @@ export const authReadyPromise = new Promise(resolve => { authReadyResolve = reso
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     currentUser = user;
-    try {
-      const [umpireSnap, adminSnap, coachSnap] = await Promise.all([
-        getDoc(doc(db, "umpires", user.uid)),
-        getDoc(doc(db, "admins", user.uid)),
-        getDoc(doc(db, "coaches", user.uid))
-      ]);
-      currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
-      currentIsAdmin  = adminSnap.exists();
-      currentAdminDoc = adminSnap.exists() ? adminSnap.data() : null;
-      currentCoachDoc = coachSnap.exists() ? coachSnap.data() : null;
-    } catch {
-      currentProfile  = null;
-      currentIsAdmin  = false;
-      currentCoachDoc = null;
+    if (_skipAuthFetch) {
+      _skipAuthFetch = false;
+      // profiles already populated by login() or googleSignIn()
+    } else {
+      try {
+        const [umpireSnap, adminSnap, coachSnap] = await Promise.all([
+          getDoc(doc(db, "umpires", user.uid)),
+          getDoc(doc(db, "admins", user.uid)),
+          getDoc(doc(db, "coaches", user.uid))
+        ]);
+        currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
+        currentIsAdmin  = adminSnap.exists();
+        currentAdminDoc = adminSnap.exists() ? adminSnap.data() : null;
+        currentCoachDoc = coachSnap.exists() ? coachSnap.data() : null;
+      } catch {
+        currentProfile  = null;
+        currentIsAdmin  = false;
+        currentCoachDoc = null;
+      }
     }
   } else {
     currentUser     = null;
@@ -99,6 +120,7 @@ export async function login(email, password) {
     currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
     currentIsAdmin  = true;
     currentAdminDoc = adminSnap.data();
+    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
 
@@ -108,6 +130,7 @@ export async function login(email, password) {
     if (profile.approved === false) { await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
     if (profile.active === false)   { await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
     currentProfile = profile;
+    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
 
@@ -117,6 +140,7 @@ export async function login(email, password) {
     if (coach.approved === false) { await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
     if (coach.active === false)   { await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
     currentCoachDoc = coach;
+    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
 
@@ -144,6 +168,7 @@ export async function googleSignIn() {
     currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
     currentIsAdmin  = true;
     currentAdminDoc = adminSnap.data();
+    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
 
@@ -153,6 +178,7 @@ export async function googleSignIn() {
     if (profile.approved === false) { await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
     if (profile.active === false)   { await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
     currentProfile = profile;
+    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
 
@@ -162,6 +188,7 @@ export async function googleSignIn() {
     if (coach.approved === false) { await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
     if (coach.active === false)   { await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
     currentCoachDoc = coach;
+    _skipAuthFetch = true; // onAuthStateChanged will fire next; data already populated
     return credential;
   }
 
@@ -203,24 +230,13 @@ export function applyAuthGate() {
   const approved = isApproved();
   const name     = getLoggedInName();
 
-  document.querySelectorAll("[data-auth-required]").forEach(el => {
-    el.style.display = loggedIn ? "" : "none";
-  });
-  document.querySelectorAll("[data-auth-guest]").forEach(el => {
-    el.style.display = loggedIn ? "none" : "";
-  });
-  document.querySelectorAll("[data-auth-approved]").forEach(el => {
-    el.style.display = (loggedIn && approved) ? "" : "none";
-  });
-  document.querySelectorAll("[data-auth-name]").forEach(el => {
-    el.textContent = name || "";
-  });
-  document.querySelectorAll("[data-auth-admin]").forEach(el => {
-    el.style.display = (loggedIn && isAdmin()) ? "" : "none";
-  });
-  document.querySelectorAll("[data-auth-coach]").forEach(el => {
-    el.style.display = (loggedIn && isCoach()) ? "" : "none";
-  });
+  const els = getAuthEls();
+  els.required.forEach(el => { el.style.display = loggedIn ? "" : "none"; });
+  els.guest.forEach(el    => { el.style.display = loggedIn ? "none" : ""; });
+  els.approved.forEach(el => { el.style.display = (loggedIn && approved) ? "" : "none"; });
+  els.name.forEach(el     => { el.textContent   = name || ""; });
+  els.admin.forEach(el    => { el.style.display = (loggedIn && isAdmin()) ? "" : "none"; });
+  els.coach.forEach(el    => { el.style.display = (loggedIn && isCoach()) ? "" : "none"; });
 
   // Sync hamburger dropdown to new auth state
   updateDropdownState();
@@ -493,6 +509,31 @@ function initAuthUI() {
               style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
           </div>
 
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid #444">
+            <div style="font-size:0.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--light-text);margin-bottom:10px">Emergency Contact</div>
+            <div style="display:flex;gap:8px">
+              <div style="flex:2">
+                <label for="profileEmergencyName" style="margin-top:0">Name <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+                <input type="text" id="profileEmergencyName" placeholder="e.g. Jane Smith"
+                  style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem;box-sizing:border-box" />
+              </div>
+              <div style="flex:1.4">
+                <label for="profileEmergencyPhone" style="margin-top:0">Phone <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+                <input type="tel" id="profileEmergencyPhone" placeholder="(605) 555-1234"
+                  style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem;box-sizing:border-box" />
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div style="font-size:0.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--light-text)">Parent / Guardian <span style="color:var(--light-text);font-weight:normal;text-transform:none;letter-spacing:0">(if under 18)</span></div>
+              <button type="button" id="profileAddParentBtn"
+                style="font-size:0.78rem;padding:3px 10px;background:transparent;color:#7ec8f7;border:1px solid #7ec8f7;border-radius:5px;cursor:pointer">+ Add</button>
+            </div>
+            <div id="profileParentsContainer"></div>
+          </div>
+
           <div style="margin-top:16px">
             <button type="submit" class="btn" style="width:100%">Save Changes</button>
           </div>
@@ -694,8 +735,14 @@ function initAuthUI() {
     document.getElementById("profileStateInput").value  = profile.state || "";
     document.getElementById("profileZip").value         = profile.zip || "";
     document.getElementById("profileMaxGames").value       = profile.maxGamesPerWeek != null ? profile.maxGamesPerWeek : "";
-    document.getElementById("profileCertifications").value = (profile.certifications || []).join(", ");
-    document.getElementById("profileNotes").value          = profile.notes || "";
+    document.getElementById("profileCertifications").value  = (profile.certifications || []).join(", ");
+    document.getElementById("profileNotes").value           = profile.notes || "";
+    const parents = normalizeParents(profile);
+    renderProfileParents(parents);
+    // Emergency contact: prefer first parent, fall back to saved emergency contact
+    const firstParent = parents[0];
+    document.getElementById("profileEmergencyName").value  = firstParent?.name  || profile.emergencyContactName  || "";
+    document.getElementById("profileEmergencyPhone").value = firstParent?.phone || profile.emergencyContactPhone || "";
     // Populate equipment checkboxes
     const owned = new Set(profile.equipment || []);
     document.querySelectorAll("#profileEquipment input[type=checkbox]").forEach(cb => {
@@ -703,6 +750,82 @@ function initAuthUI() {
     });
     document.getElementById("hmProfileMsg").textContent = "";
     showView("authProfileView");
+  });
+
+  // ── Parent / Guardian dynamic list ─────────────────────────────────────────
+  const INPUT_STYLE = "width:100%;padding:7px 9px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.88rem;box-sizing:border-box";
+
+  function normalizeParents(profile) {
+    if (Array.isArray(profile.parents) && profile.parents.length) return profile.parents;
+    if (profile.parentName) return [{ name: profile.parentName, email: profile.parentEmail || "", phone: profile.parentPhone || "" }];
+    return [];
+  }
+
+  function makeProfileParentRow(p = {}) {
+    const row = document.createElement("div");
+    row.className = "profile-parent-row";
+    row.style.cssText = "display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;margin-bottom:8px;align-items:center";
+    row.innerHTML = `
+      <input type="text"  class="ppr-name"  placeholder="Name"            value="${(p.name  || "").replace(/"/g,'&quot;')}" style="${INPUT_STYLE}" />
+      <input type="tel"   class="ppr-phone" placeholder="Phone"           value="${(p.phone || "").replace(/"/g,'&quot;')}" style="${INPUT_STYLE}" />
+      <input type="email" class="ppr-email" placeholder="Email (optional)" value="${(p.email || "").replace(/"/g,'&quot;')}" style="${INPUT_STYLE}" />
+      <button type="button" class="ppr-remove" title="Remove parent"
+        style="padding:4px 8px;background:transparent;color:#ff8a8a;border:1px solid #884444;border-radius:5px;cursor:pointer;font-size:1rem;line-height:1;flex-shrink:0">×</button>`;
+    return row;
+  }
+
+  function renderProfileParents(parents) {
+    const c = document.getElementById("profileParentsContainer");
+    if (!c) return;
+    c.innerHTML = "";
+    (parents.length ? parents : [{}]).forEach(p => c.appendChild(makeProfileParentRow(p)));
+    updateRemoveBtns();
+  }
+
+  function updateRemoveBtns() {
+    const rows = document.querySelectorAll("#profileParentsContainer .profile-parent-row");
+    rows.forEach(row => {
+      row.querySelector(".ppr-remove").style.visibility = rows.length > 1 ? "" : "hidden";
+    });
+  }
+
+  function syncFirstParentToEmergency() {
+    const first = document.querySelector("#profileParentsContainer .profile-parent-row");
+    if (!first) return;
+    const name  = first.querySelector(".ppr-name").value.trim();
+    const phone = first.querySelector(".ppr-phone").value.trim();
+    if (!name) return;
+    const eName  = document.getElementById("profileEmergencyName");
+    const ePhone = document.getElementById("profileEmergencyPhone");
+    if (eName)  eName.value  = name;
+    if (ePhone) ePhone.value = phone;
+  }
+
+  function collectProfileParents() {
+    return [...document.querySelectorAll("#profileParentsContainer .profile-parent-row")]
+      .map(row => ({
+        name:  row.querySelector(".ppr-name").value.trim(),
+        phone: row.querySelector(".ppr-phone").value.trim(),
+        email: row.querySelector(".ppr-email").value.trim(),
+      }))
+      .filter(p => p.name || p.phone);
+  }
+
+  document.getElementById("profileParentsContainer")?.addEventListener("input", e => {
+    if (e.target.matches(".ppr-name, .ppr-phone")) syncFirstParentToEmergency();
+  });
+  document.getElementById("profileParentsContainer")?.addEventListener("click", e => {
+    if (!e.target.matches(".ppr-remove")) return;
+    const rows = document.querySelectorAll("#profileParentsContainer .profile-parent-row");
+    if (rows.length > 1) {
+      e.target.closest(".profile-parent-row").remove();
+      updateRemoveBtns();
+      syncFirstParentToEmergency();
+    }
+  });
+  document.getElementById("profileAddParentBtn")?.addEventListener("click", () => {
+    document.getElementById("profileParentsContainer").appendChild(makeProfileParentRow());
+    updateRemoveBtns();
   });
 
   // Save profile
@@ -721,6 +844,8 @@ function initAuthUI() {
       const certifications = certsRaw
         ? certsRaw.split(",").map(s => s.trim()).filter(Boolean)
         : [];
+      const savedParents = collectProfileParents();
+      const firstParent  = savedParents[0] || null;
       const fields = {
         name:            document.getElementById("profileName").value.trim(),
         phone:           document.getElementById("profilePhone").value.trim(),
@@ -732,6 +857,16 @@ function initAuthUI() {
         equipment,
         certifications,
         notes:           document.getElementById("profileNotes").value.trim(),
+        parents:         savedParents,
+        // Backward-compat flat fields = first parent (or empty)
+        parentName:      firstParent?.name  || "",
+        parentPhone:     firstParent?.phone || "",
+        parentEmail:     firstParent?.email || "",
+        // First parent is always the emergency contact if any parent is set
+        emergencyContactName:  firstParent?.name
+                               || document.getElementById("profileEmergencyName").value.trim(),
+        emergencyContactPhone: firstParent?.phone
+                               || document.getElementById("profileEmergencyPhone").value.trim(),
       };
       await updateProfile(fields);
       msg.textContent = "Profile updated!";

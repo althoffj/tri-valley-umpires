@@ -80,6 +80,8 @@ function render() {
 
   renderStatCards(games);
   renderLeaderboard(games);
+  renderDivisionBreakdown(games);
+  renderYoY();
   renderWeeklyChart(games);
 }
 
@@ -107,6 +109,9 @@ function renderStatCards(games) {
 
   const fillRate    = totalSlots ? Math.round((filledSlots / totalSlots) * 100) : 0;
   const outstanding = totalEarned - totalPaid;
+  const cancelled   = games.filter(g => g.cancelled);
+  const rainouts    = cancelled.filter(g => g.cancellationType === "rainout").length;
+  const hardCancel  = cancelled.filter(g => g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled").length;
 
   const cards = [
     { label: "Active Games",    value: games.filter(g => !g.cancelled).length },
@@ -120,6 +125,10 @@ function renderStatCards(games) {
     { label: "Total Paid",      value: `$${totalPaid.toFixed(2)}` },
     { label: "Outstanding",     value: `$${outstanding.toFixed(2)}`,
       style: outstanding > 0 ? "color:#f0a500" : "" },
+    { label: "Rainouts",        value: rainouts,
+      style: rainouts > 0 ? "color:#60a5fa" : "" },
+    { label: "Cancelled",       value: hardCancel,
+      style: hardCancel > 0 ? "color:#f87171" : "" },
   ];
 
   document.getElementById("statCards").innerHTML = cards.map(c =>
@@ -175,7 +184,156 @@ function renderLeaderboard(games) {
     : `<tr><td colspan="8" style="color:var(--light-text);text-align:center">No games with assigned umpires yet.</td></tr>`;
 }
 
-// ── Weekly bar chart ───────────────────────────────────────────────────────
+// ── Division breakdown ─────────────────────────────────────────────────────
+
+function renderDivisionBreakdown(games) {
+  const tbody = document.getElementById("divisionBody");
+  if (!tbody) return;
+
+  const divStats = {};
+  const DIV_ORDER = ["10U", "12U", "14U", "HS JV", "HS Varsity"];
+
+  games.forEach(g => {
+    const div = g.division || "Unknown";
+    if (!divStats[div]) divStats[div] = { games: 0, slots: 0, filled: 0, open: 0, cancelled: 0, earned: 0 };
+    const s = divStats[div];
+    if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") {
+      s.cancelled++;
+      return;
+    }
+    s.games++;
+    (g.umpireSlots || []).forEach(slot => {
+      s.slots++;
+      if (slot.assignedUid) {
+        s.filled++;
+        s.earned += Number(slot.payRate ?? 0);
+      } else {
+        s.open++;
+      }
+    });
+  });
+
+  const divs = Object.keys(divStats).sort((a, b) => {
+    const ai = DIV_ORDER.indexOf(a);
+    const bi = DIV_ORDER.indexOf(b);
+    if (ai >= 0 && bi >= 0) return ai - bi;
+    if (ai >= 0) return -1;
+    if (bi >= 0) return 1;
+    return a.localeCompare(b);
+  });
+
+  if (!divs.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--light-text);text-align:center">No data.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = divs.map(div => {
+    const s       = divStats[div];
+    const fillPct = s.slots ? Math.round((s.filled / s.slots) * 100) : 0;
+    const fillColor = fillPct < 80 ? "#f0a500" : fillPct === 100 ? "#b8f2c4" : "";
+    return `<tr>
+      <td><strong>${esc(div)}</strong></td>
+      <td>${s.games}</td>
+      <td>${s.slots}</td>
+      <td>${s.filled}</td>
+      <td style="color:${fillColor}">${s.slots ? fillPct + "%" : "—"}</td>
+      <td style="color:${s.open > 0 ? "#f0a500" : ""}">${s.open}</td>
+      <td style="color:${s.cancelled > 0 ? "#f87171" : "var(--light-text)"}">${s.cancelled}</td>
+      <td>$${s.earned.toFixed(2)}</td>
+    </tr>`;
+  }).join("");
+}
+
+// ── Year-over-year comparison ──────────────────────────────────────────────
+
+function calcYearStats(year) {
+  const games = allGames.filter(g => {
+    if (!g.date || !g.date.startsWith(year)) return false;
+    if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") return false;
+    return true;
+  });
+  let slots = 0, filled = 0, earned = 0, paid = 0;
+  const umpires = new Set();
+  games.forEach(g => {
+    (g.umpireSlots || []).forEach(s => {
+      slots++;
+      if (s.assignedUid) { filled++; umpires.add(s.assignedUid); earned += Number(s.payRate ?? 0); if (s.paid) paid += Number(s.payRate ?? 0); }
+    });
+  });
+  return {
+    games:    games.filter(g => !g.cancelled).length,
+    fillRate: slots ? Math.round((filled / slots) * 100) : 0,
+    open:     slots - filled,
+    outstanding: earned - paid,
+    umpires:  umpires.size,
+    earned,
+  };
+}
+
+function delta(curr, prev, lowerIsBetter = false) {
+  if (prev === 0) return "";
+  const diff = curr - prev;
+  if (diff === 0) return `<span style="color:var(--light-text);font-size:0.75rem"> →</span>`;
+  const good = lowerIsBetter ? diff < 0 : diff > 0;
+  const sign = diff > 0 ? "+" : "";
+  return `<span style="color:${good ? "#b8f2c4" : "#f0a500"};font-size:0.75rem"> ${sign}${diff}</span>`;
+}
+
+function deltaFmt(curr, prev, format = v => v, lowerIsBetter = false) {
+  const diff = curr - prev;
+  if (diff === 0) return `<span style="color:var(--light-text);font-size:0.75rem"> →</span>`;
+  const good = lowerIsBetter ? diff < 0 : diff > 0;
+  const sign = diff > 0 ? "+" : "";
+  return `<span style="color:${good ? "#b8f2c4" : "#f0a500"};font-size:0.75rem"> ${sign}${format(diff)}</span>`;
+}
+
+function renderYoY() {
+  const cardsEl = document.getElementById("yoyCards");
+  const noteEl  = document.getElementById("yoyNote");
+  if (!cardsEl) return;
+
+  if (yearFilter === "all") {
+    cardsEl.innerHTML = "";
+    if (noteEl) noteEl.textContent = "Select a specific year to see year-over-year comparison.";
+    return;
+  }
+
+  const currYear = String(yearFilter);
+  const prevYear = String(Number(currYear) - 1);
+  const curr = calcYearStats(currYear);
+  const prev = calcYearStats(prevYear);
+  const hasPrev = allGames.some(g => (g.date || "").startsWith(prevYear));
+
+  if (!hasPrev) {
+    cardsEl.innerHTML = "";
+    if (noteEl) noteEl.textContent = `No ${prevYear} data available for comparison.`;
+    return;
+  }
+
+  if (noteEl) noteEl.textContent = `${currYear} vs ${prevYear}`;
+
+  const metrics = [
+    { label: "Games",       curr: curr.games,       prev: prev.games,       fmt: v => v,                          lower: false },
+    { label: "Fill Rate",   curr: curr.fillRate,    prev: prev.fillRate,    fmt: v => `${Math.abs(v)}%`,          lower: false },
+    { label: "Open Slots",  curr: curr.open,        prev: prev.open,        fmt: v => v,                          lower: true  },
+    { label: "Outstanding", curr: curr.outstanding, prev: prev.outstanding, fmt: v => `$${Math.abs(v).toFixed(0)}`, lower: true  },
+    { label: "Umpires",     curr: curr.umpires,     prev: prev.umpires,     fmt: v => v,                          lower: false },
+    { label: "Earned",      curr: curr.earned,      prev: prev.earned,      fmt: v => `$${Math.abs(v).toFixed(0)}`, lower: false },
+  ];
+
+  cardsEl.innerHTML = metrics.map(m => {
+    const dStr    = deltaFmt(m.curr, m.prev, m.fmt, m.lower);
+    const fmtVal  = v => (m.label === "Fill Rate") ? `${v}%`
+                       : (m.label === "Outstanding" || m.label === "Earned") ? `$${v.toFixed(2)}`
+                       : v;
+    return `<div class="analytics-card">
+      <div class="analytics-card-value">${fmtVal(m.curr)}${dStr}</div>
+      <div class="analytics-card-label">${m.label}
+        <span style="color:var(--light-text);font-size:0.7rem">(${prevYear}: ${fmtVal(m.prev)})</span>
+      </div>
+    </div>`;
+  }).join("");
+}
 
 function renderWeeklyChart(games) {
   const weeks = {};

@@ -4,7 +4,7 @@ import { authReadyPromise, isApproved, isCoach, getCurrentUser } from "./auth.js
 import { esc, fmtDate, fmtTime, setMsg, thisYearRange, lastYearRange } from "./utils.js";
 
 import {
-  collection, getDocs, query, orderBy
+  collection, getDocs, query, orderBy, where
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 let allRows    = [];   // all assigned, non-cancelled slots
@@ -15,16 +15,26 @@ let toFilter   = "";
 
 // ── Load ───────────────────────────────────────────────────────────────────
 
-async function loadEarnings() {
+async function loadEarnings(fromDate, toDate) {
   const tbody = document.getElementById("earningsBody");
   if (!tbody) return;
 
   const uid = getCurrentUser()?.uid;
   if (!uid) return;
 
+  // Default to current year if no range given
+  if (!fromDate || !toDate) {
+    const yr = thisYearRange();
+    fromDate = yr.from;
+    toDate   = yr.to;
+  }
+
   try {
     const snap = await getDocs(
-      query(collection(db, "games"), orderBy("date", "asc"))
+      query(collection(db, "games"),
+        where("date", ">=", fromDate),
+        where("date", "<=", toDate),
+        orderBy("date", "asc"))
     );
 
     allRows = [];
@@ -47,14 +57,12 @@ async function loadEarnings() {
       });
     });
 
-    // Default to current year on first load
-    const { from, to } = thisYearRange();
-    fromFilter = from;
-    toFilter   = to;
+    fromFilter = fromDate;
+    toFilter   = toDate;
     const fromEl = document.getElementById("earningsFrom");
     const toEl   = document.getElementById("earningsTo");
-    if (fromEl) fromEl.value = from;
-    if (toEl)   toEl.value   = to;
+    if (fromEl) fromEl.value = fromDate;
+    if (toEl)   toEl.value   = toDate;
 
     renderEarnings();
     wireControls();
@@ -160,20 +168,15 @@ function exportCSV() {
 // ── Controls ───────────────────────────────────────────────────────────────
 
 function applyYearRange(from, to) {
-  fromFilter = from;
-  toFilter   = to;
-  const fromEl = document.getElementById("earningsFrom");
-  const toEl   = document.getElementById("earningsTo");
-  if (fromEl) fromEl.value = from;
-  if (toEl)   toEl.value   = to;
-  renderEarnings();
+  // Re-query Firestore with the new date range
+  loadEarnings(from, to);
 }
 
 function wireControls() {
   document.getElementById("earningsFilterBtn")?.addEventListener("click", () => {
-    fromFilter = document.getElementById("earningsFrom").value;
-    toFilter   = document.getElementById("earningsTo").value;
-    renderEarnings();
+    const from = document.getElementById("earningsFrom").value;
+    const to   = document.getElementById("earningsTo").value;
+    loadEarnings(from || "2000-01-01", to || `${new Date().getFullYear()}-12-31`);
   });
 
   document.getElementById("earningsExportBtn")?.addEventListener("click", exportCSV);
@@ -188,11 +191,7 @@ function wireControls() {
         const r = lastYearRange();
         applyYearRange(r.from, r.to);
       } else {
-        applyYearRange("", "");
-        const fromEl = document.getElementById("earningsFrom");
-        const toEl   = document.getElementById("earningsTo");
-        if (fromEl) fromEl.value = "";
-        if (toEl)   toEl.value   = "";
+        loadEarnings("2000-01-01", `${new Date().getFullYear()}-12-31`);
       }
     });
   });

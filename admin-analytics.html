@@ -72,6 +72,33 @@
       </table>
     </div>
 
+    <!-- ── Division breakdown ────────────────────────────────────────────── -->
+    <h2 style="margin-top:32px">By Division</h2>
+    <div class="schedule-section" style="margin-top:0">
+      <table id="divisionTable">
+        <thead>
+          <tr>
+            <th>Division</th>
+            <th>Games</th>
+            <th>Slots</th>
+            <th>Filled</th>
+            <th>Fill %</th>
+            <th>Open</th>
+            <th>Cancelled</th>
+            <th>Earned</th>
+          </tr>
+        </thead>
+        <tbody id="divisionBody">
+          <tr><td colspan="8" style="color:var(--light-text);text-align:center">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Year-over-year comparison ──────────────────────────────────────── -->
+    <h2 style="margin-top:32px">Year-over-Year</h2>
+    <div id="yoyCards" class="analytics-cards" style="margin-bottom:8px"></div>
+    <p id="yoyNote" class="schedule-source"></p>
+
     <!-- ── Weekly game counts ─────────────────────────────────────────────── -->
     <h2 style="margin-top:32px">Games by Week</h2>
     <div id="weeklyChart" class="analytics-bar-chart"></div>
@@ -93,8 +120,8 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=19"></script>
-  <script type="module" src="admin-analytics.js?v=4"></script>
+  <script type="module" src="auth.js?v=22"></script>
+  <script type="module" src="admin-analytics.js?v=5"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=3"></script>

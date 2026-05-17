@@ -120,21 +120,12 @@
 
         <!-- Parent / Guardian -->
         <div class="parent-section">
-          <h2>Parent / Guardian (if under 18)</h2>
-          <label for="parent_name">Parent Name</label>
-          <input type="text" id="parent_name" autocomplete="name" />
-
-          <div class="form-row">
-            <div class="form-group">
-              <label for="parent_email">Parent Email</label>
-              <input type="email" id="parent_email" autocomplete="email" />
-              <p class="field-error" id="parentEmailError"></p>
-            </div>
-            <div class="form-group">
-              <label for="parent_phone">Parent Phone</label>
-              <input type="tel" id="parent_phone" autocomplete="tel" placeholder="(605) 555-1234" maxlength="14" />
-            </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <h2 style="margin:0">Parent / Guardian (if under 18)</h2>
+            <button type="button" id="addParentBtn" style="padding:4px 10px;font-size:0.82rem;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:5px;cursor:pointer">+ Add</button>
           </div>
+          <p style="color:var(--light-text);margin:0 0 10px;font-size:0.9rem">If this umpire is under 18, enter parent or guardian contact information. The first parent listed will be used as the emergency contact.</p>
+          <div id="parentsContainer"></div>
         </div>
 
         <!-- Team Affiliation -->
@@ -165,8 +156,8 @@
       </p>
     </div>
 
-    <script type="module" src="auth.js?v=19"></script>
-    <script type="module" src="form.js?v=8"></script>
+    <script type="module" src="auth.js?v=22"></script>
+    <script type="module" src="form.js?v=10"></script>
     <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=3"></script>
