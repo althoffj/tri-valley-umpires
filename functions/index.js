@@ -2810,22 +2810,20 @@ exports.onUmpireRegistered = onDocumentWritten(
       return;
     }
 
-    // Admin notification
-    try {
-      await transport.sendMail({
-        from:    `"Tri-Valley Umpires" <${GMAIL_USER.value()}>`,
-        to:      GMAIL_USER.value(),
-        subject: `New Umpire Registration — ${d.name || d.email || "Unknown"}`,
-        html:    adminHtml,
-        text:    adminText,
-      });
-    } catch (err) {
-      console.error("onUmpireRegistered: failed to send admin email", err);
-    }
+    // Build list of parent emails to notify — prefer new parents[] array, fall
+    // back to the flat parentEmail field for profiles registered before multi-parent.
+    const parentRecipients = (() => {
+      const arr = Array.isArray(d.parents) ? d.parents : [];
+      const fromArray = arr.filter(p => p && p.email);
+      if (fromArray.length) return fromArray; // [{name, email, ...}]
+      if (d.parentEmail) return [{ name: d.parentName || "", email: d.parentEmail }];
+      return [];
+    })();
 
-    // Parent notification (only if parentEmail is present)
-    if (d.parentEmail) {
-      const parentHtml = `
+    function makeParentEmail(parentName) {
+      const greeting = parentName ? `Hi ${parentName},` : "Hi Parent/Guardian,";
+      return {
+        html: `
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
@@ -2836,7 +2834,7 @@ exports.onUmpireRegistered = onDocumentWritten(
       <p style="margin:6px 0 0;color:#ffb0b0;font-size:0.9rem">Umpire Registration Confirmation</p>
     </td></tr>
     <tr><td style="background:#1a1a2e;padding:24px 28px">
-      <p style="margin:0 0 12px">Hi ${d.parentName || "Parent/Guardian"},</p>
+      <p style="margin:0 0 12px">${greeting}</p>
       <p style="margin:0 0 12px">This confirms that <strong>${d.name || ""}</strong> has submitted an umpire acknowledgment for the Tri-Valley Baseball Umpires program.</p>
       <p style="margin:0 0 12px">Their account is pending administrator approval, which typically takes 1–2 business days. Once approved, they'll be able to sign up for games at:</p>
       <p style="margin:0 0 12px"><a href="${APP_URL}" style="color:#7ec8f7">${APP_URL}</a></p>
@@ -2844,22 +2842,34 @@ exports.onUmpireRegistered = onDocumentWritten(
     </td></tr>
   </table>
 </body>
-</html>`;
-
-      const parentText = `Hi ${d.parentName || "Parent/Guardian"},\n\nThis confirms that ${d.name || ""} has submitted an umpire acknowledgment for the Tri-Valley Baseball Umpires program.\n\nTheir account is pending approval. Once approved, they can sign up for games at ${APP_URL}.\n\nQuestions? Contact the league administrator.`;
-
-      try {
-        await transport.sendMail({
-          from:    `"Tri-Valley Umpires" <${GMAIL_USER.value()}>`,
-          to:      d.parentEmail,
-          subject: `Umpire Registration — ${d.name || ""}`,
-          html:    parentHtml,
-          text:    parentText,
-        });
-      } catch (err) {
-        console.error("onUmpireRegistered: failed to send parent email", err);
-      }
+</html>`,
+        text: `${greeting}\n\nThis confirms that ${d.name || ""} has submitted an umpire acknowledgment for the Tri-Valley Baseball Umpires program.\n\nTheir account is pending approval. Once approved, they can sign up for games at ${APP_URL}.\n\nQuestions? Contact the league administrator.`,
+      };
     }
+
+    // Send admin email + all parent emails in parallel
+    const sends = [
+      transport.sendMail({
+        from:    `"Tri-Valley Umpires" <${GMAIL_USER.value()}>`,
+        to:      GMAIL_USER.value(),
+        subject: `New Umpire Registration — ${d.name || d.email || "Unknown"}`,
+        html:    adminHtml,
+        text:    adminText,
+      }).catch(err => console.error("onUmpireRegistered: failed to send admin email", err)),
+
+      ...parentRecipients.map(p => {
+        const body = makeParentEmail(p.name);
+        return transport.sendMail({
+          from:    `"Tri-Valley Umpires" <${GMAIL_USER.value()}>`,
+          to:      p.email,
+          subject: `Umpire Registration — ${d.name || ""}`,
+          html:    body.html,
+          text:    body.text,
+        }).catch(err => console.error(`onUmpireRegistered: failed to send parent email to ${p.email}`, err));
+      }),
+    ];
+
+    await Promise.all(sends);
   }
 );
 

@@ -1975,23 +1975,21 @@ async function approvePracticeRequest(id) {
     const req  = reqDoc.data();
     const dates = expandRecurrence(req);
 
-    // Write approved practices (one per date)
-    for (const date of dates) {
-      await addDoc(collection(db, "practices"), {
-        requestId:   id,
-        teamName:    req.teamName    || "",
-        coachName:   req.coachName   || "",
-        coachEmail:  req.coachEmail  || "",
-        coachPhone:  req.coachPhone  || "",
-        field:       req.field       || "",
-        date,
-        startTime:   req.startTime   || "",
-        endTime:     req.endTime     || "",
-        notes:       req.notes       || "",
-        recurrence:  req.recurrence  || { type: "once" },
-        approvedAt:  new Date().toISOString(),
-      });
-    }
+    // Write approved practices (one per date) — all in parallel
+    await Promise.all(dates.map(date => addDoc(collection(db, "practices"), {
+      requestId:   id,
+      teamName:    req.teamName    || "",
+      coachName:   req.coachName   || "",
+      coachEmail:  req.coachEmail  || "",
+      coachPhone:  req.coachPhone  || "",
+      field:       req.field       || "",
+      date,
+      startTime:   req.startTime   || "",
+      endTime:     req.endTime     || "",
+      notes:       req.notes       || "",
+      recurrence:  req.recurrence  || { type: "once" },
+      approvedAt:  new Date().toISOString(),
+    })));
     await updateDoc(doc(db, "practiceRequests", id), { status: "approved" });
     await loadPractices();
   } catch (err) {
