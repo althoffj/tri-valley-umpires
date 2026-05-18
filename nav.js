@@ -128,6 +128,18 @@ function buildNav() {
         : guestNav();
 
   setupDropdowns(nav);
+
+  // Inject "← Main Site" into admin subnavs so admins can always return home
+  if (section === "admin") {
+    const subnav = document.querySelector(".admin-subnav");
+    if (subnav && !subnav.querySelector(".admin-subnav-back")) {
+      const a = document.createElement("a");
+      a.href      = "index.html";
+      a.className = "admin-subnav-back";
+      a.textContent = "← Main Site";
+      subnav.appendChild(a);
+    }
+  }
 }
 
 // ── Dropdown interaction ──────────────────────────────────────────────────

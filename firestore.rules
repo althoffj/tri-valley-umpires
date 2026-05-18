@@ -142,6 +142,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Login history: any signed-in user can create their own record; only admins can read
+    match /loginHistory/{docId} {
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow read, delete: if isAdmin();
+    }
+
     // Cancellation requests: umpires create/read/withdraw their own; admins can read all and approve/deny
     match /cancellationRequests/{requestId} {
       allow create: if isApproved() && request.resource.data.uid == request.auth.uid;

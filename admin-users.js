@@ -29,7 +29,7 @@ async function loadCurrentAdminDoc() {
 
 // ── Section switching ─────────────────────────────────────────────────────────
 
-const SECTIONS = ["umpires", "coaches", "admins"];
+const SECTIONS = ["umpires", "coaches", "admins", "login-history"];
 
 function switchSection(name) {
   SECTIONS.forEach(s => {
@@ -46,15 +46,17 @@ function switchSection(name) {
     renderAddPermCards();
     adminsLoaded = true;
   }
+  if (name === "login-history" && !loginHistoryLoaded) { loadLoginHistory(); loginHistoryLoaded = true; }
 }
 
 document.querySelectorAll(".sched-sec-btn[data-section]").forEach(btn => {
   btn.addEventListener("click", () => switchSection(btn.dataset.section));
 });
 
-let rosterLoaded  = false;
-let coachesLoaded = false;
-let adminsLoaded  = false;
+let rosterLoaded       = false;
+let coachesLoaded      = false;
+let adminsLoaded       = false;
+let loginHistoryLoaded = false;
 
 // ── Pending Approvals ─────────────────────────────────────────────────────────
 
@@ -1266,6 +1268,74 @@ document.addEventListener("click", e => {
   if (e.target === document.getElementById("editPermModal"))    document.getElementById("editPermModal").style.display    = "none";
   if (e.target === document.getElementById("editAccountModal")) closeEditAccountModal();
 });
+
+// ── Login History ─────────────────────────────────────────────────────────────
+
+let _lhAll = [];   // full fetched set, filtered client-side
+
+async function loadLoginHistory() {
+  const tbody = document.getElementById("lhTableBody");
+  const note  = document.getElementById("lhNote");
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="6" style="color:var(--light-text);text-align:center;padding:20px">Loading…</td></tr>`;
+  try {
+    const snap = await getDocs(query(
+      collection(db, "loginHistory"),
+      orderBy("loginAt", "desc"),
+      limit(200)
+    ));
+    _lhAll = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderLoginHistory();
+    if (note) note.textContent = `${_lhAll.length} most recent login${_lhAll.length !== 1 ? "s" : ""} shown.`;
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" style="color:#ffb4b4;text-align:center;padding:20px">Error loading login history.</td></tr>`;
+    console.error(err);
+  }
+}
+
+function renderLoginHistory() {
+  const tbody  = document.getElementById("lhTableBody");
+  const role   = document.getElementById("lhFilterRole")?.value || "";
+  if (!tbody) return;
+
+  const rows = _lhAll.filter(r => !role || r.role === role);
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--light-text);text-align:center;padding:20px">No login records found.</td></tr>`;
+    return;
+  }
+
+  const roleColor = r => r === "admin" ? "#c4a8f0" : r === "coach" ? "#8ab4f8" : "#86efac";
+  const methodIcon = m => m === "google" ? "🔵 Google" : "📧 Email";
+  const shortUA = ua => {
+    if (!ua) return "—";
+    if (/iPhone|iPad/.test(ua))  return "iOS";
+    if (/Android/.test(ua))      return "Android";
+    if (/Mac/.test(ua))          return "macOS";
+    if (/Windows/.test(ua))      return "Windows";
+    return ua.slice(0, 30);
+  };
+
+  tbody.innerHTML = rows.map(r => {
+    const dt = r.loginAt?.toDate
+      ? r.loginAt.toDate().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+      : "—";
+    return `<tr>
+      <td style="padding:8px 10px;border-bottom:1px solid #222;white-space:nowrap;color:var(--light-text);font-size:0.82rem">${esc(dt)}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #222;font-weight:600">${esc(r.name || "—")}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #222;color:var(--light-text);font-size:0.82rem">${esc(r.email || "—")}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #222">
+        <span style="font-size:0.75rem;font-weight:700;color:${roleColor(r.role)}">${esc(r.role || "—")}</span>
+      </td>
+      <td style="padding:8px 10px;border-bottom:1px solid #222;font-size:0.82rem">${methodIcon(r.method)}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #222;color:var(--light-text);font-size:0.78rem">${esc(shortUA(r.userAgent))}</td>
+    </tr>`;
+  }).join("");
+}
+
+document.getElementById("lhRefreshBtn")?.addEventListener("click", loadLoginHistory);
+document.getElementById("lhFilterRole")?.addEventListener("change", renderLoginHistory);
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

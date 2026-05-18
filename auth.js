@@ -14,7 +14,10 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc
+  updateDoc,
+  addDoc,
+  collection,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getToken } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 
@@ -107,6 +110,24 @@ export function getLoggedInName() {
   return currentProfile?.name || currentUser?.displayName || currentUser?.email || null;
 }
 
+// ── Login event logger (fire-and-forget, non-blocking) ────────────────────────
+
+function _logLogin(user, method) {
+  try {
+    const role = currentIsAdmin ? "admin" : currentCoachDoc ? "coach" : "umpire";
+    const name = currentProfile?.name || currentCoachDoc?.name || user.displayName || "";
+    addDoc(collection(db, "loginHistory"), {
+      uid:       user.uid,
+      email:     user.email || "",
+      name,
+      role,
+      method,          // "email" | "google"
+      userAgent: navigator.userAgent,
+      loginAt:   serverTimestamp(),
+    }).catch(() => {}); // swallow errors — login tracking is non-critical
+  } catch (_) {}
+}
+
 export async function login(email, password) {
   const credential = await signInWithEmailAndPassword(auth, email, password);
   // Set flag before the Promise.all so onAuthStateChanged (which fires immediately
@@ -123,6 +144,7 @@ export async function login(email, password) {
     currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
     currentIsAdmin  = true;
     currentAdminDoc = adminSnap.data();
+    _logLogin(credential.user, "email");
     return credential;
   }
 
@@ -132,6 +154,7 @@ export async function login(email, password) {
     if (profile.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
     if (profile.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
     currentProfile = profile;
+    _logLogin(credential.user, "email");
     return credential;
   }
 
@@ -141,6 +164,7 @@ export async function login(email, password) {
     if (coach.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
     if (coach.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
     currentCoachDoc = coach;
+    _logLogin(credential.user, "email");
     return credential;
   }
 
@@ -171,6 +195,7 @@ export async function googleSignIn() {
     currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
     currentIsAdmin  = true;
     currentAdminDoc = adminSnap.data();
+    _logLogin(user, "google");
     return credential;
   }
 
@@ -180,6 +205,7 @@ export async function googleSignIn() {
     if (profile.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
     if (profile.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
     currentProfile = profile;
+    _logLogin(user, "google");
     return credential;
   }
 
@@ -189,6 +215,7 @@ export async function googleSignIn() {
     if (coach.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
     if (coach.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
     currentCoachDoc = coach;
+    _logLogin(user, "google");
     return credential;
   }
 

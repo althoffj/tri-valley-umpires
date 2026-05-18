@@ -903,6 +903,15 @@ th {
   border-color: var(--accent) !important;
 }
 
+.admin-subnav-back {
+  margin-left: auto;
+  border-style: dashed !important;
+  color: var(--light-text) !important;
+}
+.admin-subnav-back:hover {
+  color: var(--text) !important;
+}
+
 /* ── Locked / filled slot button ───────────────────────────────────────────── */
 
 .locked-btn {
