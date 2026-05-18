@@ -84,7 +84,9 @@ async function loadTeams() {
   teams.forEach(t => {
     if (!t.id) { t.id = makeTeamId(t.name); needResave = true; }
   });
-  if (needResave) await saveTeams(false);
+  if (needResave) {
+    try { await saveTeams(false); } catch { /* ignore — IDs were set in memory */ }
+  }
 
   renderTeamList();
   populateLeagueSelector();
@@ -125,21 +127,27 @@ function renderTeamList() {
   const el = document.getElementById("teamList");
   if (!el) return;
   if (!teams.length) {
-    el.innerHTML = `<p style="color:var(--light-text);margin-bottom:12px">No teams configured yet. Add your first team below.</p>`;
+    el.innerHTML = '<p style="color:var(--light-text);margin-bottom:12px">No teams configured yet. Add your first team below.</p>';
     return;
   }
-  el.innerHTML = teams.map((t, i) =>
-    '<div class="team-row">' +
-      '<span class="team-color-swatch" style="background:' + esc(t.color || "#601929") + '"></span>' +
-      '<span class="team-row-name">' + esc(t.name) + '</span>' +
-      '<span class="team-row-meta">' + esc(t.division || "") + (t.city ? " · " + esc(t.city) : "") + teamCoachMeta(t) + '</span>' +
-      teamBadges(t) +
-      '<div style="margin-left:auto;display:flex;gap:6px">' +
-        '<button type="button" class="btn print-btn team-edit-btn" data-idx="' + i + '" style="padding:4px 10px;font-size:0.82rem">Edit</button>' +
-        '<button type="button" class="btn print-btn team-delete-btn" data-idx="' + i + '" style="padding:4px 10px;font-size:0.82rem;color:#ff8a8a;border-color:#ff8a8a">Delete</button>' +
-      '</div>' +
-    '</div>'
-  ).join("");
+  try {
+    el.innerHTML = teams.map((t, i) =>
+      '<div class="team-row">' +
+        '<span class="team-color-swatch" style="background:' + esc(t.color || "#601929") + '"></span>' +
+        '<span class="team-row-name">' + esc(t.name) + '</span>' +
+        '<span class="team-row-meta">' + esc(t.division || "") + (t.city ? " · " + esc(t.city) : "") + teamCoachMeta(t) + '</span>' +
+        teamBadges(t) +
+        '<div style="margin-left:auto;display:flex;gap:6px">' +
+          '<button type="button" class="btn print-btn team-edit-btn" data-idx="' + i + '" style="padding:4px 10px;font-size:0.82rem">Edit</button>' +
+          '<button type="button" class="btn print-btn team-delete-btn" data-idx="' + i + '" style="padding:4px 10px;font-size:0.82rem;color:#ff8a8a;border-color:#ff8a8a">Delete</button>' +
+        '</div>' +
+      '</div>'
+    ).join("");
+  } catch(err) {
+    el.innerHTML = '<p style="color:#ff8a8a">Error rendering team list: ' + esc(String(err)) + '</p>';
+    console.error("renderTeamList error:", err);
+    return;
+  }
 
   el.querySelectorAll(".team-edit-btn").forEach(btn => {
     btn.addEventListener("click", () => startEditTeam(parseInt(btn.dataset.idx)));
@@ -864,5 +872,11 @@ authReadyPromise.then(async () => {
   document.getElementById("adminContent").style.display = "";
   document.getElementById("noAccess").style.display     = "none";
 
-  await loadTeams();
+  try {
+    await loadTeams();
+  } catch(err) {
+    console.error("loadTeams failed:", err);
+    const el = document.getElementById("teamList");
+    if (el) el.innerHTML = '<p style="color:#ff8a8a">Failed to load teams: ' + esc(String(err)) + '</p>';
+  }
 });
