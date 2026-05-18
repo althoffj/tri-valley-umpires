@@ -34,9 +34,7 @@ async function loadOrgSettings() {
     document.getElementById("coordinatorEmail").value = s.coordinatorEmail;
     document.getElementById("slackInviteUrl").value   = s.slackInviteUrl;
     // Divisions
-    document.querySelectorAll(".org-division-cb").forEach(cb => {
-      cb.checked = s.activeDivisions.includes(cb.value);
-    });
+    renderDivisionTags(s.activeDivisions);
     // Brand color
     const color = s.accentColor || "#601929";
     document.getElementById("orgAccentColor").value    = color;
@@ -85,10 +83,10 @@ async function saveOrgSettings() {
   btn.disabled = true;
   setMsg("orgSettingsMessage", "Saving…", "info");
   try {
-    const activeDivisions = [...document.querySelectorAll(".org-division-cb:checked")]
-      .map(cb => cb.value);
+    const activeDivisions = [...document.querySelectorAll("#divisionTagList .div-chip")]
+      .map(chip => chip.dataset.value);
     if (!activeDivisions.length) {
-      setMsg("orgSettingsMessage", "Select at least one active division.", "error");
+      setMsg("orgSettingsMessage", "Add at least one active division.", "error");
       btn.disabled = false;
       return;
     }
@@ -231,6 +229,41 @@ document.querySelectorAll(".sched-sec-btn[data-cfg]").forEach(btn => {
     document.getElementById("cfg-tab-org").style.display   = tab === "org"   ? "" : "none";
     document.getElementById("cfg-tab-comms").style.display = tab === "comms" ? "" : "none";
   });
+});
+
+// ── Division Tag Editor ───────────────────────────────────────────────────────
+
+function makeDivisionTag(div) {
+  const chip = document.createElement("span");
+  chip.dataset.value = div;
+  chip.className = "div-chip";
+  chip.style.cssText = "display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--accent);color:#fff;border-radius:20px;font-size:0.88rem;white-space:nowrap";
+  chip.innerHTML = esc(div) + ' <button type="button" title="Remove" style="background:none;border:none;color:#fff;cursor:pointer;padding:0;font-size:1.1rem;line-height:1;opacity:0.75">×</button>';
+  chip.querySelector("button").addEventListener("click", () => chip.remove());
+  return chip;
+}
+
+function renderDivisionTags(divisions = []) {
+  const list = document.getElementById("divisionTagList");
+  if (!list) return;
+  list.innerHTML = "";
+  divisions.forEach(div => list.appendChild(makeDivisionTag(div)));
+}
+
+function addDivisionFromInput() {
+  const input = document.getElementById("newDivisionInput");
+  const val = input.value.trim();
+  if (!val) return;
+  const existing = [...document.querySelectorAll("#divisionTagList .div-chip")].map(c => c.dataset.value);
+  if (existing.includes(val)) { input.value = ""; input.focus(); return; }
+  document.getElementById("divisionTagList").appendChild(makeDivisionTag(val));
+  input.value = "";
+  input.focus();
+}
+
+document.getElementById("addDivisionBtn").addEventListener("click", addDivisionFromInput);
+document.getElementById("newDivisionInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); addDivisionFromInput(); }
 });
 
 // ── Division Representatives ──────────────────────────────────────────────────

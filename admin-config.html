@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Admin: Config - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=18" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
   <style>
     .webhook-check-label { display:flex;align-items:center;gap:6px;font-size:0.88rem;cursor:pointer;user-select:none }
@@ -119,16 +119,12 @@
 
       <!-- ── Active Divisions ────────────────────────────────────────────── -->
       <h3 style="margin:20px 0 12px;font-size:1rem;border-top:1px solid #333;padding-top:16px">Active Divisions</h3>
-      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 12px">Only checked divisions will appear in dropdowns throughout the site.</p>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:4px">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="T-ball" /> T-ball</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="6U" /> 6U</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="8U" /> 8U</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="10U" /> 10U</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="12U" /> 12U</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="14U" /> 14U</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="HS JV" /> HS JV</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="org-division-cb" value="HS Varsity" /> HS Varsity</label>
+      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 12px">Divisions available throughout the site — in dropdowns, team forms, and league setup. Add or remove as needed. Order is preserved.</p>
+      <div id="divisionTagList" style="display:flex;flex-wrap:wrap;gap:8px;min-height:44px;padding:10px;background:var(--container);border:1px solid #444;border-radius:6px;margin-bottom:10px;align-items:center"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
+        <input type="text" id="newDivisionInput" placeholder="e.g. 16U" maxlength="30"
+          style="width:140px;padding:8px 10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:0.9rem" />
+        <button type="button" id="addDivisionBtn" class="btn print-btn" style="font-size:0.85rem;padding:7px 14px">+ Add Division</button>
       </div>
 
       <!-- ── City Programs ─────────────────────────────────────────────────── -->
@@ -409,7 +405,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-config.js?v=18"></script>
+  <script type="module" src="admin-config.js?v=19"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>
