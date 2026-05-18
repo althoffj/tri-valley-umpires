@@ -352,11 +352,16 @@ async function loadAdminQuickStats() {
   const todayEl = document.getElementById("adminTodayGames");
   if (!cardsEl) return;
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Use local date (not UTC) so "today" matches the user's wall-clock date
+  const localDate = d => {
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  const today = localDate(new Date());
   const weekEnd = (() => {
     const d = new Date();
     d.setDate(d.getDate() + 7);
-    return d.toISOString().slice(0, 10);
+    return localDate(d);
   })();
 
   try {
