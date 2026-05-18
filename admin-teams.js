@@ -863,7 +863,17 @@ document.getElementById("leagueForm").addEventListener("submit", async e => {
 //  INIT
 // ══════════════════════════════════════════════════════════════════════════════
 
+// Show a slow-connection warning if auth takes more than 6 s (Firestore WebSocket delay)
+const _slowTimer = setTimeout(() => {
+  const el = document.getElementById("teamListLoading");
+  if (el) el.innerHTML =
+    'Taking longer than usual — Firestore connection is slow. ' +
+    '<button onclick="location.reload()" class="btn print-btn" ' +
+    'style="font-size:0.82rem;padding:3px 10px;margin-left:8px">Reload</button>';
+}, 6000);
+
 authReadyPromise.then(async () => {
+  clearTimeout(_slowTimer);
   if (!isAdmin()) {
     document.getElementById("adminContent").style.display = "none";
     document.getElementById("noAccess").style.display     = "";
