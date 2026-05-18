@@ -63,19 +63,13 @@
       <p class="field-error" id="cfTeamNameError"></p>
 
       <label for="cfDivision">Division *</label>
-      <select id="cfDivision" required>
-        <option value="">-- Select division --</option>
-        <option value="8U">8U</option>
-        <option value="10U">10U</option>
-        <option value="12U">12U</option>
-        <option value="14U">14U</option>
-        <option value="HS JV">HS JV</option>
-        <option value="HS Varsity">HS Varsity</option>
-      </select>
+      <input type="text" id="cfDivision" list="cfDivisionList" required placeholder="e.g. 10U" autocomplete="off" />
+      <datalist id="cfDivisionList" data-org-divisions></datalist>
       <p class="field-error" id="cfDivisionError"></p>
 
       <label for="cfCity">City / Program *</label>
-      <input type="text" id="cfCity" required placeholder="e.g. Crooks, Colton" />
+      <input type="text" id="cfCity" list="cfCityList" required placeholder="e.g. City of Crooks" autocomplete="off" />
+      <datalist id="cfCityList" data-org-city-programs></datalist>
       <p class="field-error" id="cfCityError"></p>
 
       <div id="cfPasswordSection">
@@ -103,7 +97,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="coach-form.js?v=1"></script>
+  <script type="module" src="coach-form.js?v=5"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

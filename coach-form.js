@@ -91,7 +91,7 @@ authReadyPromise.then(() => {
     if (!phone || phone.replace(/\D/g,"").length < 10)
                      { fieldError("cfPhoneError",     "Please enter a valid 10-digit phone number."); valid = false; }
     if (!teamName)   { fieldError("cfTeamNameError",  "Team name is required.");  valid = false; }
-    if (!division)   { fieldError("cfDivisionError",  "Please select a division."); valid = false; }
+    if (!division)   { fieldError("cfDivisionError",  "Please enter a division."); valid = false; }
     if (!city)       { fieldError("cfCityError",      "City / Program is required."); valid = false; }
 
     const isGoogle = new URLSearchParams(window.location.search).has("google");

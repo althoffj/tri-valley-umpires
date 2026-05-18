@@ -395,17 +395,11 @@
       <label for="ccTeam">Team Name</label>
       <input type="text" id="ccTeam" placeholder="e.g. Crooks 12U" autocomplete="off" />
       <label for="ccDivision">Division</label>
-      <select id="ccDivision">
-        <option value="">-- Select --</option>
-        <option value="8U">8U</option>
-        <option value="10U">10U</option>
-        <option value="12U">12U</option>
-        <option value="14U">14U</option>
-        <option value="HS JV">HS JV</option>
-        <option value="HS Varsity">HS Varsity</option>
-      </select>
+      <input type="text" id="ccDivision" list="ccDivisionList" placeholder="e.g. 10U" autocomplete="off" />
+      <datalist id="ccDivisionList" data-org-divisions></datalist>
       <label for="ccCity">City / Program</label>
-      <input type="text" id="ccCity" placeholder="e.g. Crooks" autocomplete="off" />
+      <input type="text" id="ccCity" list="ccCityList" placeholder="e.g. City of Crooks" autocomplete="off" />
+      <datalist id="ccCityList" data-org-city-programs></datalist>
       <p id="createCoachMsg" class="signup-message" aria-live="polite" style="margin-top:12px"></p>
       <div class="page-actions" style="margin-top:20px">
         <button type="button" class="btn" id="saveCreateCoachBtn">Create Coach</button>
@@ -436,17 +430,11 @@
       <label for="editCoachTeam">Team Name</label>
       <input type="text" id="editCoachTeam" />
       <label for="editCoachDivision">Division</label>
-      <select id="editCoachDivision">
-        <option value="">-- Select --</option>
-        <option value="8U">8U</option>
-        <option value="10U">10U</option>
-        <option value="12U">12U</option>
-        <option value="14U">14U</option>
-        <option value="HS JV">HS JV</option>
-        <option value="HS Varsity">HS Varsity</option>
-      </select>
+      <input type="text" id="editCoachDivision" list="editCoachDivisionList" placeholder="e.g. 10U" autocomplete="off" />
+      <datalist id="editCoachDivisionList" data-org-divisions></datalist>
       <label for="editCoachCity">City / Program</label>
-      <input type="text" id="editCoachCity" />
+      <input type="text" id="editCoachCity" list="editCoachCityList" placeholder="e.g. City of Crooks" autocomplete="off" />
+      <datalist id="editCoachCityList" data-org-city-programs></datalist>
       <div style="margin-top:12px">
         <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
           <input type="checkbox" id="editCoachApproved" /> Approved
@@ -498,7 +486,7 @@
     </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-users.js?v=8"></script>
+  <script type="module" src="admin-users.js?v=9"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

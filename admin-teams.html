@@ -67,9 +67,8 @@
             </div>
             <div class="form-group form-group--sm">
               <label for="tDivision">Division</label>
-              <select id="tDivision" data-org-divisions required>
-                <option value="">-- Select --</option>
-              </select>
+              <input type="text" id="tDivision" list="tDivisionList" required placeholder="e.g. 10U" autocomplete="off" />
+              <datalist id="tDivisionList" data-org-divisions></datalist>
             </div>
           </div>
           <div class="form-row">
@@ -77,9 +76,8 @@
               <label for="tCity">City Program
                 <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — links to city schedule imports</span>
               </label>
-              <select id="tCity" data-org-city-programs>
-                <option value="">-- None --</option>
-              </select>
+              <input type="text" id="tCity" list="tCityList" placeholder="e.g. City of Crooks" autocomplete="off" />
+              <datalist id="tCityList" data-org-city-programs></datalist>
             </div>
             <div class="form-group form-group--sm">
               <label for="tColor">Color</label>
@@ -307,7 +305,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-teams.js?v=4"></script>
+  <script type="module" src="admin-teams.js?v=5"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

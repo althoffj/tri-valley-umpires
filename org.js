@@ -164,7 +164,7 @@ function _applyToDOM() {
   });
 
   // ── Division selects — repopulate options ─────────────────────────────────
-  document.querySelectorAll("[data-org-divisions]").forEach(sel => {
+  document.querySelectorAll("select[data-org-divisions]").forEach(sel => {
     const placeholder = sel.querySelector('option[value=""]');
     const current     = sel.value;
     sel.innerHTML = "";
@@ -176,6 +176,12 @@ function _applyToDOM() {
     });
     // Restore selected value if still valid
     if (current) sel.value = current;
+  });
+
+  // ── Division datalists (combo inputs — suggests but allows freeform) ───────
+  document.querySelectorAll("datalist[data-org-divisions]").forEach(dl => {
+    dl.innerHTML = (s.activeDivisions || [])
+      .map(div => `<option value="${div}"></option>`).join("");
   });
 
   // ── Brand color ───────────────────────────────────────────────────────────
@@ -192,7 +198,7 @@ function _applyToDOM() {
   }
 
   // ── City programs selects ─────────────────────────────────────────────────
-  document.querySelectorAll("[data-org-city-programs]").forEach(sel => {
+  document.querySelectorAll("select[data-org-city-programs]").forEach(sel => {
     const placeholder = sel.querySelector('option[value=""]');
     const current     = sel.value;
     sel.innerHTML = "";
@@ -203,6 +209,12 @@ function _applyToDOM() {
       sel.appendChild(opt);
     });
     if (current) sel.value = current;
+  });
+
+  // ── City program datalists ────────────────────────────────────────────────
+  document.querySelectorAll("datalist[data-org-city-programs]").forEach(dl => {
+    dl.innerHTML = (s.cityPrograms || [])
+      .map(prog => `<option value="${prog}"></option>`).join("");
   });
 
   // ── Page title ────────────────────────────────────────────────────────────
