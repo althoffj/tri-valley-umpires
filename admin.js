@@ -360,18 +360,20 @@ async function loadAdminQuickStats() {
   })();
 
   try {
+    // Use simple date-range queries (auto-indexed); filter needsUmpires / cancelled client-side
+    // to avoid composite index requirements on needsUmpires + date.
     const [upcomingSnap, allGamesSnap] = await Promise.all([
       getDocs(query(collection(db, "games"),
         where("date", ">=", today),
         where("date", "<=", weekEnd),
-        where("needsUmpires", "==", true),
         orderBy("date"), orderBy("time"))),
       getDocs(query(collection(db, "games"),
-        where("needsUmpires", "==", true),
         where("date", ">=", `${new Date().getFullYear()}-01-01`))),
     ]);
 
-    const upcoming   = upcomingSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(g => !g.cancelled);
+    const upcoming   = upcomingSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(g => !g.cancelled && g.needsUmpires !== false);
     const todayGames = upcoming.filter(g => g.date === today);
 
     // Today coverage
