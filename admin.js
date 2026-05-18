@@ -365,20 +365,21 @@ async function loadAdminQuickStats() {
   })();
 
   try {
-    // Use simple date-range queries (auto-indexed); filter needsUmpires / cancelled client-side
-    // to avoid composite index requirements on needsUmpires + date.
+    // Single-field orderBy("date") only — no composite index required.
+    // Filter date <= weekEnd and sort by time client-side.
     const [upcomingSnap, allGamesSnap] = await Promise.all([
       getDocs(query(collection(db, "games"),
         where("date", ">=", today),
-        where("date", "<=", weekEnd),
-        orderBy("date"), orderBy("time"))),
+        orderBy("date"))),
       getDocs(query(collection(db, "games"),
-        where("date", ">=", `${new Date().getFullYear()}-01-01`))),
+        where("date", ">=", `${new Date().getFullYear()}-01-01`),
+        orderBy("date"))),
     ]);
 
-    const upcoming   = upcomingSnap.docs
+    const upcoming = upcomingSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(g => !g.cancelled && g.needsUmpires !== false);
+      .filter(g => g.date <= weekEnd && !g.cancelled && g.needsUmpires !== false)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "").localeCompare(b.time || "")));
     const todayGames = upcoming.filter(g => g.date === today);
 
     // Today coverage
@@ -389,9 +390,10 @@ async function loadAdminQuickStats() {
       });
     });
 
-    // This week open slots (excluding today)
+    // This week: total games + open slots (excluding today)
+    const weekGames = upcoming.filter(g => g.date > today);
     let weekOpen = 0;
-    upcoming.filter(g => g.date > today).forEach(g => {
+    weekGames.forEach(g => {
       (g.umpireSlots || []).forEach(s => { if (!s.assignedUid) weekOpen++; });
     });
 
@@ -406,7 +408,7 @@ async function loadAdminQuickStats() {
     });
 
     const todayColor = todayOpen > 0 ? "#f0a500" : todayGames.length > 0 ? "#b8f2c4" : "var(--text)";
-    const weekColor  = weekOpen  > 0 ? "#f0a500" : "var(--text)";
+    const weekColor  = weekOpen  > 0 ? "#f0a500" : weekGames.length > 0 ? "#b8f2c4" : "var(--text)";
     const payColor   = outstanding > 0 ? "#f0a500" : "var(--text)";
 
     cardsEl.innerHTML = [
@@ -415,8 +417,10 @@ async function loadAdminQuickStats() {
            : todayOpen > 0 ? `${todayOpen} slot${todayOpen !== 1 ? "s" : ""} open`
            : "All covered ✓",
         color: todayColor },
-      { label: "Open This Week",  value: weekOpen,
-        sub: weekOpen === 0 ? "All filled ✓" : "Next 7 days",
+      { label: "Games This Week", value: weekGames.length,
+        sub: weekGames.length === 0 ? "None scheduled"
+           : weekOpen > 0 ? `${weekOpen} slot${weekOpen !== 1 ? "s" : ""} open`
+           : "All covered ✓",
         color: weekColor, link: "admin-games.html" },
       { label: "Outstanding Pay", value: `$${outstanding.toFixed(2)}`,
         sub: outstanding === 0 ? "All paid up" : "Unpaid umpires",
