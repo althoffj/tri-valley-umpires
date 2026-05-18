@@ -2,6 +2,7 @@
 import { db } from "./firebase.js";
 import { authReadyPromise, isCoach, isAdmin, getCurrentUser, getCurrentCoachProfile } from "./auth.js";
 import { esc, fmtDate, fmtTime, setMsg } from "./utils.js";
+import { getOrgSettings } from "./org.js";
 
 import {
   collection, getDocs, addDoc, query, orderBy, where, serverTimestamp, limit
@@ -298,6 +299,33 @@ async function submitPracticeRequest(e) {
   }
 }
 
+// ── Division rep card ─────────────────────────────────────────────────────────
+
+async function showDivisionRep() {
+  const profile = getCurrentCoachProfile();
+  if (!profile?.division) return;
+  const el = document.getElementById("cpDivRepCard");
+  if (!el) return;
+  try {
+    const settings = await getOrgSettings();
+    const reps = Array.isArray(settings.divisionReps) ? settings.divisionReps : [];
+    const rep = reps.find(r => r.division === profile.division);
+    if (!rep) { el.style.display = "none"; return; }
+    el.style.display = "";
+    el.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start">
+        <div>
+          <div style="font-weight:600;margin-bottom:2px">${esc(rep.name)}</div>
+          <div style="font-size:0.82rem;color:var(--light-text)">${esc(profile.division)} Representative</div>
+        </div>
+        <div style="margin-left:auto;display:flex;flex-direction:column;gap:4px;font-size:0.85rem;text-align:right">
+          ${rep.email ? `<a href="mailto:${esc(rep.email)}" style="color:var(--accent)">${esc(rep.email)}</a>` : ""}
+          ${rep.phone ? `<a href="tel:${esc(rep.phone.replace(/\D/g,""))}" style="color:var(--light-text)">${esc(rep.phone)}</a>` : ""}
+        </div>
+      </div>`;
+  } catch (_) { el.style.display = "none"; }
+}
+
 // ── Pre-fill forms from coach profile ────────────────────────────────────────
 
 function prefillForms() {
@@ -430,6 +458,7 @@ authReadyPromise.then(() => {
   setupTabs();
   setupDivisionFilter();
   prefillForms();
+  showDivisionRep();
   loadSchedule();
 
   document.getElementById("cpUmpireRequestForm")?.addEventListener("submit",   submitUmpireRequest);

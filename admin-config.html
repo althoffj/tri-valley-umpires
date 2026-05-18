@@ -47,6 +47,14 @@
       <a href="admin-users.html">Users</a>
     </nav>
 
+    <!-- ── Config section tabs ───────────────────────────────────────────── -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;border-bottom:1px solid #333;padding-bottom:12px">
+      <button class="sched-sec-btn active" data-cfg="org">🏢 Organization</button>
+      <button class="sched-sec-btn" data-cfg="comms">📣 Communication</button>
+    </div>
+
+    <div id="cfg-tab-org">
+
     <!-- ── Scheduling Settings moved to Scheduler ────────────────────────── -->
     <div class="document-note" style="margin-bottom:24px">
       <p style="margin:0">Pay rates, default umpire slot types, and scheduling rules (game durations, late-start cutoff) have moved to the
@@ -245,11 +253,21 @@
         </div>
       </div>
 
+      <!-- ── Division Representatives ──────────────────────────────────── -->
+      <h3 style="margin:20px 0 12px;font-size:1rem;border-top:1px solid #333;padding-top:16px">Division Representatives</h3>
+      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 12px">Optional contacts shown to coaches whose team division matches. Coaches see the rep's name, email, and phone on their portal.</p>
+      <div id="divRepRows" style="margin-bottom:10px"></div>
+      <button type="button" class="btn print-btn" id="addDivRepBtn" style="font-size:0.85rem;padding:6px 12px;margin-bottom:16px">+ Add Division Rep</button>
+
       <div class="page-actions" style="margin-top:16px">
         <button type="button" class="btn" id="saveOrgSettingsBtn">Save Organization Settings</button>
       </div>
       <p id="orgSettingsMessage" class="signup-message" aria-live="polite"></p>
     </div>
+
+    </div><!-- /#cfg-tab-org -->
+
+    <div id="cfg-tab-comms" style="display:none">
 
     <!-- ── Slack Webhooks (super admin only) ───────────────────────────── -->
     <div id="slackWebhookSection" style="display:none">
@@ -371,6 +389,8 @@
       <p id="emailAllMessage" class="signup-message" aria-live="polite"></p>
     </form>
 
+    </div><!-- /#cfg-tab-comms -->
+
   </div>
 
   <!-- Not-admin fallback -->
@@ -389,7 +409,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-config.js?v=17"></script>
+  <script type="module" src="admin-config.js?v=18"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

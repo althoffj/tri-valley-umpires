@@ -104,12 +104,18 @@
             </div>
           </div>
           <div class="form-group" style="margin-bottom:16px">
-            <label for="tCoach">Head Coach
-              <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — approved coaches only (optional)</span>
-            </label>
-            <select id="tCoach">
-              <option value="">— No coach assigned —</option>
-            </select>
+            <label>Coaches <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — head and assistant coaches (optional)</span></label>
+            <div id="tCoachList" style="margin-bottom:8px"></div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <select id="tCoachSelect" style="flex:1;min-width:160px;padding:7px 9px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+                <option value="">— Select coach —</option>
+              </select>
+              <select id="tCoachRole" style="width:150px;padding:7px 9px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem">
+                <option value="head">Head Coach</option>
+                <option value="assistant">Assistant Coach</option>
+              </select>
+              <button type="button" class="btn print-btn" id="tAddCoachBtn" style="white-space:nowrap;padding:7px 12px;font-size:0.85rem">+ Add</button>
+            </div>
           </div>
 
           <!-- ── Roster (edit mode only) ───────────────────────────────────── -->
@@ -305,7 +311,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-teams.js?v=5"></script>
+  <script type="module" src="admin-teams.js?v=6"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>
