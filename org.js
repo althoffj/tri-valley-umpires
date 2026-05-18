@@ -184,6 +184,17 @@ function _applyToDOM() {
       .map(div => `<option value="${div}"></option>`).join("");
   });
 
+  // ── Division checkbox groups ───────────────────────────────────────────────
+  document.querySelectorAll("[data-org-divisions-check]").forEach(wrap => {
+    const checked = [...wrap.querySelectorAll("input[type=checkbox]:checked")].map(cb => cb.value);
+    wrap.innerHTML = (s.activeDivisions || []).map(div =>
+      `<label style="display:flex;align-items:center;gap:5px;font-weight:normal;cursor:pointer;white-space:nowrap">
+         <input type="checkbox" class="org-div-cb" value="${div}"${checked.includes(div) ? " checked" : ""} />
+         ${div}
+       </label>`
+    ).join("");
+  });
+
   // ── Brand color ───────────────────────────────────────────────────────────
   if (s.accentColor) {
     document.documentElement.style.setProperty("--accent",       s.accentColor);

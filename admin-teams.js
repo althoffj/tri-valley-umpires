@@ -101,6 +101,13 @@ async function saveTeams(showMsg) {
   }
 }
 
+function teamCoachMeta(t) {
+  const list = Array.isArray(t.coaches) && t.coaches.length
+    ? t.coaches
+    : (t.coachId ? [{ name: t.coachName || "", role: "head" }] : []);
+  return list.map(c => " · " + (c.role === "assistant" ? "Asst: " : "Coach: ") + esc(c.name || "")).join("");
+}
+
 function renderTeamList() {
   const el = document.getElementById("teamList");
   if (!el) return;
@@ -112,7 +119,7 @@ function renderTeamList() {
     <div class="team-row">
       <span class="team-color-swatch" style="background:${esc(t.color || "#601929")}"></span>
       <span class="team-row-name">${esc(t.name)}</span>
-      <span class="team-row-meta">${esc(t.division || "")}${t.city ? " · " + esc(t.city) : ""}${(t.coaches?.length ? t.coaches : (t.coachId ? [{name: t.coachName, role: "head"}] : [])).map(c => ` · ${c.role === "assistant" ? "Asst: " : "Coach: "}${esc(c.name)}`).join("")}</span>
+      <span class="team-row-meta">${esc(t.division || "")}${t.city ? " · " + esc(t.city) : ""}${teamCoachMeta(t)}</span>
       ${t.needsUmpireForHome ? `<span class="team-needs-ump">⚾ Needs umpire</span>` : ""}
       ${(t.leagueNames || (t.leagueName ? [t.leagueName] : [])).map(n => `<span style="font-size:0.75rem;color:#8ab4f8;background:rgba(91,141,217,0.12);border:1px solid rgba(91,141,217,0.3);border-radius:4px;padding:1px 6px">🏆 ${esc(n)}</span>`).join("")}
       ${t.icsUrl ? `<span style="color:var(--light-text);font-size:0.78rem">📅 iCal linked</span>` : ""}
@@ -554,12 +561,14 @@ function populateLeagueSelector() {
     wrap.innerHTML = '<span style="color:var(--light-text);font-size:0.85rem" id="tLeagueEmpty">No leagues available</span>';
     return;
   }
-  wrap.innerHTML = leagues.map(l =>
-    `<label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;white-space:nowrap">
+  wrap.innerHTML = leagues.map(l => {
+    const divList = Array.isArray(l.divisions) && l.divisions.length ? l.divisions : (l.division ? [l.division] : []);
+    const divLabel = divList.length ? ` <span style="color:var(--light-text);font-size:0.8rem">(${divList.join(", ")})</span>` : "";
+    return `<label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;white-space:nowrap">
        <input type="checkbox" class="league-select-cb" value="${esc(l.id)}" data-name="${esc(l.name)}" />
-       ${esc(l.name)}${l.division ? ` <span style="color:var(--light-text);font-size:0.8rem">(${esc(l.division)})</span>` : ""}
-     </label>`
-  ).join("");
+       ${esc(l.name)}${divLabel}
+     </label>`;
+  }).join("");
 }
 
 function populateCoachSelector(selectedId = "") {
@@ -633,9 +642,10 @@ function renderLeagueList() {
     return;
   }
   el.innerHTML = leagues.map(l => {
-    const divBadge = l.division
-      ? `<span style="font-size:0.75rem;background:rgba(96,25,41,0.3);border:1px solid #601929;border-radius:4px;padding:1px 6px;color:#ffb0b0">${esc(l.division)}</span>`
-      : "";
+    const divList = Array.isArray(l.divisions) && l.divisions.length ? l.divisions : (l.division ? [l.division] : []);
+    const divBadge = divList.map(d =>
+      `<span style="font-size:0.75rem;background:rgba(96,25,41,0.3);border:1px solid #601929;border-radius:4px;padding:1px 6px;color:#ffb0b0">${esc(d)}</span>`
+    ).join("");
     const websiteLink = l.websiteUrl
       ? `<a href="${esc(l.websiteUrl)}" target="_blank" rel="noopener" style="font-size:0.85rem;color:#8ab4f8">${esc(l.websiteUrl)}</a>`
       : "";
@@ -721,6 +731,7 @@ function getLeagueContactRows() {
 function resetLeagueForm() {
   document.getElementById("leagueEditId").value      = "";
   document.getElementById("leagueForm").reset();
+  document.querySelectorAll("#lDivisionCheckboxes .org-div-cb").forEach(cb => { cb.checked = false; });
   document.getElementById("lContactsWrap").innerHTML = "";
   document.getElementById("lContactsHint").style.display = "";
   document.getElementById("leagueFormTitle").textContent      = "Add League";
@@ -736,9 +747,13 @@ function startEditLeague(id) {
   if (!l) return;
   document.getElementById("leagueEditId").value = id;
   document.getElementById("lName").value         = l.name      || "";
-  document.getElementById("lDivision").value     = l.division  || "";
   document.getElementById("lWebsite").value      = l.websiteUrl || "";
   document.getElementById("lNotes").value        = l.notes     || "";
+  // Restore division checkboxes (support new divisions[] or legacy division string)
+  const selDivs = Array.isArray(l.divisions) ? l.divisions : (l.division ? [l.division] : []);
+  document.querySelectorAll("#lDivisionCheckboxes .org-div-cb").forEach(cb => {
+    cb.checked = selDivs.includes(cb.value);
+  });
   // Contacts
   document.getElementById("lContactsWrap").innerHTML = "";
   (l.contacts || []).forEach(c => addLeagueContactRow(c));
@@ -783,9 +798,11 @@ document.getElementById("leagueForm").addEventListener("submit", async e => {
   const contacts = getLeagueContactRows();
   const homeLocations = [...document.querySelectorAll("#lLocationsWrap .league-location-cb:checked")]
     .map(cb => ({ facilityId: cb.value, facilityName: cb.dataset.name }));
+  const divisions = [...document.querySelectorAll("#lDivisionCheckboxes .org-div-cb:checked")].map(cb => cb.value);
   const data = {
     name:          document.getElementById("lName").value.trim(),
-    division:      document.getElementById("lDivision").value,
+    divisions,
+    division:      divisions[0] || "",   // backward-compat single value
     websiteUrl:    document.getElementById("lWebsite").value.trim(),
     notes:         document.getElementById("lNotes").value.trim(),
     contacts,
