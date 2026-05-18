@@ -12,7 +12,7 @@ const page = window.location.pathname.split("/").pop() || "index.html";
 const section = (() => {
   if (["schedule.html", "calendar.html", "availability.html"].includes(page)) return "games";
   if (["fields.html", "facility-schedule.html"].includes(page)) return "fields";
-  if (["incident.html", "field-issues.html"].includes(page)) return "reports";
+  if (["incident.html", "field-issues.html", "coach-callup.html", "admin-callup.html"].includes(page)) return "reports";
   if (["expectations.html", "principles_of_umpiring.html", "rule_breakdown.html",
        "pregame-meeting.html", "training.html"].includes(page)) return "training";
   if (["coach-portal.html", "coach-callup.html"].includes(page)) return "coach";
@@ -62,10 +62,11 @@ function fieldsDropdown() {
   );
 }
 
-function reportsDropdown() {
+function reportsDropdown(callupHref = null) {
   return navTrigger("reports", "Reports",
     navLink("incident.html",     "Incident Report") +
-    navLink("field-issues.html", "Field Issues")
+    navLink("field-issues.html", "Field Issues") +
+    (callupHref ? navLink(callupHref, "Player Call-Ups") : "")
   );
 }
 
@@ -109,9 +110,20 @@ function umpireNav() {
   `;
 }
 
-// Admin: same top nav as umpire — Admin Panel is in the hamburger menu
+// Admin: same as umpire but with call-ups in Reports
 function adminNav() {
-  return umpireNav();
+  return `
+    ${navLink("index.html", "Home")}
+    ${navTrigger("games", "Games",
+      navLink("schedule.html",    "Schedule &amp; Signups") +
+      navLink("calendar.html",    "Calendar") +
+      navLink("availability.html","My Availability")
+    )}
+    ${fieldsDropdown()}
+    ${reportsDropdown("admin-callup.html")}
+    ${trainingDropdown()}
+    ${requestDropdown()}
+  `;
 }
 
 // Coach: portal-centric nav with fields access and reporting
@@ -123,7 +135,7 @@ function coachNav() {
       navLink("coach-callup.html", "Player Call-Ups")
     )}
     ${fieldsDropdown()}
-    ${reportsDropdown()}
+    ${reportsDropdown("coach-callup.html")}
     ${trainingDropdown()}
     ${requestDropdown()}
   `;
