@@ -87,10 +87,11 @@ function guestNav() {
   `;
 }
 
-function requestDropdown() {
+function requestDropdown(callupHref = null) {
   return navTrigger("request", "Request",
     navLink("request-umpire.html",   "Request an Umpire") +
-    navLink("practice-request.html", "Request Practice Time")
+    navLink("practice-request.html", "Request Practice Time") +
+    (callupHref ? navLink(callupHref, "Player Call-Up Request") : "")
   );
 }
 
@@ -110,7 +111,7 @@ function umpireNav() {
   `;
 }
 
-// Admin: same as umpire but with call-ups in Reports
+// Admin: same as umpire but with call-ups in Reports and Request
 function adminNav() {
   return `
     ${navLink("index.html", "Home")}
@@ -122,7 +123,7 @@ function adminNav() {
     ${fieldsDropdown()}
     ${reportsDropdown("admin-callup.html")}
     ${trainingDropdown()}
-    ${requestDropdown()}
+    ${requestDropdown("admin-callup.html")}
   `;
 }
 
@@ -137,7 +138,7 @@ function coachNav() {
     ${fieldsDropdown()}
     ${reportsDropdown("coach-callup.html")}
     ${trainingDropdown()}
-    ${requestDropdown()}
+    ${requestDropdown("coach-callup.html")}
   `;
 }
 
