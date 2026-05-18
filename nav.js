@@ -79,6 +79,13 @@ function guestNav() {
   `;
 }
 
+function requestDropdown() {
+  return navTrigger("request", "Request",
+    navLink("request-umpire.html",   "Request an Umpire") +
+    navLink("practice-request.html", "Request Practice Time")
+  );
+}
+
 // Approved umpire: schedule, signups, fields, reporting, training
 function umpireNav() {
   return `
@@ -91,6 +98,7 @@ function umpireNav() {
     ${fieldsDropdown()}
     ${navLink("incident.html", "Incident Report")}
     ${trainingDropdown()}
+    ${requestDropdown()}
   `;
 }
 
@@ -110,6 +118,7 @@ function coachNav() {
     ${fieldsDropdown()}
     ${navLink("incident.html",     "Incident Report")}
     ${trainingDropdown()}
+    ${requestDropdown()}
   `;
 }
 
