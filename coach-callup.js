@@ -10,7 +10,7 @@ import {
 
 // ── Division ordering ─────────────────────────────────────────────────────────
 
-const DIV_ORDER = ["10U", "12U", "14U", "HS JV", "HS Varsity"];
+const DIV_ORDER = ["T-ball", "6U", "8U", "10U", "12U", "14U", "HS JV", "HS Varsity"];
 function divIdx(d) { return DIV_ORDER.indexOf(d); }
 
 // A player from sourceDivision is eligible to play for targetDivision

@@ -21,10 +21,14 @@ export const ORG_DEFAULTS = {
   slackInviteUrl:   "https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA",
 
   // Divisions
-  activeDivisions:  ["8U", "10U", "12U", "14U", "HS JV", "HS Varsity"],
+  activeDivisions:  ["T-ball", "6U", "8U", "10U", "12U", "14U", "HS JV", "HS Varsity"],
 
   // Branding
   accentColor:      "#601929",
+  logoUrl:          "logo.png",
+
+  // City Programs
+  cityPrograms:     ["City of Crooks", "City of Colton"],
 
   // Season
   seasonStart:      "",   // "YYYY-MM-DD" — empty = Jan 1 of current year
@@ -181,6 +185,25 @@ function _applyToDOM() {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = s.accentColor;
   }
+
+  // ── Logo ──────────────────────────────────────────────────────────────────
+  if (s.logoUrl) {
+    document.querySelectorAll("img.logo").forEach(img => { img.src = s.logoUrl; });
+  }
+
+  // ── City programs selects ─────────────────────────────────────────────────
+  document.querySelectorAll("[data-org-city-programs]").forEach(sel => {
+    const placeholder = sel.querySelector('option[value=""]');
+    const current     = sel.value;
+    sel.innerHTML = "";
+    if (placeholder) sel.appendChild(placeholder.cloneNode(true));
+    (s.cityPrograms || []).forEach(prog => {
+      const opt = document.createElement("option");
+      opt.value = opt.textContent = prog;
+      sel.appendChild(opt);
+    });
+    if (current) sel.value = current;
+  });
 
   // ── Page title ────────────────────────────────────────────────────────────
   document.title = document.title

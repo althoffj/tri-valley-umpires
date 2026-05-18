@@ -113,7 +113,7 @@ function renderTeamList() {
       <span class="team-row-name">${esc(t.name)}</span>
       <span class="team-row-meta">${esc(t.division || "")}${t.city ? " · " + esc(t.city) : ""}${t.coachName ? " · Coach: " + esc(t.coachName) : ""}</span>
       ${t.needsUmpireForHome ? `<span class="team-needs-ump">⚾ Needs umpire</span>` : ""}
-      ${t.leagueName ? `<span style="font-size:0.75rem;color:#8ab4f8;background:rgba(91,141,217,0.12);border:1px solid rgba(91,141,217,0.3);border-radius:4px;padding:1px 6px">🏆 ${esc(t.leagueName)}</span>` : ""}
+      ${(t.leagueNames || (t.leagueName ? [t.leagueName] : [])).map(n => `<span style="font-size:0.75rem;color:#8ab4f8;background:rgba(91,141,217,0.12);border:1px solid rgba(91,141,217,0.3);border-radius:4px;padding:1px 6px">🏆 ${esc(n)}</span>`).join("")}
       ${t.icsUrl ? `<span style="color:var(--light-text);font-size:0.78rem">📅 iCal linked</span>` : ""}
       <div style="margin-left:auto;display:flex;gap:6px">
         <button type="button" class="btn print-btn team-edit-btn" data-idx="${i}" style="padding:4px 10px;font-size:0.82rem">Edit</button>
@@ -138,8 +138,11 @@ function startEditTeam(idx) {
   document.getElementById("tColor").value        = t.color || "#601929";
   document.getElementById("tIcsUrl").value       = t.icsUrl || "";
   document.getElementById("tNeedsUmpire").checked = !!t.needsUmpireForHome;
-  const leagueSel = document.getElementById("tLeague");
-  if (leagueSel) leagueSel.value = t.leagueId || "";
+  // Support new leagueIds array or fall back to legacy single leagueId
+  const selectedLeagueIds = Array.isArray(t.leagueIds) ? t.leagueIds : (t.leagueId ? [t.leagueId] : []);
+  document.querySelectorAll("#tLeagueCheckboxes .league-select-cb").forEach(cb => {
+    cb.checked = selectedLeagueIds.includes(cb.value);
+  });
   populateCoachSelector(t.coachId || "");
   document.getElementById("teamFormTitle").textContent = "Edit Team";
   document.getElementById("teamFormSubmitBtn").textContent = "Save Changes";
@@ -464,8 +467,10 @@ document.getElementById("teamFormCancelBtn").addEventListener("click", cancelEdi
 document.getElementById("teamForm").addEventListener("submit", async e => {
   e.preventDefault();
   const msg = document.getElementById("teamFormMsg");
-  const leagueId  = document.getElementById("tLeague")?.value || "";
-  const leagueObj = leagues.find(l => l.id === leagueId);
+  const checkedLeagues = [...document.querySelectorAll("#tLeagueCheckboxes .league-select-cb:checked")]
+    .map(cb => ({ id: cb.value, name: cb.dataset.name || "" }));
+  const leagueIds   = checkedLeagues.map(l => l.id);
+  const leagueNames = checkedLeagues.map(l => l.name);
   const coachId   = document.getElementById("tCoach")?.value || "";
   const coachObj  = teamCoaches.find(c => c.id === coachId);
   const nameVal  = document.getElementById("tName").value.trim();
@@ -481,8 +486,10 @@ document.getElementById("teamForm").addEventListener("submit", async e => {
     color:              document.getElementById("tColor").value,
     icsUrl:             document.getElementById("tIcsUrl").value.trim(),
     needsUmpireForHome: document.getElementById("tNeedsUmpire").checked,
-    leagueId,
-    leagueName:         leagueObj?.name || "",
+    leagueIds,
+    leagueNames,
+    leagueId:           leagueIds[0]   || "",
+    leagueName:         leagueNames[0] || "",
     coachId,
     coachName:          coachObj?.name || "",
     coachEmail:         coachObj?.email || "",
@@ -534,14 +541,19 @@ async function loadLeagues() {
 }
 
 function populateLeagueSelector() {
-  const sel = document.getElementById("tLeague");
-  if (!sel) return;
-  const current = sel.value;
-  sel.innerHTML = '<option value="">— No league —</option>' +
-    leagues.map(l =>
-      `<option value="${esc(l.id)}"${l.id === current ? " selected" : ""}>` +
-      `${esc(l.name)}${l.division ? " (" + esc(l.division) + ")" : ""}</option>`
-    ).join("");
+  const wrap = document.getElementById("tLeagueCheckboxes");
+  if (!wrap) return;
+  const emptyMsg = document.getElementById("tLeagueEmpty");
+  if (!leagues.length) {
+    wrap.innerHTML = '<span style="color:var(--light-text);font-size:0.85rem" id="tLeagueEmpty">No leagues available</span>';
+    return;
+  }
+  wrap.innerHTML = leagues.map(l =>
+    `<label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;white-space:nowrap">
+       <input type="checkbox" class="league-select-cb" value="${esc(l.id)}" data-name="${esc(l.name)}" />
+       ${esc(l.name)}${l.division ? ` <span style="color:var(--light-text);font-size:0.8rem">(${esc(l.division)})</span>` : ""}
+     </label>`
+  ).join("");
 }
 
 function populateCoachSelector(selectedId = "") {

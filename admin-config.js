@@ -42,6 +42,12 @@ async function loadOrgSettings() {
     document.getElementById("orgAccentColor").value    = color;
     document.getElementById("orgAccentColorHex").value = color;
     document.getElementById("orgColorPreview").style.background = color;
+    // Logo
+    const logoUrl = s.logoUrl || "logo.png";
+    document.getElementById("orgLogoUrl").value = logoUrl;
+    document.getElementById("orgLogoPreview").src = logoUrl;
+    // City programs
+    document.getElementById("orgCityPrograms").value = (Array.isArray(s.cityPrograms) ? s.cityPrograms : []).join("\n");
     // Season
     document.getElementById("orgSeasonStart").value = s.seasonStart || "";
     document.getElementById("orgSeasonEnd").value   = s.seasonEnd   || "";
@@ -102,6 +108,9 @@ async function saveOrgSettings() {
       activeDivisions,
       // Brand
       accentColor,
+      logoUrl: document.getElementById("orgLogoUrl").value.trim() || "logo.png",
+      // City programs
+      cityPrograms: document.getElementById("orgCityPrograms").value.split("\n").map(s => s.trim()).filter(Boolean),
       // Season
       seasonStart: document.getElementById("orgSeasonStart").value || "",
       seasonEnd:   document.getElementById("orgSeasonEnd").value   || "",
@@ -142,6 +151,10 @@ document.getElementById("orgAccentColorHex").addEventListener("input", function(
   }
 });
 document.getElementById("orgRegistrationOpen").addEventListener("change", toggleRegClosedMsg);
+document.getElementById("orgLogoUrl").addEventListener("input", function() {
+  const v = this.value.trim() || "logo.png";
+  document.getElementById("orgLogoPreview").src = v;
+});
 
 // ── Push Notifications ────────────────────────────────────────────────────────
 

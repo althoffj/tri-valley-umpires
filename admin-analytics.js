@@ -191,7 +191,7 @@ function renderDivisionBreakdown(games) {
   if (!tbody) return;
 
   const divStats = {};
-  const DIV_ORDER = ["10U", "12U", "14U", "HS JV", "HS Varsity"];
+  const DIV_ORDER = ["T-ball", "6U", "8U", "10U", "12U", "14U", "HS JV", "HS Varsity"];
 
   games.forEach(g => {
     const div = g.division || "Unknown";

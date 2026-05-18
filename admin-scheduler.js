@@ -78,7 +78,7 @@ let leagues              = []; // [{ id, name, division, websiteUrl, notes, cont
 let facilitiesForLeagues = []; // [{ id, name, address }]
 
 // ── Settings constants ────────────────────────────────────────────────────────
-const SCHED_DEFAULTS = { "10U": 90, "12U": 90, "14U": 120, "HS JV": 120, "HS Varsity": 150, default: 90 };
+const SCHED_DEFAULTS = { "T-ball": 60, "6U": 60, "8U": 60, "10U": 90, "12U": 90, "14U": 120, "HS JV": 120, "HS Varsity": 150, default: 90 };
 const DUR_IDS = {
   "10U": "sDur10U", "12U": "sDur12U", "14U": "sDur14U",
   "HS JV": "sDurHSJV", "HS Varsity": "sDurHSVar", default: "sDurDefault"
@@ -457,7 +457,7 @@ function renderConflicts() {
           <div class="form-group form-group--sm">
             <label>Division</label>
             <select class="edit-division" data-idx="${i}">
-              ${["10U","12U","14U","HS JV","HS Varsity"].map(d =>
+              ${["T-ball","6U","8U","10U","12U","14U","HS JV","HS Varsity"].map(d =>
                 `<option value="${d}" ${game.division === d ? "selected" : ""}>${d}</option>`
               ).join("")}
             </select>

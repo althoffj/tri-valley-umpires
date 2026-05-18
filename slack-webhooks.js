@@ -60,11 +60,12 @@ function renderWebhookList() {
       ? (w.divisions || []).map(d => `<span class="webhook-tag div-tag">${esc(d)}</span>`).join("")
       : `<span class="webhook-tag div-tag">All divisions</span>`;
     const inactiveTag = w.active === false ? `<span class="webhook-tag inactive">Inactive</span>` : "";
+    const homeUmpTag  = w.homeUmpireOnly ? `<span class="webhook-tag">Home+umpire only</span>` : "";
     return `<div class="webhook-card">
       <div class="webhook-card-info">
         <div class="webhook-card-label">${esc(w.label || w.id)}</div>
         <div class="webhook-card-url">${esc(maskUrl(w.url))}</div>
-        <div class="webhook-card-tags">${inactiveTag}${divTags}${eventTags}</div>
+        <div class="webhook-card-tags">${inactiveTag}${homeUmpTag}${divTags}${eventTags}</div>
       </div>
       <button class="btn print-btn webhook-edit-btn" data-id="${esc(w.id)}"
         style="font-size:0.8rem;padding:5px 12px;flex-shrink:0">Edit</button>
@@ -84,6 +85,8 @@ function openWebhookEdit(id) {
   document.getElementById("webhookLabel").value    = w?.label || "";
   document.getElementById("webhookUrl").value      = w?.url   || "";
   document.getElementById("webhookActive").checked = w?.active !== false;
+  const homeUmpEl = document.getElementById("webhookHomeUmpireOnly");
+  if (homeUmpEl) homeUmpEl.checked = !!(w && w.homeUmpireOnly);
   document.getElementById("webhookDeleteBtn").style.display = w ? "" : "none";
   setMsg("webhookEditMessage", "", "info");
 
@@ -173,12 +176,13 @@ export function initSlackWebhooks() {
       setMsg("webhookEditMessage", "Invalid URL.", "error"); return;
     }
 
-    const events    = [...document.querySelectorAll(".webhook-event-cb:checked")].map(cb => cb.value);
-    const divisions = [...document.querySelectorAll(".webhook-div-cb:checked")].map(cb => cb.value);
-    const active    = document.getElementById("webhookActive").checked;
+    const events         = [...document.querySelectorAll(".webhook-event-cb:checked")].map(cb => cb.value);
+    const divisions      = [...document.querySelectorAll(".webhook-div-cb:checked")].map(cb => cb.value);
+    const active         = document.getElementById("webhookActive").checked;
+    const homeUmpireOnly = !!(document.getElementById("webhookHomeUmpireOnly")?.checked);
 
     const newId = id || `wh_${Date.now()}`;
-    const entry = { id: newId, label, url, events, divisions, active };
+    const entry = { id: newId, label, url, events, divisions, active, homeUmpireOnly };
 
     if (id) {
       const idx = webhooks.findIndex(w => w.id === id);
