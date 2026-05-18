@@ -103,16 +103,22 @@ async function loadCoachPending() {
   const noteEl = document.getElementById("coachPendingNote");
   if (!listEl) return;
   try {
+    // Single-field filter only; sort client-side to avoid composite index requirement
     const snap = await getDocs(
-      query(collection(db, "coaches"), where("approved", "==", false), orderBy("registeredAt", "asc"))
+      query(collection(db, "coaches"), where("approved", "==", false))
     );
-    if (snap.empty) {
+    const docs = snap.docs.sort((a, b) => {
+      const aTs = a.data().registeredAt?.seconds ?? 0;
+      const bTs = b.data().registeredAt?.seconds ?? 0;
+      return aTs - bTs;
+    });
+    if (docs.length === 0) {
       noteEl.textContent = "No pending coach applications.";
       listEl.innerHTML = "";
       return;
     }
-    noteEl.textContent = `${snap.size} pending`;
-    listEl.innerHTML = snap.docs.map(d => {
+    noteEl.textContent = `${docs.length} pending`;
+    listEl.innerHTML = docs.map(d => {
       const c = d.data();
       return `<div class="document-note" style="margin-bottom:10px">
         <strong>${esc(c.name ?? "")}</strong> — ${esc(c.teamName ?? "")} ${esc(c.division ?? "")} · ${esc(c.city ?? "")}
@@ -153,20 +159,26 @@ async function loadCallupPending() {
   const badge  = document.getElementById("callupPendingBadge");
   if (!listEl) return;
   try {
+    // Single-field filter only; sort client-side to avoid composite index requirement
     const snap = await getDocs(
-      query(collection(db, "callupRequests"), where("status", "==", "pending"), orderBy("requestedAt", "asc"))
+      query(collection(db, "callupRequests"), where("status", "==", "pending"))
     );
+    const docs = snap.docs.sort((a, b) => {
+      const aTs = a.data().requestedAt?.seconds ?? 0;
+      const bTs = b.data().requestedAt?.seconds ?? 0;
+      return aTs - bTs;
+    });
     if (badge) {
-      badge.textContent   = snap.size || "";
-      badge.style.display = snap.size ? "" : "none";
+      badge.textContent   = docs.length || "";
+      badge.style.display = docs.length ? "" : "none";
     }
-    if (snap.empty) {
+    if (docs.length === 0) {
       noteEl.textContent = "No pending call-up requests.";
       listEl.innerHTML = "";
       return;
     }
-    noteEl.textContent = `${snap.size} pending`;
-    listEl.innerHTML = snap.docs.map(d => {
+    noteEl.textContent = `${docs.length} pending`;
+    listEl.innerHTML = docs.map(d => {
       const r = d.data();
       const dateLine = r.gameDate
         ? `<span style="color:var(--light-text);font-size:0.82rem">📅 ${esc(r.gameDate)}</span> · ` : "";
@@ -220,20 +232,14 @@ async function loadIncidentsPending() {
   const badge  = document.getElementById("incidentPendingBadge");
   if (!listEl) return;
   try {
-    // Two-pronged query: explicit open status + limited fallback for legacy docs without a status field
-    const [openSnap, legacySnap] = await Promise.all([
-      getDocs(query(collection(db, "incidentReports"),
-        where("status", "==", "open"),
-        orderBy("submittedAt", "desc"))),
-      getDocs(query(collection(db, "incidentReports"),
-        orderBy("submittedAt", "desc"),
-        limit(25)))
-    ]);
-    // Merge, filter to open/no-status, deduplicate by ID
-    const seen = new Set();
-    const openDocs = [...openSnap.docs, ...legacySnap.docs].filter(d => {
-      if (seen.has(d.id)) return false;
-      seen.add(d.id);
+    // Fetch recent incidents ordered by date; filter open/no-status client-side
+    // (avoids composite index on status + submittedAt)
+    const legacySnap = await getDocs(query(
+      collection(db, "incidentReports"),
+      orderBy("submittedAt", "desc"),
+      limit(50)
+    ));
+    const openDocs = legacySnap.docs.filter(d => {
       const s = d.data().status;
       return !s || s === "open";
     });
