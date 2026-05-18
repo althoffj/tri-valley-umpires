@@ -11,8 +11,8 @@ const page = window.location.pathname.split("/").pop() || "index.html";
 
 const section = (() => {
   if (["schedule.html", "calendar.html", "availability.html"].includes(page)) return "games";
-  if (["fields.html", "field-issues.html", "facility-schedule.html"].includes(page)) return "fields";
-  if (["incident.html"].includes(page)) return "reports";
+  if (["fields.html", "facility-schedule.html"].includes(page)) return "fields";
+  if (["incident.html", "field-issues.html"].includes(page)) return "reports";
   if (["expectations.html", "principles_of_umpiring.html", "rule_breakdown.html",
        "pregame-meeting.html", "training.html"].includes(page)) return "training";
   if (["coach-portal.html", "coach-callup.html"].includes(page)) return "coach";
@@ -57,7 +57,14 @@ function trainingDropdown() {
 
 function fieldsDropdown() {
   return navTrigger("fields", "Fields",
-    navLink("fields.html",       "Field Directory") +
+    navLink("fields.html",            "Field Directory") +
+    navLink("facility-schedule.html", "Field Schedule")
+  );
+}
+
+function reportsDropdown() {
+  return navTrigger("reports", "Reports",
+    navLink("incident.html",     "Incident Report") +
     navLink("field-issues.html", "Field Issues")
   );
 }
@@ -96,7 +103,7 @@ function umpireNav() {
       navLink("availability.html","My Availability")
     )}
     ${fieldsDropdown()}
-    ${navLink("incident.html", "Incident Report")}
+    ${reportsDropdown()}
     ${trainingDropdown()}
     ${requestDropdown()}
   `;
@@ -116,7 +123,7 @@ function coachNav() {
       navLink("coach-callup.html", "Player Call-Ups")
     )}
     ${fieldsDropdown()}
-    ${navLink("incident.html",     "Incident Report")}
+    ${reportsDropdown()}
     ${trainingDropdown()}
     ${requestDropdown()}
   `;
