@@ -56,10 +56,9 @@ async function loadOrgSettings() {
     toggleRegClosedMsg();
     // Coach access
     document.getElementById("orgAllowCoachShedCodes").checked = s.allowCoachShedCodes === true;
-    // Division reps
+    // Division reps — populate dropdown options before rendering rows
+    _repDivisions = s.activeDivisions || [];
     renderDivRepRows(Array.isArray(s.divisionReps) ? s.divisionReps : []);
-    // Populate division datalist for rep rows
-    orgDivisionsList.innerHTML = (s.activeDivisions || []).map(d => `<option value="${d}"></option>`).join("");
     // Field use calendar
     document.getElementById("orgFieldCalendarUrl").value = s.fieldCalendarUrl || "";
     // Technical
@@ -270,25 +269,24 @@ document.getElementById("newDivisionInput").addEventListener("keydown", e => {
 
 const INPUT_S = "padding:7px 9px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.85rem;box-sizing:border-box";
 
+// Cached active divisions for rep row dropdowns (populated when org settings load)
+let _repDivisions = [];
+
 function makeDivRepRow(rep = {}) {
   const row = document.createElement("div");
   row.className = "div-rep-row";
   row.style.cssText = "display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:6px;margin-bottom:8px;align-items:center";
-  row.innerHTML = `
-    <input type="text" class="drDivision" list="orgDivisionsList" placeholder="Division (e.g. 10U)" value="${esc(rep.division || "")}" style="${INPUT_S}" autocomplete="off" />
-    <input type="text" class="drName"     placeholder="Rep Name"  value="${esc(rep.name     || "")}" style="${INPUT_S}" />
-    <input type="email" class="drEmail"   placeholder="Email"     value="${esc(rep.email    || "")}" style="${INPUT_S}" />
-    <input type="tel"   class="drPhone"   placeholder="Phone"     value="${esc(rep.phone    || "")}" style="${INPUT_S}" />
-    <button type="button" class="dr-remove-btn" title="Remove"
-      style="padding:5px 9px;background:transparent;color:#ff8a8a;border:1px solid #884444;border-radius:5px;cursor:pointer;font-size:1rem;line-height:1">×</button>`;
+  const divOptions = '<option value="">-- Division --</option>' +
+    _repDivisions.map(d => '<option value="' + esc(d) + '"' + (d === (rep.division || "") ? ' selected' : '') + '>' + esc(d) + '</option>').join("");
+  row.innerHTML =
+    '<select class="drDivision" style="' + INPUT_S + '">' + divOptions + '</select>' +
+    '<input type="text"  class="drName"  placeholder="Rep Name" value="' + esc(rep.name  || "") + '" style="' + INPUT_S + '" />' +
+    '<input type="email" class="drEmail" placeholder="Email"    value="' + esc(rep.email || "") + '" style="' + INPUT_S + '" />' +
+    '<input type="tel"   class="drPhone" placeholder="Phone"    value="' + esc(rep.phone || "") + '" style="' + INPUT_S + '" />' +
+    '<button type="button" class="dr-remove-btn" title="Remove" style="padding:5px 9px;background:transparent;color:#ff8a8a;border:1px solid #884444;border-radius:5px;cursor:pointer;font-size:1rem;line-height:1">×</button>';
   row.querySelector(".dr-remove-btn").addEventListener("click", () => row.remove());
   return row;
 }
-
-// Add datalist for division suggestions (reuses active divisions)
-const orgDivisionsList = document.createElement("datalist");
-orgDivisionsList.id = "orgDivisionsList";
-document.body.appendChild(orgDivisionsList);
 
 function renderDivRepRows(reps = []) {
   const container = document.getElementById("divRepRows");
