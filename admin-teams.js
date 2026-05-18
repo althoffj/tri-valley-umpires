@@ -108,6 +108,19 @@ function teamCoachMeta(t) {
   return list.map(c => " · " + (c.role === "assistant" ? "Asst: " : "Coach: ") + esc(c.name || "")).join("");
 }
 
+function teamLeagueMeta(t) {
+  const names = t.leagueNames || (t.leagueName ? [t.leagueName] : []);
+  return names.map(n =>
+    '<span style="font-size:0.75rem;color:#8ab4f8;background:rgba(91,141,217,0.12);border:1px solid rgba(91,141,217,0.3);border-radius:4px;padding:1px 6px">🏆 ' + esc(n) + '</span>'
+  ).join("");
+}
+
+function teamBadges(t) {
+  return (t.needsUmpireForHome ? '<span class="team-needs-ump">⚾ Needs umpire</span>' : "")
+    + teamLeagueMeta(t)
+    + (t.icsUrl ? '<span style="color:var(--light-text);font-size:0.78rem">📅 iCal linked</span>' : "");
+}
+
 function renderTeamList() {
   const el = document.getElementById("teamList");
   if (!el) return;
@@ -115,19 +128,18 @@ function renderTeamList() {
     el.innerHTML = `<p style="color:var(--light-text);margin-bottom:12px">No teams configured yet. Add your first team below.</p>`;
     return;
   }
-  el.innerHTML = teams.map((t, i) => `
-    <div class="team-row">
-      <span class="team-color-swatch" style="background:${esc(t.color || "#601929")}"></span>
-      <span class="team-row-name">${esc(t.name)}</span>
-      <span class="team-row-meta">${esc(t.division || "")}${t.city ? " · " + esc(t.city) : ""}${teamCoachMeta(t)}</span>
-      ${t.needsUmpireForHome ? `<span class="team-needs-ump">⚾ Needs umpire</span>` : ""}
-      ${(t.leagueNames || (t.leagueName ? [t.leagueName] : [])).map(n => `<span style="font-size:0.75rem;color:#8ab4f8;background:rgba(91,141,217,0.12);border:1px solid rgba(91,141,217,0.3);border-radius:4px;padding:1px 6px">🏆 ${esc(n)}</span>`).join("")}
-      ${t.icsUrl ? `<span style="color:var(--light-text);font-size:0.78rem">📅 iCal linked</span>` : ""}
-      <div style="margin-left:auto;display:flex;gap:6px">
-        <button type="button" class="btn print-btn team-edit-btn" data-idx="${i}" style="padding:4px 10px;font-size:0.82rem">Edit</button>
-        <button type="button" class="btn print-btn team-delete-btn" data-idx="${i}" style="padding:4px 10px;font-size:0.82rem;color:#ff8a8a;border-color:#ff8a8a">Delete</button>
-      </div>
-    </div>`).join("");
+  el.innerHTML = teams.map((t, i) =>
+    '<div class="team-row">' +
+      '<span class="team-color-swatch" style="background:' + esc(t.color || "#601929") + '"></span>' +
+      '<span class="team-row-name">' + esc(t.name) + '</span>' +
+      '<span class="team-row-meta">' + esc(t.division || "") + (t.city ? " · " + esc(t.city) : "") + teamCoachMeta(t) + '</span>' +
+      teamBadges(t) +
+      '<div style="margin-left:auto;display:flex;gap:6px">' +
+        '<button type="button" class="btn print-btn team-edit-btn" data-idx="' + i + '" style="padding:4px 10px;font-size:0.82rem">Edit</button>' +
+        '<button type="button" class="btn print-btn team-delete-btn" data-idx="' + i + '" style="padding:4px 10px;font-size:0.82rem;color:#ff8a8a;border-color:#ff8a8a">Delete</button>' +
+      '</div>' +
+    '</div>'
+  ).join("");
 
   el.querySelectorAll(".team-edit-btn").forEach(btn => {
     btn.addEventListener("click", () => startEditTeam(parseInt(btn.dataset.idx)));
