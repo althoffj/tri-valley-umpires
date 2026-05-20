@@ -26,6 +26,8 @@
       <button class="cp-tab-btn tab-btn" data-pane="umpireRequest">Request Umpire</button>
       <button class="cp-tab-btn tab-btn" data-pane="practiceRequest">Request Practice</button>
       <button class="cp-tab-btn tab-btn" data-pane="myRequests">My Requests</button>
+      <button class="cp-tab-btn tab-btn" data-pane="myRoster">My Roster</button>
+      <button class="cp-tab-btn tab-btn" data-pane="myProfile">My Profile</button>
       <a href="coach-callup.html" class="tab-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px">⬆ Player Call-Ups</a>
     </div>
 
@@ -209,6 +211,111 @@
       </div>
     </div>
 
+    <!-- My Roster tab -->
+    <div id="cpPane-myRoster" class="cp-tab-pane" style="display:none">
+      <h2>My Team Roster</h2>
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0">Players listed here are available for call-up requests from other coaches.</p>
+      </div>
+      <div id="cpRosterNoTeam" style="display:none">
+        <div class="document-note">
+          <p style="margin:0;color:var(--light-text)">Not linked to a team in the schedule configuration — contact your administrator.</p>
+        </div>
+      </div>
+      <div id="cpRosterMain" style="display:none">
+        <div style="margin-bottom:12px">
+          <button class="btn" id="rosterAddBtn" style="font-size:0.9rem">+ Add Player</button>
+        </div>
+
+        <!-- Inline add/edit form -->
+        <div id="rosterPlayerForm" style="display:none;background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:8px;padding:16px;margin-bottom:16px">
+          <h3 style="margin:0 0 14px;font-size:1rem" id="rosterFormTitle">Add Player</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="rpName">Name *</label>
+              <input type="text" id="rpName" required placeholder="e.g. Alex Johnson" />
+            </div>
+            <div class="form-group">
+              <label for="rpPositions">Position(s)</label>
+              <input type="text" id="rpPositions" placeholder="e.g. SS, 2B" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="rpGradYear">Grad Year</label>
+              <input type="number" id="rpGradYear" min="2024" max="2040" placeholder="e.g. 2028" style="width:120px" />
+            </div>
+            <div class="form-group">
+              <label for="rpNotes">Notes <span style="font-weight:normal;color:var(--light-text)">(optional)</span></label>
+              <input type="text" id="rpNotes" placeholder="e.g. Left-handed pitcher" />
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px">
+            <button class="btn" id="rpSaveBtn">Save Player</button>
+            <button class="btn print-btn" id="rpCancelBtn">Cancel</button>
+          </div>
+          <p id="rpMsg" class="signup-message" style="margin-top:8px"></p>
+        </div>
+
+        <!-- Player table -->
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
+            <thead>
+              <tr style="border-bottom:1px solid #444;color:var(--light-text)">
+                <th style="text-align:left;padding:8px 10px;font-weight:600">Name</th>
+                <th style="text-align:left;padding:8px 10px;font-weight:600">Position(s)</th>
+                <th style="text-align:left;padding:8px 10px;font-weight:600">Grad Year</th>
+                <th style="text-align:left;padding:8px 10px;font-weight:600">Notes</th>
+                <th style="text-align:left;padding:8px 10px;font-weight:600">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rosterBody">
+              <tr><td colspan="5" style="padding:20px;text-align:center;color:var(--light-text)">Loading roster…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- My Profile tab -->
+    <div id="cpPane-myProfile" class="cp-tab-pane" style="display:none">
+      <h2>My Profile</h2>
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0">Update your contact information and team details. Email is linked to your sign-in account and cannot be changed here.</p>
+      </div>
+      <form id="cpProfileForm" novalidate style="max-width:520px">
+        <label for="cpProfileName">Name *</label>
+        <input type="text" id="cpProfileName" required autocomplete="name" />
+
+        <label for="cpProfilePhone" style="margin-top:14px;display:block">Phone</label>
+        <input type="tel" id="cpProfilePhone" autocomplete="tel" placeholder="(605) 555-1234" />
+
+        <label for="cpProfileTeam" style="margin-top:14px;display:block">Team Name</label>
+        <input type="text" id="cpProfileTeam" placeholder="e.g. Crooks 12U" />
+
+        <label for="cpProfileDivision" style="margin-top:14px;display:block">Division</label>
+        <select id="cpProfileDivision" data-org-divisions>
+          <option value="">-- Select division --</option>
+          <option value="8U">8U</option>
+          <option value="10U">10U</option>
+          <option value="12U">12U</option>
+          <option value="14U">14U</option>
+          <option value="HS JV">HS JV</option>
+          <option value="HS Varsity">HS Varsity</option>
+        </select>
+
+        <label for="cpProfileCity" style="margin-top:14px;display:block">City / Program</label>
+        <select id="cpProfileCity" data-org-city-programs>
+          <option value="">-- Select city --</option>
+        </select>
+
+        <div style="margin-top:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <button type="submit" class="btn" id="cpProfileSaveBtn">Save Profile</button>
+          <p id="cpProfileMsg" class="signup-message" style="margin:0"></p>
+        </div>
+      </form>
+    </div>
+
   </div>
 
   <!-- No-access fallback -->
@@ -226,7 +333,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="coach-portal.js?v=5"></script>
+  <script type="module" src="coach-portal.js?v=6"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

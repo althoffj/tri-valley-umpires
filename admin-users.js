@@ -411,7 +411,8 @@ document.getElementById("saveCreateUmpireBtn")?.addEventListener("click", async 
 const createCoachAccountFn = httpsCallable(getFunctions(app), "createCoachAccount");
 
 // Teams cache for the coach team dropdown
-let _coachTeamList = [];  // [{id, name, division, city}]
+let _coachTeamList = [];  // [{id, name, division, city, coaches:[{uid,role}]}]
+let _coachTeamMap  = {}; // { coachUid: ["Team A (12U)", ...] }
 
 async function loadCoachTeamList() {
   if (_coachTeamList.length) return;          // already loaded
@@ -422,6 +423,26 @@ async function loadCoachTeamList() {
       .filter(t => t.name)
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   } catch { /* non-fatal — select stays empty */ }
+  _buildCoachTeamMap();
+}
+
+function _buildCoachTeamMap() {
+  _coachTeamMap = {};
+  _coachTeamList.forEach(t => {
+    const label = t.name + (t.division ? ` (${t.division})` : "");
+    // New format: coaches[] array
+    const coaches = Array.isArray(t.coaches) ? t.coaches : [];
+    coaches.forEach(c => {
+      if (!c.uid) return;
+      if (!_coachTeamMap[c.uid]) _coachTeamMap[c.uid] = [];
+      _coachTeamMap[c.uid].push(label);
+    });
+    // Legacy format: coachId
+    if (!coaches.length && t.coachId) {
+      if (!_coachTeamMap[t.coachId]) _coachTeamMap[t.coachId] = [];
+      _coachTeamMap[t.coachId].push(label);
+    }
+  });
 }
 
 function populateCoachTeamSelect() {
@@ -1131,7 +1152,10 @@ async function denyCoachPending(uid, name) {
 async function loadCoachRoster() {
   const tbody = document.getElementById("coachBody");
   try {
-    const snap = await getDocs(query(collection(db, "coaches"), orderBy("name")));
+    const [snap] = await Promise.all([
+      getDocs(query(collection(db, "coaches"), orderBy("name"))),
+      loadCoachTeamList(),   // ensures _coachTeamMap is populated
+    ]);
     allCoaches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderCoachRoster();
   } catch (err) {
@@ -1198,9 +1222,14 @@ function renderCoachRoster() {
     actions.push(`<button class="btn delete-coach-btn" data-uid="${esc(c.id)}" data-name="${esc(c.name||"")}"
       style="font-size:0.78rem;padding:3px 10px;background:#5a1a1a">Delete</button>`);
 
+    const assignedTeams = _coachTeamMap[c.id] || [];
+    const teamCell = assignedTeams.length
+      ? assignedTeams.map(t => `<span style="display:inline-block;background:#1a2a1a;color:#b8f2c4;border-radius:4px;padding:1px 6px;font-size:0.78rem;margin:1px 2px 1px 0">${esc(t)}</span>`).join("")
+      : `<span style="color:var(--light-text)">${esc(c.teamName||"—")}</span>`;
+
     return `<tr style="${isInactive ? "opacity:0.55" : ""}">
       <td><strong>${esc(c.name||"")}</strong></td>
-      <td>${esc(c.teamName||"—")}</td>
+      <td>${teamCell}</td>
       <td>${esc(c.division||"—")}</td>
       <td>${esc(c.city||"—")}</td>
       <td style="font-size:0.85rem">${esc(c.email||"")}<br><span style="color:var(--light-text)">${esc(c.phone||"")}</span></td>

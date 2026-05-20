@@ -1475,26 +1475,115 @@ exports.onGameWrite = onDocumentWritten(
 
 // ── Cancellation request notifications ───────────────────────────────────────
 
-exports.onCancellationRequest = onDocumentWritten("cancellationRequests/{requestId}", async event => {
+exports.onCancellationRequest = onDocumentWritten(
+  { document: "cancellationRequests/{requestId}", secrets: [GMAIL_USER, GMAIL_PASS] },
+  async event => {
   const before = event.data.before?.data() ?? null;
   const after  = event.data.after?.data()  ?? null;
+  if (!after) return;
 
-  // Only notify on new pending requests
-  if (!after || after.status !== "pending" || before?.status === "pending") return;
+  const db   = getFirestore();
+  const name = after.name     || after.uid || "Unknown";
+  const slot = after.slotType || "?";
+  const date = fmtDateSlack(after.gameDate);
+  const time = after.gameTime ? fmtTimeSlack(after.gameTime) : "";
+  const gameWhere = [after.gameCity, after.gameDivision, after.gameField].filter(Boolean).join(" · ");
 
-  const db    = getFirestore();
-  const config = await loadWebhookConfig(db);
-  const targets = getTargetWebhooks(config, "cancellationRequests");
-  if (!targets.length) return;
+  // ── New pending request → notify admin via Slack ──────────────────────────
+  if (after.status === "pending" && before?.status !== "pending") {
+    const config  = await loadWebhookConfig(db);
+    const targets = getTargetWebhooks(config, "cancellationRequests");
+    if (targets.length) {
+      const msg = `⚠️ Cancellation request — ${name} wants to cancel ${slot} slot · ${date}${time ? " at " + time : ""}${gameWhere ? " · " + gameWhere : ""}\nReview: https://tri-valley-baseball-umpires.web.app/admin.html`;
+      await Promise.allSettled(targets.map(url => postSlack(url, msg)));
+    }
+    return;
+  }
 
-  const name  = after.name     || after.uid || "Unknown";
-  const slot  = after.slotType || "?";
-  const date  = fmtDateSlack(after.gameDate);
-  const time  = after.gameTime ? fmtTimeSlack(after.gameTime) : "";
-  const where = [after.gameCity, after.gameDivision, after.gameField].filter(Boolean).join(" · ");
-  const msg   = `⚠️ Cancellation request — ${name} wants to cancel ${slot} slot · ${date}${time ? " at " + time : ""}${where ? " · " + where : ""}\nReview: https://tri-valley-baseball-umpires.web.app/admin-games.html`;
+  // ── Status resolved (approved / denied) → notify the umpire ──────────────
+  const resolved = after.status === "approved" || after.status === "denied";
+  const wasResolved = before?.status === "approved" || before?.status === "denied";
+  if (!resolved || wasResolved || !after.uid) return;
 
-  await Promise.allSettled(targets.map(url => postSlack(url, msg)));
+  const isApproved = after.status === "approved";
+  const pushTitle  = isApproved ? "✅ Cancellation Approved" : "❌ Cancellation Denied";
+  const pushBody   = isApproved
+    ? `Your ${slot} slot on ${date} has been released. You are no longer assigned.`
+    : `Your cancellation request for ${slot} on ${date} was denied. You remain assigned.`;
+
+  const sends = [];
+
+  // Push notification
+  try {
+    const tokenSnap = await db.doc(`notifications/${after.uid}`).get();
+    const token = tokenSnap.exists ? tokenSnap.data()?.token : null;
+    if (token) {
+      const result = await getMessaging().sendEachForMulticast({
+        tokens: [token],
+        notification: { title: pushTitle, body: pushBody },
+        webpush: { fcmOptions: { link: "https://tri-valley-baseball-umpires.web.app/schedule.html" } },
+      });
+      // Clean up stale token
+      if (result.responses[0]?.error?.code === "messaging/registration-token-not-registered") {
+        await db.doc(`notifications/${after.uid}`).delete();
+      }
+    }
+  } catch (err) {
+    console.error("onCancellationRequest push:", err);
+  }
+
+  // Email notification
+  try {
+    const umpSnap = await db.doc(`umpires/${after.uid}`).get();
+    const email   = umpSnap.exists ? umpSnap.data()?.email : null;
+    if (email) {
+      const orgSnap = await db.doc("config/orgSettings").get();
+      const org     = orgSnap.exists() ? orgSnap.data() : {};
+      const orgName = org.assocName || "Tri-Valley Baseball Umpires";
+      const coord   = org.coordinatorName  || "";
+      const phone   = org.coordinatorPhone || "";
+      const APP_URL = "https://tri-valley-baseball-umpires.web.app";
+
+      const subject = isApproved
+        ? `Cancellation Approved — ${slot} on ${date}`
+        : `Cancellation Request Denied — ${slot} on ${date}`;
+
+      const bodyHtml = `
+        <div style="font-family:-apple-system,sans-serif;max-width:540px;margin:0 auto;color:#111">
+          <div style="background:#601929;color:#fff;padding:16px 24px;border-radius:8px 8px 0 0">
+            <strong style="font-size:1.1rem">${isApproved ? "✅ Cancellation Approved" : "❌ Cancellation Request Denied"}</strong>
+          </div>
+          <div style="background:#f7f2f3;padding:20px 24px;border-radius:0 0 8px 8px;border:1px solid #d9b8bb;border-top:none">
+            <p>Hi ${name},</p>
+            <p>${isApproved
+              ? `Your request to cancel your <strong>${slot}</strong> slot has been <strong>approved</strong>. You are no longer assigned to the game below.`
+              : `Your request to cancel your <strong>${slot}</strong> slot has been <strong>denied</strong>. You remain assigned to the game below.`}
+            </p>
+            <div style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:12px 16px;margin:16px 0;font-size:0.9rem">
+              <strong>Game Details</strong><br>
+              📅 ${after.gameDate || ""}${time ? " at " + time : ""}<br>
+              📍 ${gameWhere || "—"}
+            </div>
+            ${isApproved ? "" : `<p>If you have questions about this decision, please contact ${coord ? coord + (phone ? " at " + phone : "") : "your coordinator"}.</p>`}
+            <p><a href="${APP_URL}/schedule.html" style="color:#601929">View your schedule →</a></p>
+            <hr style="border:none;border-top:1px solid #ddd;margin:16px 0">
+            <p style="font-size:0.8rem;color:#777">${orgName}${coord ? " · " + coord : ""}${phone ? " · " + phone : ""}</p>
+          </div>
+        </div>`;
+
+      const transport = buildTransport();
+      await transport.sendMail({
+        from:    `"${orgName}" <${GMAIL_USER.value()}>`,
+        to:      email,
+        subject,
+        html:    bodyHtml,
+      });
+    }
+  } catch (err) {
+    console.error("onCancellationRequest email:", err);
+  }
+
+  await Promise.allSettled(sends);
 });
 
 // ── Incident report notifications ────────────────────────────────────────────

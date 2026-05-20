@@ -1,14 +1,16 @@
 // admin.js — Overview dashboard: stats, pending queues, open issues
 import { db } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
-import { esc, fmtTime, setMsg, showToast, showConfirm } from "./utils.js";
+import { esc, fmtDate, fmtTime, setMsg, showToast, showConfirm } from "./utils.js";
 
 import {
   collection,
   getDocs,
+  getDoc,
   doc,
   updateDoc,
   deleteDoc,
+  runTransaction,
   query,
   orderBy,
   where,
@@ -486,7 +488,133 @@ document.addEventListener("click", e => {
 
   const callupDeclineBtn = e.target.closest(".callup-decline-btn");
   if (callupDeclineBtn) { adminOverrideCallup(callupDeclineBtn.dataset.id, "declined"); return; }
+
+  const cancelApproveBtn = e.target.closest(".cancel-approve-btn");
+  if (cancelApproveBtn) { resolveCancellation(cancelApproveBtn.dataset.id, "approved"); return; }
+
+  const cancelDenyBtn = e.target.closest(".cancel-deny-btn");
+  if (cancelDenyBtn) { resolveCancellation(cancelDenyBtn.dataset.id, "denied"); return; }
 });
+
+// ── Pending Cancellation Requests ─────────────────────────────────────────────
+
+let _cancelRequests = [];
+
+async function loadCancellationsPending() {
+  const noteEl = document.getElementById("cancelPendingNote");
+  const listEl = document.getElementById("cancelPendingList");
+  if (!listEl) return;
+
+  try {
+    const snap = await getDocs(query(
+      collection(db, "cancellationRequests"),
+      where("status", "==", "pending"),
+      orderBy("requestedAt")
+    ));
+
+    _cancelRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    if (!_cancelRequests.length) {
+      if (noteEl) noteEl.textContent = "No pending cancellation requests.";
+      listEl.innerHTML = "";
+      return;
+    }
+
+    if (noteEl) noteEl.textContent = `${_cancelRequests.length} pending request${_cancelRequests.length !== 1 ? "s" : ""}.`;
+
+    listEl.innerHTML = _cancelRequests.map(r => {
+      const when = r.requestedAt?.toDate
+        ? r.requestedAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+        : "";
+      return `
+        <div class="document-note" style="border-left-color:#f57c00;margin-bottom:12px" data-cancel-id="${esc(r.id)}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+            <div>
+              <strong>${esc(r.name)}</strong> wants to cancel their
+              <strong>${esc(r.slotType)}</strong> slot
+              <span style="color:var(--light-text);font-size:0.85rem">— submitted ${esc(when)}</span>
+            </div>
+          </div>
+          <div style="font-size:0.88rem;color:var(--light-text);margin-top:4px">
+            ${esc(fmtDate(r.gameDate))} · ${r.gameTime ? esc(fmtTime(r.gameTime)) + " · " : ""}${esc(r.gameCity)} · ${esc(r.gameDivision)}${r.gameField ? " · " + esc(r.gameField) : ""}
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn cancel-approve-btn" data-id="${esc(r.id)}"
+              style="font-size:0.82rem;padding:4px 14px;background:#7a1c1c">
+              ✓ Approve (Remove from game)
+            </button>
+            <button class="btn print-btn cancel-deny-btn" data-id="${esc(r.id)}"
+              style="font-size:0.82rem;padding:4px 14px">
+              ✕ Deny (Keep assigned)
+            </button>
+          </div>
+          <p class="cancel-result-msg" style="font-size:0.82rem;margin:6px 0 0;color:var(--light-text)"></p>
+        </div>`;
+    }).join("");
+  } catch (err) {
+    console.error(err);
+    if (noteEl) noteEl.textContent = "Error loading cancellation requests.";
+  }
+}
+
+async function resolveCancellation(requestId, decision) {
+  const req = _cancelRequests.find(r => r.id === requestId);
+  if (!req) return;
+
+  const card    = document.querySelector(`[data-cancel-id="${requestId}"]`);
+  const msgEl   = card?.querySelector(".cancel-result-msg");
+  const buttons = card?.querySelectorAll("button");
+  if (buttons) buttons.forEach(b => b.disabled = true);
+  if (msgEl)   msgEl.textContent = "Processing…";
+
+  try {
+    if (decision === "approved") {
+      // Remove the umpire from the slot in the game doc, then mark request resolved
+      const gameRef = doc(db, "games", req.gameId);
+      await runTransaction(db, async tx => {
+        const snap = await tx.get(gameRef);
+        if (!snap.exists()) throw new Error("Game not found.");
+        const slots = (snap.data().umpireSlots || []).map(s =>
+          s.type === req.slotType && s.assignedUid === req.uid
+            ? { type: s.type, payRate: s.payRate ?? null }   // strip assignment
+            : s
+        );
+        const needsUmpires = slots.some(s => !s.assignedUid);
+        tx.update(gameRef, { umpireSlots: slots, needsUmpires });
+      });
+    }
+
+    // Mark the request resolved
+    await updateDoc(doc(db, "cancellationRequests", requestId), {
+      status:     decision,
+      resolvedAt: serverTimestamp(),
+    });
+
+    // Remove from local list and re-render
+    _cancelRequests = _cancelRequests.filter(r => r.id !== requestId);
+
+    if (card) {
+      card.style.background = decision === "approved" ? "rgba(200,50,50,0.1)" : "rgba(50,100,50,0.08)";
+      const msg = decision === "approved"
+        ? `✓ Approved — ${req.name} removed from ${req.slotType} slot on ${req.gameDate}.`
+        : `✕ Denied — ${req.name} remains assigned to the ${req.slotType} slot.`;
+      if (msgEl) { msgEl.textContent = msg; msgEl.style.color = decision === "approved" ? "#f87171" : "#6fcf97"; }
+      if (buttons) buttons.forEach(b => { b.style.display = "none"; });
+    }
+
+    // Update count note
+    const noteEl = document.getElementById("cancelPendingNote");
+    if (noteEl) {
+      noteEl.textContent = _cancelRequests.length
+        ? `${_cancelRequests.length} pending request${_cancelRequests.length !== 1 ? "s" : ""}.`
+        : "No pending cancellation requests.";
+    }
+  } catch (err) {
+    console.error(err);
+    if (msgEl) { msgEl.textContent = "Error: " + err.message; msgEl.style.color = "#f87171"; }
+    if (buttons) buttons.forEach(b => b.disabled = false);
+  }
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -503,6 +631,7 @@ authReadyPromise.then(() => {
   loadPending();
   loadCoachPending();
   loadCallupPending();
+  loadCancellationsPending();
   loadIncidentsPending();
   loadFieldIssuesPending();
 });

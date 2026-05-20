@@ -5,7 +5,8 @@ import { esc, fmtDate, fmtTime, setMsg } from "./utils.js";
 import { getOrgSettings } from "./org.js";
 
 import {
-  collection, getDocs, addDoc, query, orderBy, where, serverTimestamp, limit
+  collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc,
+  query, orderBy, where, serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -24,6 +25,8 @@ function fieldError(id, msg) {
 // ── Tab switching ─────────────────────────────────────────────────────────────
 
 let myRequestsLoaded = false;
+let myRosterLoaded   = false;
+let myProfileLoaded  = false;
 
 function setupTabs() {
   document.querySelectorAll(".cp-tab-btn").forEach(btn => {
@@ -37,6 +40,15 @@ function setupTabs() {
       if (btn.dataset.pane === "myRequests" && !myRequestsLoaded) {
         myRequestsLoaded = true;
         loadMyRequests();
+      }
+      // Lazy-load My Roster on first open
+      if (btn.dataset.pane === "myRoster" && !myRosterLoaded) {
+        myRosterLoaded = true;
+        loadRoster();
+      }
+      // Load My Profile on each open so form always reflects current data
+      if (btn.dataset.pane === "myProfile") {
+        loadProfileTab();
       }
     });
   });
@@ -427,6 +439,242 @@ async function loadMyRequests() {
   }
 }
 
+// ── My Roster ─────────────────────────────────────────────────────────────────
+
+let myTeamId    = null;   // stable team ID from config/teamCalendars
+let rosterPlayers = [];   // current player array
+let editingPlayerId = null; // null = adding new
+
+async function loadMyTeamId() {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return null;
+  const teamsSnap = await getDoc(doc(db, "config/teamCalendars"));
+  if (!teamsSnap.exists()) return null;
+  const teams = teamsSnap.data().teams || [];
+  const found = teams.find(t => t.coachId === uid || (Array.isArray(t.coaches) && t.coaches.some(c => c.uid === uid)));
+  return found?.id ?? null;
+}
+
+async function loadRoster() {
+  const noTeamEl = document.getElementById("cpRosterNoTeam");
+  const mainEl   = document.getElementById("cpRosterMain");
+  const bodyEl   = document.getElementById("rosterBody");
+
+  try {
+    myTeamId = await loadMyTeamId();
+    if (!myTeamId) {
+      if (noTeamEl) noTeamEl.style.display = "";
+      if (mainEl)   mainEl.style.display   = "none";
+      return;
+    }
+    if (noTeamEl) noTeamEl.style.display = "none";
+    if (mainEl)   mainEl.style.display   = "";
+
+    const rosterSnap = await getDoc(doc(db, "rosters", myTeamId));
+    rosterPlayers = rosterSnap.exists() ? (rosterSnap.data().players || []) : [];
+    renderRoster(rosterPlayers);
+  } catch (err) {
+    console.error("loadRoster:", err);
+    if (bodyEl) bodyEl.innerHTML = `<tr><td colspan="5" style="padding:16px;color:#ffb4b4">Failed to load roster. Please refresh.</td></tr>`;
+  }
+}
+
+function renderRoster(players) {
+  const bodyEl = document.getElementById("rosterBody");
+  if (!bodyEl) return;
+
+  if (!players.length) {
+    bodyEl.innerHTML = `<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--light-text)">No players yet. Click "Add Player" to get started.</td></tr>`;
+    return;
+  }
+
+  bodyEl.innerHTML = players.map(p => `
+    <tr style="border-bottom:1px solid #333">
+      <td style="padding:9px 10px;font-weight:600">${esc(p.name)}</td>
+      <td style="padding:9px 10px;color:var(--light-text)">${esc(p.positions || "—")}</td>
+      <td style="padding:9px 10px;color:var(--light-text)">${p.gradYear ? esc(String(p.gradYear)) : "—"}</td>
+      <td style="padding:9px 10px;color:var(--light-text);font-size:0.85rem">${esc(p.notes || "")}</td>
+      <td style="padding:9px 10px;white-space:nowrap">
+        <button class="btn print-btn roster-edit-btn" data-id="${esc(p.id)}"
+          style="font-size:0.78rem;padding:3px 10px;margin-right:6px">Edit</button>
+        <button class="btn print-btn roster-del-btn" data-id="${esc(p.id)}"
+          style="font-size:0.78rem;padding:3px 10px;color:#ffb4b4;border-color:#7a2a2a">Delete</button>
+      </td>
+    </tr>`).join("");
+
+  bodyEl.querySelectorAll(".roster-edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => openPlayerForm(btn.dataset.id));
+  });
+  bodyEl.querySelectorAll(".roster-del-btn").forEach(btn => {
+    btn.addEventListener("click", () => deleteRosterPlayer(btn.dataset.id));
+  });
+}
+
+function openPlayerForm(playerId) {
+  const formEl = document.getElementById("rosterPlayerForm");
+  const titleEl = document.getElementById("rosterFormTitle");
+  if (!formEl) return;
+
+  if (playerId) {
+    // Edit mode
+    editingPlayerId = playerId;
+    const p = rosterPlayers.find(x => x.id === playerId);
+    if (!p) return;
+    document.getElementById("rpName").value      = p.name      || "";
+    document.getElementById("rpPositions").value = p.positions || "";
+    document.getElementById("rpGradYear").value  = p.gradYear  ? String(p.gradYear) : "";
+    document.getElementById("rpNotes").value      = p.notes     || "";
+    if (titleEl) titleEl.textContent = "Edit Player";
+  } else {
+    // Add mode
+    editingPlayerId = null;
+    document.getElementById("rpName").value      = "";
+    document.getElementById("rpPositions").value = "";
+    document.getElementById("rpGradYear").value  = "";
+    document.getElementById("rpNotes").value      = "";
+    if (titleEl) titleEl.textContent = "Add Player";
+  }
+
+  const msgEl = document.getElementById("rpMsg");
+  if (msgEl) { msgEl.textContent = ""; msgEl.className = "signup-message"; }
+
+  formEl.style.display = "";
+  document.getElementById("rpName").focus();
+}
+
+async function saveRosterPlayer() {
+  const name      = val("rpName");
+  const positions = val("rpPositions");
+  const gradYearRaw = document.getElementById("rpGradYear")?.value?.trim();
+  const gradYear  = gradYearRaw ? Number(gradYearRaw) : null;
+  const notes     = val("rpNotes");
+
+  if (!name) {
+    document.getElementById("rpName").focus();
+    setMsg("rpMsg", "Player name is required.", "error");
+    return;
+  }
+
+  if (!myTeamId) {
+    setMsg("rpMsg", "No team linked — cannot save.", "error");
+    return;
+  }
+
+  const saveBtn = document.getElementById("rpSaveBtn");
+  if (saveBtn) saveBtn.disabled = true;
+  setMsg("rpMsg", "Saving…", "info");
+
+  try {
+    let updatedPlayers;
+    if (editingPlayerId) {
+      // Update existing player
+      updatedPlayers = rosterPlayers.map(p =>
+        p.id === editingPlayerId
+          ? { ...p, name, positions, gradYear, notes }
+          : p
+      );
+    } else {
+      // Add new player
+      const newPlayer = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        name, positions, gradYear, notes
+      };
+      updatedPlayers = [...rosterPlayers, newPlayer];
+    }
+
+    await setDoc(doc(db, "rosters", myTeamId), { players: updatedPlayers }, { merge: false });
+    rosterPlayers = updatedPlayers;
+    renderRoster(rosterPlayers);
+    document.getElementById("rosterPlayerForm").style.display = "none";
+    editingPlayerId = null;
+  } catch (err) {
+    console.error("saveRosterPlayer:", err);
+    setMsg("rpMsg", "Error saving player: " + (err.message || String(err)), "error");
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
+async function deleteRosterPlayer(playerId) {
+  if (!confirm("Remove this player from your roster?")) return;
+  if (!myTeamId) return;
+
+  const updatedPlayers = rosterPlayers.filter(p => p.id !== playerId);
+  try {
+    await setDoc(doc(db, "rosters", myTeamId), { players: updatedPlayers }, { merge: false });
+    rosterPlayers = updatedPlayers;
+    renderRoster(rosterPlayers);
+  } catch (err) {
+    console.error("deleteRosterPlayer:", err);
+    alert("Error deleting player: " + (err.message || String(err)));
+  }
+}
+
+function setupRosterTab() {
+  document.getElementById("rosterAddBtn")?.addEventListener("click", () => openPlayerForm(null));
+  document.getElementById("rpSaveBtn")?.addEventListener("click", saveRosterPlayer);
+  document.getElementById("rpCancelBtn")?.addEventListener("click", () => {
+    document.getElementById("rosterPlayerForm").style.display = "none";
+    editingPlayerId = null;
+  });
+}
+
+// ── My Profile ────────────────────────────────────────────────────────────────
+
+function loadProfileTab() {
+  const profile = getCurrentCoachProfile();
+  if (!profile) return;
+
+  const setField = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v ?? "";
+  };
+
+  setField("cpProfileName",     profile.name     || "");
+  setField("cpProfilePhone",    profile.phone    || "");
+  setField("cpProfileTeam",     profile.teamName || "");
+  setField("cpProfileDivision", profile.division || "");
+  setField("cpProfileCity",     profile.city     || "");
+
+  const msgEl = document.getElementById("cpProfileMsg");
+  if (msgEl) { msgEl.textContent = ""; msgEl.className = "signup-message"; }
+}
+
+async function saveProfile(e) {
+  e.preventDefault();
+
+  const name     = val("cpProfileName");
+  const phone    = val("cpProfilePhone");
+  const teamName = val("cpProfileTeam");
+  const division = val("cpProfileDivision");
+  const city     = val("cpProfileCity");
+
+  if (!name) {
+    document.getElementById("cpProfileName").focus();
+    setMsg("cpProfileMsg", "Name is required.", "error");
+    return;
+  }
+
+  const uid = getCurrentUser()?.uid;
+  if (!uid) { setMsg("cpProfileMsg", "Not signed in.", "error"); return; }
+
+  const btn = document.getElementById("cpProfileSaveBtn");
+  if (btn) btn.disabled = true;
+  setMsg("cpProfileMsg", "Saving…", "info");
+
+  try {
+    await updateDoc(doc(db, "coaches", uid), { name, phone, teamName, division, city });
+    setMsg("cpProfileMsg", "Profile saved.", "success");
+    // Refresh pre-filled form fields for other tabs
+    prefillForms();
+  } catch (err) {
+    console.error("saveProfile:", err);
+    setMsg("cpProfileMsg", "Error saving profile: " + (err.message || String(err)), "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // ── Division filter buttons ───────────────────────────────────────────────────
 
 function setupDivisionFilter() {
@@ -457,10 +705,12 @@ authReadyPromise.then(() => {
 
   setupTabs();
   setupDivisionFilter();
+  setupRosterTab();
   prefillForms();
   showDivisionRep();
   loadSchedule();
 
   document.getElementById("cpUmpireRequestForm")?.addEventListener("submit",   submitUmpireRequest);
   document.getElementById("cpPracticeRequestForm")?.addEventListener("submit", submitPracticeRequest);
+  document.getElementById("cpProfileForm")?.addEventListener("submit",         saveProfile);
 });

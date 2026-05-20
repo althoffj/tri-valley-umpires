@@ -20,6 +20,7 @@ let payrollRows       = [];
 let payRates          = { plate: 0, field: 0, extra: 0 };
 let payrollFromFilter = "";
 let payrollToFilter   = "";
+let payrollUmpireFilter = "";  // uid of selected umpire, "" = all
 let manualPayEntries  = [];
 let divisionPayRates  = {};   // { "10U": 40, "12U": 45, ... }
 let umpireList        = [];   // [{ uid, name }] for the umpire dropdown
@@ -67,8 +68,9 @@ async function loadPayroll() {
           division:   g.division ?? "",
           field:      g.field ?? "",
           pay,
-          paid:       slot.paid === true,
-          noShow:     slot.noShow === true,
+          paid:       slot.paid      === true,
+          checkedIn:  slot.checkedIn === true,
+          noShow:     slot.noShow    === true,
         });
       });
     });
@@ -93,10 +95,11 @@ async function loadPayroll() {
 
 // ── Filter helpers ────────────────────────────────────────────────────────────
 
-function filteredRows() {
+function filteredRows(ignoreUmpireFilter = false) {
   return payrollRows.filter(r => {
     if (payrollFromFilter && r.date < payrollFromFilter) return false;
     if (payrollToFilter   && r.date > payrollToFilter)   return false;
+    if (!ignoreUmpireFilter && payrollUmpireFilter && r.uid !== payrollUmpireFilter) return false;
     return true;
   });
 }
@@ -136,9 +139,14 @@ function renderSummary() {
       const outstanding = owed - paid;
       const allPaid     = outstanding === 0;
       const unpaidCount = uRows.filter(r => !r.paid).length;
+      const isFiltered  = payrollUmpireFilter === uid;
       return `
-        <div style="background:var(--container);border:1px solid ${allPaid ? "#2a4a2a" : "#444"};border-radius:8px;padding:14px 16px;min-width:180px;flex:1 1 180px">
-          <div style="font-weight:600;margin-bottom:8px;font-size:0.95rem">${esc(name)}</div>
+        <div style="background:var(--container);border:2px solid ${isFiltered ? "var(--accent)" : (allPaid ? "#2a4a2a" : "#444")};border-radius:8px;padding:14px 16px;min-width:180px;flex:1 1 180px;cursor:pointer"
+          class="umpire-card" data-uid="${esc(uid)}">
+          <div style="font-weight:600;margin-bottom:8px;font-size:0.95rem;display:flex;align-items:center;gap:6px">
+            ${esc(name)}
+            ${isFiltered ? '<span style="font-size:0.72rem;background:var(--accent);color:#fff;border-radius:4px;padding:1px 6px">filtered</span>' : ""}
+          </div>
           <div style="font-size:0.82rem;color:var(--light-text);margin-bottom:2px">Owed: <strong style="color:var(--text)">$${owed.toFixed(2)}</strong></div>
           <div style="font-size:0.82rem;color:var(--light-text);margin-bottom:2px">Paid: <strong style="color:#6fcf97">$${paid.toFixed(2)}</strong></div>
           <div style="font-size:0.82rem;margin-bottom:10px;color:${allPaid ? "#6fcf97" : "#ffcc80"}">
@@ -164,6 +172,15 @@ function renderSummary() {
 
   el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">${cards.join("")}</div>`;
 
+  // Card click → filter detail table
+  el.querySelectorAll(".umpire-card").forEach(card => {
+    card.addEventListener("click", e => {
+      if (e.target.closest("button")) return; // let buttons work normally
+      const uid = card.dataset.uid;
+      payrollUmpireFilter = payrollUmpireFilter === uid ? "" : uid;
+      renderAll();
+    });
+  });
   el.querySelectorAll(".mark-all-paid-btn").forEach(btn => {
     btn.addEventListener("click", () => markAllPaid(btn.dataset.uid));
   });
@@ -220,6 +237,27 @@ function renderDetailTable() {
   const totalsEl = document.getElementById("payrollTotals");
   if (!tbody) return;
 
+  // Show/update umpire filter banner
+  let filterBanner = document.getElementById("payrollUmpireFilterBanner");
+  if (!filterBanner) {
+    filterBanner = document.createElement("div");
+    filterBanner.id = "payrollUmpireFilterBanner";
+    tbody.closest("table")?.parentElement?.insertBefore(filterBanner, tbody.closest("table"));
+  }
+  if (payrollUmpireFilter) {
+    const allUmpireRows = filteredRows(true);
+    const name = allUmpireRows.find(r => r.uid === payrollUmpireFilter)?.umpireName || payrollUmpireFilter;
+    filterBanner.innerHTML = `<p style="font-size:0.88rem;color:var(--light-text);margin:0 0 8px">
+      Showing: <strong style="color:var(--text)">${esc(name)}</strong>
+      &nbsp;<button id="clearUmpireFilterBtn" class="btn print-btn" style="font-size:0.75rem;padding:2px 8px">× Show All</button>
+    </p>`;
+    document.getElementById("clearUmpireFilterBtn")?.addEventListener("click", () => {
+      payrollUmpireFilter = ""; renderAll();
+    });
+  } else {
+    filterBanner.innerHTML = "";
+  }
+
   const rows     = filteredRows();
   const billable = rows.filter(r => !r.noShow);
   const noShows  = rows.length - billable.length;
@@ -237,8 +275,20 @@ function renderDetailTable() {
   }
 
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--light-text);text-align:center">No payroll records for this period.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="color:var(--light-text);text-align:center">No payroll records for this period.</td></tr>';
     return;
+  }
+
+  // Update header column count
+  const thead = document.querySelector("#payrollTable thead tr");
+  if (thead && !thead.querySelector("th[data-checkin-col]")) {
+    const slotTh = [...thead.querySelectorAll("th")].find(th => th.textContent === "Slot");
+    if (slotTh) {
+      const ciTh = document.createElement("th");
+      ciTh.textContent = "Check-In";
+      ciTh.setAttribute("data-checkin-col", "1");
+      slotTh.insertAdjacentElement("afterend", ciTh);
+    }
   }
 
   tbody.innerHTML = rows.map(r => {
@@ -249,10 +299,14 @@ function renderDetailTable() {
         <td>${esc(r.city)}<br><span style="font-size:0.82rem;color:var(--light-text)">${esc(r.division)}</span></td>
         <td>${esc(r.field || "—")}</td>
         <td><span class="badge badge-${(r.slotType||"").toLowerCase()}">${esc(r.slotType)}</span></td>
+        <td>—</td>
         <td style="color:var(--light-text)">$0.00</td>
         <td><span class="badge" style="background:#3a1010;color:#ffb4b4">No Show</span></td>
       </tr>`;
     }
+    const checkedInCell = r.checkedIn
+      ? `<span style="color:#6fcf97;font-size:0.88rem">✅</span>`
+      : `<span style="color:var(--light-text);font-size:0.88rem">—</span>`;
     const paidBadge = r.paid
       ? `<span class="badge" style="background:#17351f;color:#b8f2c4">Paid</span>`
       : `<span class="badge" style="background:#4a2c00;color:#ffcc80">Unpaid</span>`;
@@ -267,6 +321,7 @@ function renderDetailTable() {
       <td>${esc(r.city)}<br><span style="font-size:0.82rem;color:var(--light-text)">${esc(r.division)}</span></td>
       <td style="font-size:0.85rem;color:var(--light-text)">${esc(r.field || "—")}</td>
       <td><span class="badge badge-${(r.slotType||"").toLowerCase()}">${esc(r.slotType)}</span></td>
+      <td style="text-align:center">${checkedInCell}</td>
       <td>$${r.pay.toFixed(2)}</td>
       <td style="white-space:nowrap">${paidBadge}${toggleBtn}</td>
     </tr>`;
@@ -633,10 +688,12 @@ function wireFilters() {
   document.getElementById("payrollFilterBtn")?.addEventListener("click", () => {
     payrollFromFilter = document.getElementById("payrollFrom").value;
     payrollToFilter   = document.getElementById("payrollTo").value;
+    payrollUmpireFilter = "";
     renderAll();
   });
   document.getElementById("payrollResetBtn")?.addEventListener("click", () => {
     payrollFromFilter = payrollToFilter = "";
+    payrollUmpireFilter = "";
     document.getElementById("payrollFrom").value = "";
     document.getElementById("payrollTo").value   = "";
     renderAll();
@@ -644,6 +701,7 @@ function wireFilters() {
   document.getElementById("payrollThisYearBtn")?.addEventListener("click", () => {
     const r = thisYearRange();
     payrollFromFilter = r.from; payrollToFilter = r.to;
+    payrollUmpireFilter = "";
     document.getElementById("payrollFrom").value = r.from;
     document.getElementById("payrollTo").value   = r.to;
     renderAll();
@@ -651,6 +709,7 @@ function wireFilters() {
   document.getElementById("payrollLastYearBtn")?.addEventListener("click", () => {
     const r = lastYearRange();
     payrollFromFilter = r.from; payrollToFilter = r.to;
+    payrollUmpireFilter = "";
     document.getElementById("payrollFrom").value = r.from;
     document.getElementById("payrollTo").value   = r.to;
     renderAll();

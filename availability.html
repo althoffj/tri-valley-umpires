@@ -34,7 +34,7 @@
     <!-- Calendar grid -->
     <div id="calGrid" class="avail-grid"></div>
 
-    <!-- Legend + Save -->
+    <!-- Legend + Actions -->
     <div style="display:flex;align-items:center;gap:20px;margin-top:20px;flex-wrap:wrap">
       <div style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--light-text)">
         <span class="avail-day-demo"></span> Available
@@ -42,8 +42,14 @@
       <div style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--light-text)">
         <span class="avail-day-demo avail-day-demo--off"></span> Unavailable
       </div>
-      <div style="margin-left:auto">
-        <button class="btn" id="saveAvailBtn">Save Changes</button>
+      <div style="display:flex;align-items:center;gap:6px;font-size:0.85rem;color:var(--light-text)">
+        <span class="avail-game-dot avail-game-dot--plate" style="display:inline-block"></span>
+        <span class="avail-game-dot" style="display:inline-block"></span>
+        Assigned game
+      </div>
+      <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">
+        <button class="btn print-btn" id="clearMonthBtn" style="font-size:0.85rem">Clear Month</button>
+        <button class="btn" id="saveAvailBtn">Save</button>
       </div>
     </div>
     <p id="availMsg" class="signup-message" style="margin-top:12px;min-height:1.4em" aria-live="polite"></p>
@@ -65,7 +71,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="availability.js?v=4"></script>
+  <script type="module" src="availability.js?v=5"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

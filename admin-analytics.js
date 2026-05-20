@@ -90,28 +90,40 @@ function render() {
 function renderStatCards(games) {
   let totalSlots = 0, filledSlots = 0, openSlots = 0;
   let totalEarned = 0, totalPaid = 0;
+  let totalNoShows = 0, totalCheckedIn = 0, totalBillable = 0;
   const umpireSet = new Set();
 
   games.forEach(g => {
+    const isRainout = g.cancelled && g.cancellationType === "rainout";
     (g.umpireSlots || []).forEach(s => {
       totalSlots++;
       if (s.assignedUid) {
         filledSlots++;
         umpireSet.add(s.assignedUid);
-        const pay = Number(s.payRate ?? g.payRate ?? 0);
-        totalEarned += pay;
-        if (s.paid) totalPaid += pay;
+        if (s.noShow) {
+          totalNoShows++;
+        } else {
+          totalBillable++;
+          if (s.checkedIn) totalCheckedIn++;
+          // Only count pay for non-rainout, non-no-show slots (matches payroll page)
+          if (!isRainout) {
+            const pay = Number(s.payRate ?? g.payRate ?? 0);
+            totalEarned += pay;
+            if (s.paid) totalPaid += pay;
+          }
+        }
       } else if (!g.cancelled) {
         openSlots++;
       }
     });
   });
 
-  const fillRate    = totalSlots ? Math.round((filledSlots / totalSlots) * 100) : 0;
-  const outstanding = totalEarned - totalPaid;
-  const cancelled   = games.filter(g => g.cancelled);
-  const rainouts    = cancelled.filter(g => g.cancellationType === "rainout").length;
-  const hardCancel  = cancelled.filter(g => g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled").length;
+  const fillRate     = totalSlots ? Math.round((filledSlots / totalSlots) * 100) : 0;
+  const checkInRate  = totalBillable ? Math.round((totalCheckedIn / totalBillable) * 100) : 0;
+  const outstanding  = totalEarned - totalPaid;
+  const cancelled    = games.filter(g => g.cancelled);
+  const rainouts     = cancelled.filter(g => g.cancellationType === "rainout").length;
+  const hardCancel   = cancelled.filter(g => g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled").length;
 
   const cards = [
     { label: "Active Games",    value: games.filter(g => !g.cancelled).length },
@@ -120,6 +132,10 @@ function renderStatCards(games) {
       style: fillRate < 80 ? "color:#f0a500" : fillRate === 100 ? "color:#b8f2c4" : "" },
     { label: "Open Slots",      value: openSlots,
       style: openSlots > 0 ? "color:#f0a500" : "color:#b8f2c4" },
+    { label: "No Shows",        value: totalNoShows,
+      style: totalNoShows > 0 ? "color:#f87171" : "color:#b8f2c4" },
+    { label: "Check-In Rate",   value: totalBillable ? `${checkInRate}%` : "—",
+      style: checkInRate < 70 ? "color:#f0a500" : checkInRate === 100 ? "color:#b8f2c4" : "" },
     { label: "Active Umpires",  value: umpireSet.size },
     { label: "Total Earned",    value: `$${totalEarned.toFixed(2)}` },
     { label: "Total Paid",      value: `$${totalPaid.toFixed(2)}` },
@@ -145,33 +161,72 @@ function renderLeaderboard(games) {
   const stats = {};
 
   games.forEach(g => {
+    const isRainout = g.cancelled && g.cancellationType === "rainout";
     (g.umpireSlots || []).forEach(s => {
       if (!s.assignedUid) return;
       if (!stats[s.assignedUid]) {
-        stats[s.assignedUid] = { name: s.assignedName || "Unknown", games: 0, plate: 0, field: 0, extra: 0, earned: 0, paid: 0 };
+        stats[s.assignedUid] = {
+          name: s.assignedName || "Unknown",
+          games: 0, plate: 0, field: 0, extra: 0,
+          noShows: 0, checkedIn: 0,
+          earned: 0, paid: 0,
+        };
       }
-      const st  = stats[s.assignedUid];
-      const pay = Number(s.payRate ?? g.payRate ?? 0);
-      st.games++;
+      const st   = stats[s.assignedUid];
       const type = (s.type || "").toLowerCase();
+
+      if (s.noShow) {
+        st.noShows++;
+        return; // no-shows don't count toward games or pay
+      }
+
+      st.games++;
       if (type === "plate")      st.plate++;
       else if (type === "field") st.field++;
       else                       st.extra++;
-      st.earned += pay;
-      if (s.paid) st.paid += pay;
+
+      if (s.checkedIn) st.checkedIn++;
+
+      // Pay only for non-rainout games (matches payroll page)
+      if (!isRainout) {
+        const pay = Number(s.payRate ?? g.payRate ?? 0);
+        st.earned += pay;
+        if (s.paid) st.paid += pay;
+      }
     });
   });
+
+  // Update header
+  const thead = document.querySelector("#leaderboardTable thead tr");
+  if (thead) {
+    thead.innerHTML = `
+      <th>Umpire</th>
+      <th>Games</th>
+      <th>Plate</th>
+      <th>Field</th>
+      <th>Extra</th>
+      <th>No Shows</th>
+      <th>Check-In %</th>
+      <th>Earned</th>
+      <th>Paid</th>
+      <th>Outstanding</th>`;
+  }
 
   const rows = Object.entries(stats)
     .sort((a, b) => b[1].games - a[1].games)
     .map(([, s]) => {
-      const outstanding = s.earned - s.paid;
+      const outstanding  = s.earned - s.paid;
+      const checkInRate  = s.games ? Math.round((s.checkedIn / s.games) * 100) : 0;
+      const ciColor      = checkInRate < 70 ? "#f0a500" : checkInRate === 100 ? "#b8f2c4" : "var(--text)";
+      const nsColor      = s.noShows > 0 ? "#f87171" : "var(--light-text)";
       return `<tr>
         <td>${esc(s.name)}</td>
         <td>${s.games}</td>
         <td>${s.plate}</td>
         <td>${s.field}</td>
-        <td>${s.extra}</td>
+        <td>${s.extra || "—"}</td>
+        <td style="color:${nsColor}">${s.noShows || "—"}</td>
+        <td style="color:${ciColor}">${s.games ? checkInRate + "%" : "—"}</td>
         <td>$${s.earned.toFixed(2)}</td>
         <td>$${s.paid.toFixed(2)}</td>
         <td style="color:${outstanding > 0 ? "#f0a500" : "var(--light-text)"}">$${outstanding.toFixed(2)}</td>
@@ -181,7 +236,7 @@ function renderLeaderboard(games) {
   const tbody = document.getElementById("leaderboardBody");
   tbody.innerHTML = rows.length
     ? rows.join("")
-    : `<tr><td colspan="8" style="color:var(--light-text);text-align:center">No games with assigned umpires yet.</td></tr>`;
+    : `<tr><td colspan="10" style="color:var(--light-text);text-align:center">No games with assigned umpires yet.</td></tr>`;
 }
 
 // ── Division breakdown ─────────────────────────────────────────────────────
@@ -252,21 +307,38 @@ function calcYearStats(year) {
     if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") return false;
     return true;
   });
-  let slots = 0, filled = 0, earned = 0, paid = 0;
+  let slots = 0, filled = 0, earned = 0, paid = 0, noShows = 0, checkedIn = 0, billable = 0;
   const umpires = new Set();
   games.forEach(g => {
+    const isRainout = g.cancelled && g.cancellationType === "rainout";
     (g.umpireSlots || []).forEach(s => {
       slots++;
-      if (s.assignedUid) { filled++; umpires.add(s.assignedUid); earned += Number(s.payRate ?? 0); if (s.paid) paid += Number(s.payRate ?? 0); }
+      if (s.assignedUid) {
+        filled++;
+        umpires.add(s.assignedUid);
+        if (s.noShow) {
+          noShows++;
+        } else {
+          billable++;
+          if (s.checkedIn) checkedIn++;
+          if (!isRainout) {
+            const pay = Number(s.payRate ?? 0);
+            earned += pay;
+            if (s.paid) paid += pay;
+          }
+        }
+      }
     });
   });
   return {
-    games:    games.filter(g => !g.cancelled).length,
-    fillRate: slots ? Math.round((filled / slots) * 100) : 0,
-    open:     slots - filled,
+    games:       games.filter(g => !g.cancelled).length,
+    fillRate:    slots ? Math.round((filled / slots) * 100) : 0,
+    open:        slots - filled,
     outstanding: earned - paid,
-    umpires:  umpires.size,
+    umpires:     umpires.size,
     earned,
+    noShows,
+    checkInRate: billable ? Math.round((checkedIn / billable) * 100) : 0,
   };
 }
 
@@ -313,12 +385,14 @@ function renderYoY() {
   if (noteEl) noteEl.textContent = `${currYear} vs ${prevYear}`;
 
   const metrics = [
-    { label: "Games",       curr: curr.games,       prev: prev.games,       fmt: v => v,                          lower: false },
-    { label: "Fill Rate",   curr: curr.fillRate,    prev: prev.fillRate,    fmt: v => `${Math.abs(v)}%`,          lower: false },
-    { label: "Open Slots",  curr: curr.open,        prev: prev.open,        fmt: v => v,                          lower: true  },
-    { label: "Outstanding", curr: curr.outstanding, prev: prev.outstanding, fmt: v => `$${Math.abs(v).toFixed(0)}`, lower: true  },
-    { label: "Umpires",     curr: curr.umpires,     prev: prev.umpires,     fmt: v => v,                          lower: false },
-    { label: "Earned",      curr: curr.earned,      prev: prev.earned,      fmt: v => `$${Math.abs(v).toFixed(0)}`, lower: false },
+    { label: "Games",         curr: curr.games,        prev: prev.games,        fmt: v => v,                             lower: false },
+    { label: "Fill Rate",     curr: curr.fillRate,     prev: prev.fillRate,     fmt: v => `${Math.abs(v)}%`,             lower: false },
+    { label: "Open Slots",    curr: curr.open,         prev: prev.open,         fmt: v => v,                             lower: true  },
+    { label: "No Shows",      curr: curr.noShows,      prev: prev.noShows,      fmt: v => v,                             lower: true  },
+    { label: "Check-In Rate", curr: curr.checkInRate,  prev: prev.checkInRate,  fmt: v => `${Math.abs(v)}%`,             lower: false },
+    { label: "Outstanding",   curr: curr.outstanding,  prev: prev.outstanding,  fmt: v => `$${Math.abs(v).toFixed(0)}`,  lower: true  },
+    { label: "Umpires",       curr: curr.umpires,      prev: prev.umpires,      fmt: v => v,                             lower: false },
+    { label: "Earned",        curr: curr.earned,       prev: prev.earned,       fmt: v => `$${Math.abs(v).toFixed(0)}`,  lower: false },
   ];
 
   cardsEl.innerHTML = metrics.map(m => {

@@ -87,10 +87,12 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Umpire requests from coaches: anyone can create; only admins can read/update
+    // Umpire requests from coaches: anyone can create; only admins can read/update;
+    // submitting coach can read their own requests
     match /umpireRequests/{requestId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
+      allow read: if isApprovedCoach() && resource.data.submittedBy == request.auth.uid;
     }
 
     // Coaches: own profile read/create; admin can read/update/delete all
@@ -159,10 +161,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Practice requests: anyone can submit (coaches, no account required); admins can read/update/delete
+    // Practice requests: anyone can submit (coaches, no account required); admins can read/update/delete;
+    // submitting coach can read their own requests
     match /practiceRequests/{requestId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
+      allow read: if isApprovedCoach() && resource.data.submittedBy == request.auth.uid;
     }
 
     // Approved practices: public read; admins can write
@@ -171,10 +175,11 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    // Player rosters: keyed by team stable ID; admins and approved coaches can read
+    // Player rosters: keyed by team stable ID; admins and approved coaches can read;
+    // approved coaches can write (needed for roster management tab)
     match /rosters/{teamId} {
       allow read:  if isAdmin() || isApprovedCoach();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isApprovedCoach();
     }
 
     // Player call-up requests: coach-to-coach workflow
