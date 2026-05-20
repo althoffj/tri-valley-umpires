@@ -208,6 +208,11 @@ async function loadSettings() {
       document.getElementById("sSlotPlate").checked = defaults.includes("Plate");
       document.getElementById("sSlotField").checked = defaults.includes("Field");
       document.getElementById("sSlotExtra").checked = defaults.includes("Extra");
+      // Per-division rates
+      const divRates = r.divisionRates || {};
+      buildDivRatesGrid(divRates);
+    } else {
+      buildDivRatesGrid({});
     }
     if (schedSnap.exists()) {
       const d = schedSnap.data();
@@ -225,6 +230,50 @@ async function loadSettings() {
     console.error("loadSettings:", err);
   }
 }
+
+async function buildDivRatesGrid(divRates = {}) {
+  const grid = document.getElementById("sDivRatesGrid");
+  if (!grid) return;
+  try {
+    const snap = await getDoc(doc(db, "config", "orgSettings"));
+    const divs = snap.exists() ? (snap.data().activeDivisions || []) : [];
+    if (!divs.length) {
+      grid.innerHTML = '<p style="color:var(--light-text);font-size:0.85rem">No divisions configured. Add divisions in <a href="admin-config.html" style="color:#8ab4f8">Config</a>.</p>';
+      return;
+    }
+    grid.innerHTML = divs.map(div =>
+      '<div class="form-group form-group--sm">' +
+      '<label for="sDivRate_' + div + '">' + div + ' ($)</label>' +
+      '<input type="number" id="sDivRate_' + div + '" data-div="' + div + '" min="0" step="0.01" ' +
+      'placeholder="—" value="' + (divRates[div] != null ? divRates[div] : "") + '" />' +
+      '</div>'
+    ).join("");
+  } catch (err) {
+    grid.innerHTML = '<p style="color:#ff8a8a;font-size:0.85rem">Failed to load divisions.</p>';
+  }
+}
+
+document.getElementById("sDivRatesForm")?.addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn = this.querySelector("button[type='submit']");
+  btn.disabled = true;
+  setSettingsMsg("sDivRatesMsg", "Saving…", "info");
+  try {
+    const divisionRates = {};
+    document.querySelectorAll("#sDivRatesGrid input[data-div]").forEach(inp => {
+      const val = parseFloat(inp.value);
+      if (!isNaN(val) && val >= 0) divisionRates[inp.dataset.div] = val;
+    });
+    const snap = await getDoc(doc(db, "config", "payRates"));
+    const existing = snap.exists() ? snap.data() : {};
+    await setDoc(doc(db, "config", "payRates"), { ...existing, divisionRates });
+    setSettingsMsg("sDivRatesMsg", "Division rates saved.", "success");
+  } catch (err) {
+    setSettingsMsg("sDivRatesMsg", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 document.getElementById("sPayRatesForm").addEventListener("submit", async function(e) {
   e.preventDefault();
@@ -1597,6 +1646,17 @@ function openGameEditModal(game) {
   document.getElementById("seGameMsg").textContent  = "";
   document.getElementById("seGameMsg").className    = "signup-message";
 
+  // Rain-out state
+  const isRainout = game.cancelled === true && game.cancellationType === "rainout";
+  const rainoutBanner = document.getElementById("seRainoutBanner");
+  const rainoutBtn    = document.getElementById("seRainoutBtn");
+  const saveBtn       = document.getElementById("seGameSaveBtn");
+  const practiceBtn   = document.getElementById("seConvertToPracticeBtn");
+  if (rainoutBanner) rainoutBanner.style.display = isRainout ? "" : "none";
+  if (rainoutBtn)    rainoutBtn.textContent = isRainout ? "↩ Undo Rain Out" : "🌧 Rain Out";
+  if (saveBtn)       saveBtn.disabled = false;
+  if (practiceBtn)   practiceBtn.disabled = isRainout;
+
   renderSeSlots();
   modal.style.display = "flex";
 }
@@ -1652,6 +1712,41 @@ document.getElementById("seGameSaveBtn").addEventListener("click", async () => {
     msg.textContent = "Error: " + err.message;
     msg.className   = "signup-message error";
     btn.disabled    = false;
+  }
+});
+
+document.getElementById("seRainoutBtn").addEventListener("click", async () => {
+  const game = seCurrentGame;
+  if (!game) return;
+  const isRainout = game.cancelled === true && game.cancellationType === "rainout";
+  const action = isRainout
+    ? "Remove the rain-out flag and restore this game to active?"
+    : "Mark this game as a Rain Out?\n\nAssigned umpires will be retained for record-keeping but this game will be excluded from payroll.";
+  if (!await showConfirm(action)) return;
+
+  const msg = document.getElementById("seGameMsg");
+  const btn = document.getElementById("seRainoutBtn");
+  btn.disabled = true;
+  msg.textContent = "Saving…";
+  msg.className = "signup-message info";
+
+  try {
+    if (isRainout) {
+      await updateDoc(doc(db, "games", game.id), { cancelled: false, cancellationType: "" });
+      Object.assign(seCurrentGame, { cancelled: false, cancellationType: "" });
+    } else {
+      await updateDoc(doc(db, "games", game.id), { cancelled: true, cancellationType: "rainout" });
+      Object.assign(seCurrentGame, { cancelled: true, cancellationType: "rainout" });
+    }
+    // Refresh modal state and calendar
+    openGameEditModal(seCurrentGame);
+    await fetchCalendarData();
+    if (calView === "month") renderMonthView();
+    else                     renderListView();
+  } catch (err) {
+    msg.textContent = "Error: " + err.message;
+    msg.className = "signup-message error";
+    btn.disabled = false;
   }
 });
 

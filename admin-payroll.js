@@ -2,10 +2,10 @@
 import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
 import { getOrgSettings, getSeasonRange } from "./org.js";
-import { esc, fmtDate, fmtTime, setMsg, thisYearRange, lastYearRange, showToast } from "./utils.js";
+import { esc, fmtDate, fmtTime, setMsg, thisYearRange, lastYearRange, showToast, showConfirm } from "./utils.js";
 
 import {
-  collection, getDocs, getDoc, doc, updateDoc, writeBatch, query, orderBy
+  collection, getDocs, getDoc, addDoc, deleteDoc, doc, updateDoc, writeBatch, query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import {
   getFunctions,
@@ -20,6 +20,9 @@ let payrollRows       = [];
 let payRates          = { plate: 0, field: 0, extra: 0 };
 let payrollFromFilter = "";
 let payrollToFilter   = "";
+let manualPayEntries  = [];
+let divisionPayRates  = {};   // { "10U": 40, "12U": 45, ... }
+let umpireList        = [];   // [{ uid, name }] for the umpire dropdown
 
 // ── Load ──────────────────────────────────────────────────────────────────────
 
@@ -32,21 +35,23 @@ async function loadPayroll() {
   await getOrgSettings().catch(() => {});
 
   try {
-    const [gamesSnap, ratesSnap] = await Promise.all([
+    const [gamesSnap, ratesSnap, manualSnap] = await Promise.all([
       getDocs(query(collection(db, "games"), orderBy("date", "asc"))),
       getDoc(doc(db, "config", "payRates")),
+      getDocs(query(collection(db, "manualPay"), orderBy("date", "asc"))),
     ]);
 
     if (ratesSnap.exists()) {
       const r = ratesSnap.data();
       payRates = { plate: Number(r.plate ?? 0), field: Number(r.field ?? 0), extra: Number(r.extra ?? 0) };
+      divisionPayRates = r.divisionRates || {};
     }
 
     payrollRows = [];
     gamesSnap.forEach(d => {
       const g = { id: d.id, ...d.data() };
-      // Skip hard-cancelled games
-      if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") return;
+      // Skip all cancelled games — rainouts retain umpire assignments for history but are not paid
+      if (g.cancelled) return;
       (g.umpireSlots ?? []).forEach(slot => {
         if (!slot.assignedUid) return;
         // Determine pay: use stored payRate on slot first, then look up from config by type
@@ -67,6 +72,8 @@ async function loadPayroll() {
         });
       });
     });
+
+    manualPayEntries = manualSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
     // Default to this year on first load
     if (!payrollFromFilter && !payrollToFilter) {
@@ -97,6 +104,7 @@ function filteredRows() {
 function renderAll() {
   renderSummary();
   renderDetailTable();
+  renderManualPay();
 }
 
 // ── Per-umpire summary ────────────────────────────────────────────────────────
@@ -649,6 +657,159 @@ function wireFilters() {
   });
   document.getElementById("exportCsvBtn")?.addEventListener("click", exportCSV);
 }
+
+// ── Manual Pay ────────────────────────────────────────────────────────────────
+
+function renderManualPay() {
+  const tbody    = document.getElementById("manualPayBody");
+  const totalsEl = document.getElementById("manualPayTotals");
+  if (!tbody) return;
+
+  // Apply same date filter as main payroll
+  const rows = manualPayEntries.filter(r => {
+    if (payrollFromFilter && r.date < payrollFromFilter) return false;
+    if (payrollToFilter   && r.date > payrollToFilter)   return false;
+    return true;
+  });
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--light-text);text-align:center">No unscheduled pay entries.</td></tr>';
+    if (totalsEl) totalsEl.textContent = "";
+    return;
+  }
+
+  const totalAmt  = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const paidAmt   = rows.filter(r => r.paid).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const unpaidAmt = totalAmt - paidAmt;
+  if (totalsEl) totalsEl.textContent =
+    `${rows.length} entr${rows.length === 1 ? "y" : "ies"} · Total: $${totalAmt.toFixed(2)} · Paid: $${paidAmt.toFixed(2)} · Unpaid: $${unpaidAmt.toFixed(2)}`;
+
+  tbody.innerHTML = rows.map(r => {
+    const paidBadge = r.paid
+      ? '<span class="badge badge-upcoming" style="font-size:0.72rem">Paid</span>'
+      : '<span class="badge badge-today" style="font-size:0.72rem">Unpaid</span>';
+    const paidBtn = r.paid
+      ? '<button class="btn print-btn mp-unpay-btn" data-id="' + esc(r.id) + '" style="font-size:0.75rem;padding:3px 8px">Unmark</button>'
+      : '<button class="btn mp-pay-btn" data-id="' + esc(r.id) + '" style="font-size:0.75rem;padding:3px 8px">Mark Paid</button>';
+    return '<tr>' +
+      '<td style="font-size:0.85rem">' + esc(r.date || "—") + '</td>' +
+      '<td>' + esc(r.division || "—") + '</td>' +
+      '<td>' + esc(r.umpireName || "—") + '</td>' +
+      '<td>$' + (Number(r.amount) || 0).toFixed(2) + '</td>' +
+      '<td style="font-size:0.82rem;color:var(--light-text)">' + esc(r.notes || "") + '</td>' +
+      '<td>' + paidBadge + '</td>' +
+      '<td style="display:flex;gap:4px">' + paidBtn +
+        '<button class="btn print-btn mp-delete-btn" data-id="' + esc(r.id) + '" style="font-size:0.75rem;padding:3px 8px;color:#ff8a8a;border-color:#ff8a8a">Delete</button>' +
+      '</td>' +
+    '</tr>';
+  }).join("");
+}
+
+async function loadUmpireList() {
+  if (umpireList.length) return;
+  try {
+    const snap = await getDocs(query(collection(db, "umpires"), orderBy("lastName")));
+    umpireList = snap.docs
+      .map(d => ({ uid: d.id, name: d.data().name || (d.data().firstName + " " + d.data().lastName).trim() }))
+      .filter(u => u.name);
+  } catch { /* non-fatal */ }
+}
+
+function populateUmpireSelect() {
+  const sel = document.getElementById("mpUmpire");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select umpire —</option>' +
+    umpireList.map(u => '<option value="' + esc(u.uid) + '">' + esc(u.name) + '</option>').join("");
+}
+
+document.getElementById("mpDivision")?.addEventListener("change", function() {
+  const rate = divisionPayRates[this.value];
+  const amtEl = document.getElementById("mpAmount");
+  if (amtEl && rate != null) amtEl.value = rate.toFixed(2);
+});
+
+document.getElementById("addManualPayBtn")?.addEventListener("click", async () => {
+  await loadUmpireList();
+  populateUmpireSelect();
+  document.getElementById("mpDate").value       = new Date().toISOString().slice(0, 10);
+  document.getElementById("mpDivision").value   = "";
+  document.getElementById("mpUmpire").value     = "";
+  document.getElementById("mpAmount").value     = "";
+  document.getElementById("mpPaid").checked     = false;
+  document.getElementById("mpNotes").value      = "";
+  setMsg("manualPayMsg", "", "info");
+  document.getElementById("manualPayModal").style.display = "flex";
+});
+
+document.getElementById("cancelManualPayBtn")?.addEventListener("click", () => {
+  document.getElementById("manualPayModal").style.display = "none";
+});
+
+document.getElementById("saveManualPayBtn")?.addEventListener("click", async () => {
+  const date      = document.getElementById("mpDate").value;
+  const division  = document.getElementById("mpDivision").value;
+  const umpireUid = document.getElementById("mpUmpire").value;
+  const amount    = parseFloat(document.getElementById("mpAmount").value);
+  const paid      = document.getElementById("mpPaid").checked;
+  const notes     = document.getElementById("mpNotes").value.trim();
+
+  if (!date || !division || isNaN(amount)) {
+    setMsg("manualPayMsg", "Date, division, and amount are required.", "error"); return;
+  }
+  const umpire = umpireList.find(u => u.uid === umpireUid);
+  const resolvedUmpireName = umpireUid ? (umpire?.name || umpireUid) : "Unknown / On-site";
+  const btn = document.getElementById("saveManualPayBtn");
+  btn.disabled = true;
+  setMsg("manualPayMsg", "Saving…", "info");
+  try {
+    const ref = await addDoc(collection(db, "manualPay"), {
+      date, division,
+      umpireUid: umpireUid || null,
+      umpireName: resolvedUmpireName,
+      amount,
+      paid,
+      paidAt: paid ? serverTimestamp() : null,
+      notes,
+      createdAt: serverTimestamp(),
+    });
+    manualPayEntries.push({ id: ref.id, date, division, umpireUid: umpireUid || null, umpireName: resolvedUmpireName, amount, paid, notes });
+    manualPayEntries.sort((a, b) => a.date.localeCompare(b.date));
+    document.getElementById("manualPayModal").style.display = "none";
+    renderManualPay();
+  } catch (err) {
+    setMsg("manualPayMsg", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("manualPayBody")?.addEventListener("click", async e => {
+  const payBtn    = e.target.closest(".mp-pay-btn");
+  const unpayBtn  = e.target.closest(".mp-unpay-btn");
+  const deleteBtn = e.target.closest(".mp-delete-btn");
+
+  if (payBtn || unpayBtn) {
+    const id   = (payBtn || unpayBtn).dataset.id;
+    const paid = !!payBtn;
+    try {
+      await updateDoc(doc(db, "manualPay", id), { paid, paidAt: paid ? serverTimestamp() : null });
+      const entry = manualPayEntries.find(r => r.id === id);
+      if (entry) entry.paid = paid;
+      renderManualPay();
+    } catch (err) { showToast(err.message); }
+    return;
+  }
+  if (deleteBtn) {
+    const id = deleteBtn.dataset.id;
+    const entry = manualPayEntries.find(r => r.id === id);
+    if (!entry || !await showConfirm(`Delete pay entry for ${entry.umpireName} on ${entry.date}?`)) return;
+    try {
+      await deleteDoc(doc(db, "manualPay", id));
+      manualPayEntries = manualPayEntries.filter(r => r.id !== id);
+      renderManualPay();
+    } catch (err) { showToast(err.message); }
+  }
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

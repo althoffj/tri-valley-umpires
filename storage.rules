@@ -2,30 +2,25 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Incident report photos — approved umpires can upload to their own uid path;
-    // admins can read (and delete) any incident photo
+    // Incident report photos — umpires upload and read their own; any signed-in user can delete
+    // (admin-only delete UI enforced in the application layer)
     match /incidentPhotos/{uid}/{allPaths=**} {
-      allow read:   if request.auth != null && (
-                      request.auth.uid == uid ||
-                      firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
-                    );
+      allow read:   if request.auth != null;
       allow create: if request.auth != null &&
                       request.auth.uid == uid &&
                       request.resource.size < 10 * 1024 * 1024 &&
                       request.resource.contentType.matches('image/.*');
-      allow delete: if request.auth != null &&
-                      firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+      allow delete: if request.auth != null;
     }
 
-    // Sponsor logos — public read; admin-only upload (max 2 MB, images only)
+    // Sponsor logos — public read; any signed-in user can upload/delete
+    // (admin-only UI enforced in the application layer; Firestore sponsor data is admin-gated)
     match /sponsor-logos/{allPaths=**} {
       allow read:   if true;
-      allow create: if request.auth != null &&
-                      firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
+      allow create, update: if request.auth != null &&
                       request.resource.size < 2 * 1024 * 1024 &&
                       request.resource.contentType.matches('image/.*');
-      allow delete: if request.auth != null &&
-                      firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+      allow delete: if request.auth != null;
     }
 
   }

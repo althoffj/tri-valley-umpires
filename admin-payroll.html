@@ -84,6 +84,83 @@
       </table>
     </div>
 
+    <!-- ── Manual Pay (unscheduled umpire pay) ──────────────────────────────────── -->
+    <div style="margin-top:32px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <h3 style="margin:0">Unscheduled Umpire Pay</h3>
+        <button type="button" class="btn print-btn" id="addManualPayBtn" style="font-size:0.85rem">+ Add Entry</button>
+      </div>
+      <div class="document-note" style="margin-bottom:14px">
+        <p style="margin:0">Games where an umpire is owed payment but was not scheduled through the system. Pay rates default from per-division config.</p>
+      </div>
+      <div class="schedule-section" style="margin-top:0">
+        <table id="manualPayTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Division</th>
+              <th>Umpire</th>
+              <th>Amount</th>
+              <th>Notes</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="manualPayBody">
+            <tr><td colspan="7" style="color:var(--light-text);text-align:center">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p id="manualPayTotals" style="font-size:0.88rem;color:var(--light-text);margin-top:8px"></p>
+    </div>
+
+    <!-- Add Manual Pay Modal -->
+    <div id="manualPayModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
+      <div style="background:var(--container);border-radius:12px;padding:24px 28px;width:100%;max-width:480px;position:relative">
+        <h3 style="margin-top:0">Add Unscheduled Pay Entry</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="mpDate">Date *</label>
+            <input type="date" id="mpDate" required />
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="mpDivision">Division *</label>
+            <select id="mpDivision" data-org-divisions required
+              style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.95rem">
+              <option value="">— Div —</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="mpUmpire">Umpire <span style="font-weight:normal;color:var(--light-text)">(optional)</span></label>
+          <select id="mpUmpire"
+            style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.95rem">
+            <option value="">— Unknown / On-site —</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group form-group--sm">
+            <label for="mpAmount">Amount ($) *</label>
+            <input type="number" id="mpAmount" min="0" step="0.01" placeholder="0.00" required />
+          </div>
+          <div class="form-group form-group--sm">
+            <label style="display:flex;align-items:center;gap:8px;margin-top:28px;cursor:pointer;font-weight:normal">
+              <input type="checkbox" id="mpPaid" style="accent-color:var(--accent)" /> Already paid
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="mpNotes">Notes</label>
+          <input type="text" id="mpNotes" placeholder="e.g. makeup game, tournament, etc." />
+        </div>
+        <div class="page-actions" style="margin-top:16px">
+          <button type="button" class="btn" id="saveManualPayBtn">Save Entry</button>
+          <button type="button" class="btn print-btn" id="cancelManualPayBtn">Cancel</button>
+        </div>
+        <p id="manualPayMsg" class="signup-message" aria-live="polite"></p>
+      </div>
+    </div>
+
     <!-- ── Umpire Requests (now managed in Scheduler) ───────────────────────── -->
     <div class="document-note" style="margin-top:24px">
       <p style="margin:0">Umpire requests from coaches are now managed in
@@ -108,7 +185,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-payroll.js?v=15"></script>
+  <script type="module" src="admin-payroll.js?v=18"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

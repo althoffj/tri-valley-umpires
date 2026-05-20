@@ -767,6 +767,7 @@ function startEditLeague(id) {
   if (!l) return;
   document.getElementById("leagueEditId").value = id;
   document.getElementById("lName").value         = l.name      || "";
+  document.getElementById("lCity").value         = l.city      || "";
   document.getElementById("lWebsite").value      = l.websiteUrl || "";
   document.getElementById("lNotes").value        = l.notes     || "";
   // Restore division checkboxes (support new divisions[] or legacy division string)
@@ -821,6 +822,7 @@ document.getElementById("leagueForm").addEventListener("submit", async e => {
   const divisions = [...document.querySelectorAll("#lDivisionCheckboxes .org-div-cb:checked")].map(cb => cb.value);
   const data = {
     name:          document.getElementById("lName").value.trim(),
+    city:          document.getElementById("lCity").value,
     divisions,
     division:      divisions[0] || "",   // backward-compat single value
     websiteUrl:    document.getElementById("lWebsite").value.trim(),

@@ -9,7 +9,7 @@ document.querySelectorAll("#seasonYear, .season-year").forEach(el => {
 document.title = `Tri-Valley Baseball Umpires - ${SEASON_YEAR}`;
 import { db, auth } from "./firebase.js";
 import { getOrgSettings } from "./org.js";
-import { esc, fmtDate, fmtTime, todayISO } from "./utils.js";
+import { esc, fmtTime, todayISO } from "./utils.js";
 
 // Refresh title with org name once settings resolve
 getOrgSettings().then(s => {

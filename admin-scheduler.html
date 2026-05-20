@@ -326,6 +326,19 @@
         <p id="sPayRatesMsg" class="signup-message" aria-live="polite"></p>
       </form>
 
+      <!-- Per-Division Pay Rates -->
+      <h3 style="margin-bottom:8px">Per-Division Pay Rates</h3>
+      <p style="color:var(--light-text);font-size:0.88rem;margin:0 0 12px">Override the default plate rate for specific divisions. Used for manual pay entries and game-level pay lookups.</p>
+      <form id="sDivRatesForm" class="signup-form" style="margin-bottom:24px">
+        <div id="sDivRatesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:12px">
+          <p style="color:var(--light-text);font-size:0.85rem">Loading divisions…</p>
+        </div>
+        <div class="page-actions" style="margin-top:0">
+          <button type="submit" class="btn">Save Division Rates</button>
+        </div>
+        <p id="sDivRatesMsg" class="signup-message" aria-live="polite"></p>
+      </form>
+
       <!-- Default Slot Types -->
       <h3 style="margin-bottom:12px">Default Umpire Slot Types</h3>
       <form id="sSlotTypesForm" class="signup-form" style="margin-bottom:24px">
@@ -490,8 +503,13 @@
         <textarea id="seNotes" rows="2" placeholder="e.g. Park on north side."
           style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
       </div>
+      <!-- Rain-out status banner (shown only when game is marked as a rain-out) -->
+      <div id="seRainoutBanner" style="display:none;background:#1a2a3a;border:1px solid #3a6080;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.88rem;color:#8ab4f8">
+        🌧 <strong>Rain Out</strong> — Assigned umpires are retained for record-keeping but this game is excluded from payroll calculations.
+      </div>
       <div class="page-actions">
         <button type="button" class="btn" id="seGameSaveBtn">Save Changes</button>
+        <button type="button" class="btn print-btn" id="seRainoutBtn" style="color:#90caf9;border-color:#90caf9" title="Mark this game as a weather cancellation">🌧 Rain Out</button>
         <button type="button" class="btn print-btn" id="seConvertToPracticeBtn" style="color:#8ab4f8;border-color:#8ab4f8" title="Move this event to the Practices calendar">→ Practice</button>
         <button type="button" class="btn print-btn" id="seGameDeleteBtn" style="color:#ff8a8a;border-color:#ff8a8a">Delete Game</button>
         <button type="button" class="btn print-btn" id="seGameCancelBtn">Cancel</button>
@@ -578,7 +596,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-scheduler.js?v=13"></script>
+  <script type="module" src="admin-scheduler.js?v=16"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

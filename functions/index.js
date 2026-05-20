@@ -1265,6 +1265,10 @@ function getTargetWebhooks(config, eventType, division = null) {
     case "coachRegistration":
     case "umpireRequests":
     case "practiceRequests":
+    case "checkIn":
+    case "fieldIssues":
+    case "rainout":
+    case "umpireRegistration":
       addJeff(); break;
     case "dailySummary":
       if (config.dailySummary) urls.add(config.dailySummary); break;
@@ -1304,8 +1308,9 @@ exports.onGameWrite = onDocumentWritten(
   const div    = after?.division ?? before?.division ?? "";
   const config = await loadWebhookConfig(db);
 
-  // ── 1. Structural game changes → gameChanges webhooks ───────────────────────
+  // ── 1. Structural game changes → gameChanges / rainout webhooks ─────────────
   let broadcastMsg = null;
+  let rainoutMsg   = null;
 
   if (!before && after) {
     broadcastMsg = `🆕 New game added: ${gameLabel(after)}`;
@@ -1313,7 +1318,11 @@ exports.onGameWrite = onDocumentWritten(
     broadcastMsg = `🗑️ Game deleted: ${gameLabel(before)}`;
   } else if (before && after) {
     if (!before.cancelled && after.cancelled) {
-      broadcastMsg = `❌ Game cancelled: ${gameLabel(after)}`;
+      if (after.cancellationType === "rainout") {
+        rainoutMsg = `🌧 Rain Out — ${gameLabel(after)}`;
+      } else {
+        broadcastMsg = `❌ Game cancelled: ${gameLabel(after)}`;
+      }
     } else if (before.cancelled && !after.cancelled) {
       broadcastMsg = `✅ Game reinstated: ${gameLabel(after)}`;
     } else {
@@ -1324,22 +1333,27 @@ exports.onGameWrite = onDocumentWritten(
 
   // ── 2. Slot assignment changes → slotChanges webhooks ───────────────────────
   let jeffMsg = null;
+  const newlyAssignedUids = [];
+  const checkIns = [];
 
-  if (before && after && !after.cancelled) {
+  if (before && after) {
     const beforeSlots = before.umpireSlots || [];
     const afterSlots  = after.umpireSlots  || [];
     const signups  = [];
     const cancels  = [];
-    const newlyAssignedUids = [];
 
     for (let i = 0; i < afterSlots.length; i++) {
       const b = beforeSlots[i] || {};
       const a = afterSlots[i];
-      if (!b.assignedUid && a.assignedUid) {
+      if (!b.assignedUid && a.assignedUid && !after.cancelled) {
         signups.push(`${a.type}: ${a.assignedName || a.assignedUid}`);
         newlyAssignedUids.push(a.assignedUid);
-      } else if (b.assignedUid && !a.assignedUid) {
+      } else if (b.assignedUid && !a.assignedUid && !after.cancelled) {
         cancels.push(`${b.type}: ${b.assignedName || b.assignedUid}`);
+      }
+      // Check-in: fires for any game (including retroactive admin check-in on past games)
+      if (!b.checkedIn && a.checkedIn && a.assignedName) {
+        checkIns.push(`${a.type}: ${a.assignedName}`);
       }
     }
 
@@ -1357,9 +1371,20 @@ exports.onGameWrite = onDocumentWritten(
       sends.push(postSlack(url, broadcastMsg))
     );
   }
+  if (rainoutMsg) {
+    getTargetWebhooks(config, "rainout", div).forEach(url =>
+      sends.push(postSlack(url, rainoutMsg))
+    );
+  }
   if (jeffMsg) {
     getTargetWebhooks(config, "slotChanges", div).forEach(url =>
       sends.push(postSlack(url, jeffMsg))
+    );
+  }
+  if (checkIns.length) {
+    const checkInMsg = `✅ Checked in — ${checkIns.join(", ")} · ${gameLabel(after)}`;
+    getTargetWebhooks(config, "checkIn", div).forEach(url =>
+      sends.push(postSlack(url, checkInMsg))
     );
   }
 
@@ -2869,6 +2894,19 @@ exports.onUmpireRegistered = onDocumentWritten(
       }),
     ];
 
+    // Slack notification
+    try {
+      const db      = getFirestore();
+      const config  = await loadWebhookConfig(db);
+      const targets = getTargetWebhooks(config, "umpireRegistration");
+      if (targets.length) {
+        const msg = `🆕 New Umpire Registration — *${d.name || d.email || "Unknown"}*${d.email ? " · " + d.email : ""}${d.phone ? " · " + d.phone : ""}\nReview: https://tri-valley-baseball-umpires.web.app/admin-users.html`;
+        await Promise.allSettled(targets.map(url => postSlack(url, msg)));
+      }
+    } catch (e) {
+      console.error("onUmpireRegistered: Slack error", e);
+    }
+
     await Promise.all(sends);
   }
 );
@@ -3262,15 +3300,37 @@ exports.fetchOrgIcs = onCall({ cors: CORS }, async request => {
 exports.onFieldIssue = onDocumentWritten("fieldIssues/{issueId}", async event => {
   const before = event.data.before?.data() ?? null;
   const after  = event.data.after?.data()  ?? null;
-  if (!after || !before) return; // Only care about updates, not creates
+  if (!after) return;
 
+  const db    = getFirestore();
+  const isNew = !before;
+
+  // ── New report → Slack admin notification ─────────────────────────────────
+  if (isNew) {
+    try {
+      const config  = await loadWebhookConfig(db);
+      const targets = getTargetWebhooks(config, "fieldIssues");
+      if (targets.length) {
+        const loc  = after.fieldName
+          ? `${after.facilityName || ""} — ${after.fieldName}`.trim()
+          : (after.facilityName || "");
+        const desc = after.description ? "\n" + String(after.description).slice(0, 150) : "";
+        const msg  = `⚠️ Field Issue — *${after.title || after.issueType || "Reported"}*${loc ? " at " + loc : ""}${desc}\nReview: https://tri-valley-baseball-umpires.web.app/admin-field-calendar.html`;
+        await Promise.allSettled(targets.map(url => postSlack(url, msg)));
+      }
+    } catch (e) {
+      console.error("Field issue Slack error:", e);
+    }
+    return;
+  }
+
+  // ── Status change → push notification to reporter ─────────────────────────
   const prevStatus = before.status ?? "Open";
   const newStatus  = after.status  ?? "Open";
   if (prevStatus === newStatus) return; // Status unchanged
   if (!after.reportedBy) return;
 
   try {
-    const db        = getFirestore();
     const tokenSnap = await db.doc(`notifications/${after.reportedBy}`).get();
     const token     = tokenSnap.exists ? tokenSnap.data()?.token : null;
     if (!token) return;

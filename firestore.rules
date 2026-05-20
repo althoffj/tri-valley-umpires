@@ -199,5 +199,10 @@ service cloud.firestore {
     match /sponsors/{sponsorId} {
       allow read, create, update, delete: if isAdmin();
     }
+
+    // Manual (unscheduled) umpire pay entries: admin only
+    match /manualPay/{entryId} {
+      allow read, create, update, delete: if isAdmin();
+    }
   }
 }

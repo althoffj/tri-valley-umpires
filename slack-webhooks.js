@@ -20,12 +20,16 @@ import {
 const EVENT_LABELS = {
   gameChanges:          "Game changes",
   slotChanges:          "Slot signups & cancellations",
+  checkIn:              "Umpire check-ins",
+  rainout:              "Rain-outs",
   dayOfReminders:       "Day-of reminders",
   dailySummary:         "Daily summary",
   openSlots:            "Open slot alerts",
   cancellationRequests: "Cancellation requests",
   incidentReports:      "Incident reports",
+  fieldIssues:          "Field issue reports",
   tournamentSwaps:      "Tournament field swaps",
+  umpireRegistration:   "Umpire registrations",
   coachRegistration:    "Coach registrations",
   umpireRequests:       "Coach umpire requests",
   practiceRequests:     "Practice requests",
@@ -93,7 +97,7 @@ function openWebhookEdit(id) {
   document.querySelectorAll(".webhook-event-cb").forEach(cb => {
     cb.checked = w ? (w.events || []).includes(cb.value) : false;
   });
-  document.querySelectorAll(".webhook-div-cb").forEach(cb => {
+  document.querySelectorAll("#webhookDivisionsGrid .org-div-cb").forEach(cb => {
     cb.checked = w ? (w.divisions || []).includes(cb.value) : false;
   });
 
@@ -177,7 +181,7 @@ export function initSlackWebhooks() {
     }
 
     const events         = [...document.querySelectorAll(".webhook-event-cb:checked")].map(cb => cb.value);
-    const divisions      = [...document.querySelectorAll(".webhook-div-cb:checked")].map(cb => cb.value);
+    const divisions      = [...document.querySelectorAll("#webhookDivisionsGrid .org-div-cb:checked")].map(cb => cb.value);
     const active         = document.getElementById("webhookActive").checked;
     const homeUmpireOnly = !!(document.getElementById("webhookHomeUmpireOnly")?.checked);
 

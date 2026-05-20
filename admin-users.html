@@ -370,7 +370,7 @@
     <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto">
       <h2 style="margin-top:0">Add Coach</h2>
       <div class="document-note" style="margin-bottom:16px">
-        <p style="margin:0;font-size:0.88rem">Creates a Firebase account and an approved coach profile. A password-setup email is sent so they can sign in to the Coach Portal.</p>
+        <p style="margin:0;font-size:0.88rem" id="ccModalNoteText">Creates a Firebase account and an approved coach profile. A password-setup email is sent so they can sign in to the Coach Portal.</p>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -382,18 +382,31 @@
           <input type="text" id="ccLastName" required autocomplete="off" />
         </div>
       </div>
-      <label for="ccEmail">Email *</label>
+      <div style="margin:0 0 14px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal">
+          <input type="checkbox" id="ccAllowSignIn" checked style="width:16px;height:16px;accent-color:var(--accent)" />
+          Allow this coach to sign in to the portal
+        </label>
+      </div>
+      <label for="ccEmail" id="ccEmailLabel">Email *</label>
       <input type="email" id="ccEmail" required autocomplete="off" />
       <label for="ccPhone">Phone</label>
       <input type="tel" id="ccPhone" placeholder="(605) 555-1234" autocomplete="off" />
-      <label for="ccTeam">Team Name</label>
-      <input type="text" id="ccTeam" placeholder="e.g. Crooks 12U" autocomplete="off" />
+      <label for="ccTeam">Team</label>
+      <select id="ccTeam"
+        style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.95rem">
+        <option value="">— Select a team —</option>
+      </select>
       <label for="ccDivision">Division</label>
-      <input type="text" id="ccDivision" list="ccDivisionList" placeholder="e.g. 10U" autocomplete="off" />
-      <datalist id="ccDivisionList" data-org-divisions></datalist>
+      <select id="ccDivision" data-org-divisions
+        style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.95rem">
+        <option value="">— Division —</option>
+      </select>
       <label for="ccCity">City / Program</label>
-      <input type="text" id="ccCity" list="ccCityList" placeholder="e.g. City of Crooks" autocomplete="off" />
-      <datalist id="ccCityList" data-org-city-programs></datalist>
+      <select id="ccCity" data-org-city-programs
+        style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.95rem">
+        <option value="">— City / Program —</option>
+      </select>
       <p id="createCoachMsg" class="signup-message" aria-live="polite" style="margin-top:12px"></p>
       <div class="page-actions" style="margin-top:20px">
         <button type="button" class="btn" id="saveCreateCoachBtn">Create Coach</button>
@@ -417,18 +430,29 @@
           <input type="text" id="editCoachLastName" />
         </div>
       </div>
-      <label for="editCoachEmail">Email (read-only)</label>
-      <input type="email" id="editCoachEmail" readonly style="opacity:0.55;cursor:not-allowed" />
+      <label for="editCoachEmail" id="editCoachEmailLabel">Email</label>
+      <input type="email" id="editCoachEmail" autocomplete="off" />
+      <div style="margin:6px 0 14px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal">
+          <input type="checkbox" id="editCoachAllowSignIn" style="width:16px;height:16px;accent-color:var(--accent)" />
+          Allow sign in to the portal
+        </label>
+        <p id="editCoachSignInNote" style="font-size:0.8rem;color:var(--light-text);margin:4px 0 0"></p>
+      </div>
       <label for="editCoachPhone">Phone</label>
       <input type="text" id="editCoachPhone" />
       <label for="editCoachTeam">Team Name</label>
       <input type="text" id="editCoachTeam" />
       <label for="editCoachDivision">Division</label>
-      <input type="text" id="editCoachDivision" list="editCoachDivisionList" placeholder="e.g. 10U" autocomplete="off" />
-      <datalist id="editCoachDivisionList" data-org-divisions></datalist>
+      <select id="editCoachDivision" data-org-divisions
+        style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.95rem">
+        <option value="">— Division —</option>
+      </select>
       <label for="editCoachCity">City / Program</label>
-      <input type="text" id="editCoachCity" list="editCoachCityList" placeholder="e.g. City of Crooks" autocomplete="off" />
-      <datalist id="editCoachCityList" data-org-city-programs></datalist>
+      <select id="editCoachCity" data-org-city-programs
+        style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.95rem">
+        <option value="">— City / Program —</option>
+      </select>
       <div style="margin-top:12px">
         <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
           <input type="checkbox" id="editCoachApproved" /> Approved
@@ -480,7 +504,7 @@
     </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-users.js?v=10"></script>
+  <script type="module" src="admin-users.js?v=14"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

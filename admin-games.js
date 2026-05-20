@@ -24,7 +24,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 let allGames       = [];
-let gameFilter     = "upcoming";
+let gameFilter     = "today";
 let currentRates   = { plate: 0, field: 0, extra: 0 };
 let facilitiesData = []; // [{ id, name, fields:[{name,notes}] }]
 let leaguesData    = []; // [{ id, name }] from leagues collection
@@ -143,9 +143,14 @@ async function loadGames() {
 
 function applyGameFilters() {
   const today = todayISO();
+  // "Upcoming" shows active games from the past 14 days forward so recent games
+  // can be retroactively marked as rain-outs or edited after the fact.
+  const d14 = new Date(); d14.setDate(d14.getDate() - 14);
+  const twoWeeksAgo = d14.toISOString().slice(0, 10);
   return allGames.filter(g => {
     // Status filter
-    if (gameFilter === "upcoming" && (g.cancelled || g.date < today)) return false;
+    if (gameFilter === "today"    && g.date !== today) return false;
+    if (gameFilter === "upcoming" && (g.cancelled || g.date < twoWeeksAgo)) return false;
     // Date range
     if (gfFrom && g.date < gfFrom) return false;
     if (gfTo   && g.date > gfTo)   return false;
@@ -281,10 +286,14 @@ function renderAdminGames() {
       <td>${g.cancelled ? cancelledLabel(g) : slotHtml}${changeWarning}${notesHtml}</td>
       <td style="white-space:nowrap;vertical-align:top">
         ${g.cancelled
-          ? (g.cancellationType === "rescheduled"
+          ? `
+          <button class="btn print-btn edit-game-btn" style="margin-bottom:4px;display:block;width:100%"
+            data-game-id="${esc(g.id)}">Edit</button>
+          ${g.cancellationType === "rescheduled"
               ? `<button class="btn print-btn makeup-btn" style="margin-bottom:4px;display:block;width:100%;font-size:0.8rem"
                    data-game-id="${esc(g.id)}">📅 Schedule Makeup</button>`
-              : "")
+              : `<button class="btn print-btn undo-cancel-btn" style="margin-bottom:4px;display:block;width:100%;font-size:0.8rem"
+                   data-game-id="${esc(g.id)}">↩ Undo ${g.cancellationType === "rainout" ? "Rain Out" : "Cancel"}</button>`}`
           : `
           <button class="btn print-btn edit-game-btn" style="margin-bottom:4px;display:block;width:100%"
             data-game-id="${esc(g.id)}">Edit</button>
@@ -404,6 +413,42 @@ document.getElementById("cancelGameModal").addEventListener("click", e => {
     document.getElementById("cancelGameModal").style.display = "none";
 });
 
+async function toggleCheckIn(gameId, slotType, newCheckedIn) {
+  try {
+    const game = allGames.find(g => g.id === gameId);
+    if (!game) throw new Error("Game not found.");
+    const updatedSlots = (game.umpireSlots || []).map(s =>
+      s.type === slotType
+        ? { ...s, checkedIn: newCheckedIn, checkedInAt: newCheckedIn ? new Date().toISOString() : null }
+        : s
+    );
+    await updateDoc(doc(db, "games", gameId), { umpireSlots: updatedSlots });
+    game.umpireSlots = updatedSlots;
+    showToast(newCheckedIn ? "Marked as checked in." : "Check-in removed.");
+    renderAdminGames();
+  } catch (err) {
+    showToast("Error: " + err.message);
+  }
+}
+
+async function undoCancelGame(gameId) {
+  const game = allGames.find(g => g.id === gameId);
+  if (!game) return;
+  const label = game.cancellationType === "rainout" ? "Rain Out"
+              : game.cancellationType === "rescheduled" ? "Reschedule"
+              : "Cancellation";
+  if (!await showConfirm(`Undo ${label} and restore this game to active?`)) return;
+  try {
+    await updateDoc(doc(db, "games", gameId), { cancelled: false, cancellationType: "" });
+    game.cancelled = false;
+    game.cancellationType = "";
+    renderAdminGames();
+    showToast("Game restored.");
+  } catch (err) {
+    showToast("Error: " + err.message);
+  }
+}
+
 async function unassignSlot(gameId, slotType) {
   if (!await showConfirm(`Remove the umpire from the ${slotType} slot?`)) return;
   try {
@@ -496,23 +541,33 @@ function openEditModal(gameId) {
     }
   }
 
-  // Render slot-type checkboxes + pay inputs
+  // Render slot-type checkboxes + pay inputs + check-in toggles
   const slotsDiv  = document.getElementById("editSlotPays");
   const slots      = game.umpireSlots || [];
   const slotMap    = Object.fromEntries(slots.map(s => [s.type, s]));
   const slotTypes  = ["Plate", "Field", "Extra"];
-  slotsDiv.innerHTML = `<div style="display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:6px 10px">` +
+  slotsDiv.innerHTML = `<div style="display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:6px 10px">` +
     slotTypes.map(t => {
       const s   = slotMap[t];
       const cls = t === "Plate" ? "plate" : t === "Field" ? "field" : "extra";
       const nameLabel = s?.assignedName
         ? `<span style="font-size:0.82rem;color:var(--light-text)">→ ${esc(s.assignedName)}</span>` : `<span></span>`;
+      const checkinBtn = s?.assignedUid
+        ? s.checkedIn
+          ? `<button type="button" class="edit-checkin-btn" data-slot-type="${t}" data-checked-in="1"
+               style="font-size:0.72rem;padding:2px 8px;background:#17351f;color:#b8f2c4;border:1px solid #3a7a4a;border-radius:4px;cursor:pointer"
+               title="Click to undo check-in">✓ Checked In</button>`
+          : `<button type="button" class="edit-checkin-btn" data-slot-type="${t}" data-checked-in="0"
+               style="font-size:0.72rem;padding:2px 8px;background:#3a2800;color:#ffcc80;border:1px solid #7a5a00;border-radius:4px;cursor:pointer"
+               title="Mark as checked in">Mark In</button>`
+        : `<span></span>`;
       return `
         <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin:0">
           <input type="checkbox" class="edit-slot-check" value="${t}" ${s ? "checked" : ""} />
           <span class="badge badge-${cls}">${t}</span>
         </label>
         ${nameLabel}
+        ${checkinBtn}
         <input type="number" min="0" step="0.01" value="${s?.payRate != null ? s.payRate : ""}"
           class="edit-slot-pay" data-slot-type="${t}"
           ${!s ? "disabled" : ""}
@@ -525,6 +580,18 @@ function openEditModal(gameId) {
     cb.addEventListener("change", () => {
       const pay = slotsDiv.querySelector(`.edit-slot-pay[data-slot-type="${cb.value}"]`);
       if (pay) pay.disabled = !cb.checked;
+    });
+  });
+
+  // Wire check-in toggle buttons
+  slotsDiv.querySelectorAll(".edit-checkin-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const slotType  = btn.dataset.slotType;
+      const checkedIn = btn.dataset.checkedIn === "1";
+      await toggleCheckIn(game.id, slotType, !checkedIn);
+      // Re-open modal with fresh local state
+      const freshGame = allGames.find(g => g.id === game.id);
+      if (freshGame) openEditModal(freshGame.id);
     });
   });
 
@@ -901,6 +968,9 @@ document.addEventListener("click", e => {
 
   const makeupBtn = e.target.closest(".makeup-btn");
   if (makeupBtn) { scheduleMakeup(makeupBtn.dataset.gameId); return; }
+
+  const undoCancelBtn = e.target.closest(".undo-cancel-btn");
+  if (undoCancelBtn) { undoCancelGame(undoCancelBtn.dataset.gameId); return; }
 
   const filterBtn = e.target.closest(".filter-btn");
   if (filterBtn) {

@@ -19,7 +19,8 @@ let teams    = [];   // loaded from config/teamCalendars for assignment UI
 // Pending logo state while editing
 let pendingLogoFile     = null;  // File object to upload on save
 let pendingLogoRemove   = false; // true if existing logo should be removed
-let currentLogoUrl      = "";    // existing logo URL for the sponsor being edited
+let currentLogoUrl      = "";    // existing logo download URL for the sponsor being edited
+let currentLogoPath     = "";    // existing logo storage path (e.g. "sponsor-logos/docId.png")
 
 // ── Load ──────────────────────────────────────────────────────────────────────
 
@@ -114,7 +115,8 @@ function openEdit(id) {
   // Logo state
   pendingLogoFile   = null;
   pendingLogoRemove = false;
-  currentLogoUrl    = sp?.logoUrl || "";
+  currentLogoUrl    = sp?.logoUrl  || "";
+  currentLogoPath   = sp?.logoPath || "";
   document.getElementById("spLogoFile").value = "";
   setMsg("logoUploadMsg", "", "");
   updateLogoPreview(currentLogoUrl);
@@ -311,23 +313,27 @@ document.getElementById("sponsorSaveBtn").addEventListener("click", async () => 
     const teamAssign   = getTeamAssignRows();
     const history      = getHistoryRows();
 
-    // Determine final logo URL
-    let logoUrl = currentLogoUrl;
+    // Determine final logo URL + path
+    let logoUrl  = currentLogoUrl;
+    let logoPath = currentLogoPath;
 
     if (pendingLogoFile) {
-      // Upload new logo
+      // Upload new logo — delete old one first (by path, not URL)
+      if (currentLogoPath) {
+        try { await deleteObject(ref(storage, currentLogoPath)); } catch { /* ignore */ }
+      }
       setMsg("sponsorEditMsg", "Uploading logo…", "info");
-      const ext     = pendingLogoFile.name.split(".").pop().toLowerCase();
-      const docId   = editId || `sp_${Date.now()}`;
-      const logoRef = ref(storage, `sponsor-logos/${docId}.${ext}`);
+      const ext    = pendingLogoFile.name.split(".").pop().toLowerCase();
+      const docId  = editId || `sp_${Date.now()}`;
+      logoPath     = `sponsor-logos/${docId}.${ext}`;
+      const logoRef = ref(storage, logoPath);
       await uploadBytes(logoRef, pendingLogoFile);
       logoUrl = await getDownloadURL(logoRef);
-    } else if (pendingLogoRemove && currentLogoUrl) {
-      // Delete old logo from storage
-      try {
-        await deleteObject(ref(storage, currentLogoUrl));
-      } catch { /* ignore — may already be deleted */ }
-      logoUrl = "";
+    } else if (pendingLogoRemove && currentLogoPath) {
+      // Remove logo — delete by path
+      try { await deleteObject(ref(storage, currentLogoPath)); } catch { /* ignore */ }
+      logoUrl  = "";
+      logoPath = "";
     }
 
     setMsg("sponsorEditMsg", "Saving…", "info");
@@ -347,6 +353,7 @@ document.getElementById("sponsorSaveBtn").addEventListener("click", async () => 
       contactEmail: document.getElementById("spContactEmail").value.trim(),
       notes:        document.getElementById("spNotes").value.trim(),
       logoUrl,
+      logoPath,
       teamAssignments: teamAssign,
       teamIds: teamAssign.map(a => a.teamId),
       history,
@@ -384,7 +391,10 @@ document.getElementById("sponsorDeleteBtn").addEventListener("click", async () =
 
   setMsg("sponsorEditMsg", "Deleting…", "info");
   try {
-    if (sp.logoUrl) {
+    if (sp.logoPath) {
+      try { await deleteObject(ref(storage, sp.logoPath)); } catch { /* ignore */ }
+    } else if (sp.logoUrl) {
+      // Legacy: sponsors saved before logoPath was stored — fall back to URL
       try { await deleteObject(ref(storage, sp.logoUrl)); } catch { /* ignore */ }
     }
     await deleteDoc(doc(db, "sponsors", id));

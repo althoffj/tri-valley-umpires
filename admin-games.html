@@ -150,8 +150,9 @@
 
     <!-- Status + date range row -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-      <button type="button" class="btn filter-btn filter-active" data-filter="upcoming">Upcoming</button>
-      <button type="button" class="btn print-btn filter-btn" data-filter="all">All</button>
+      <button type="button" class="btn filter-btn filter-active" data-filter="today">Today</button>
+      <button type="button" class="btn print-btn filter-btn" data-filter="upcoming">Active (±14 days)</button>
+      <button type="button" class="btn print-btn filter-btn" data-filter="all">All Dates</button>
       <div style="display:flex;gap:6px;align-items:center;margin-left:8px">
         <label style="font-size:0.82rem;color:var(--light-text);white-space:nowrap">From</label>
         <input type="date" id="gfFrom" style="padding:5px 8px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.82rem" />
@@ -378,7 +379,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-games.js?v=22"></script>
+  <script type="module" src="admin-games.js?v=28"></script>
   <script type="module" src="/pwa.js?v=2"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

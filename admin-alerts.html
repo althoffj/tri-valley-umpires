@@ -165,25 +165,23 @@
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;margin-bottom:16px" id="webhookEventsGrid">
           <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="gameChanges" /> Game changes (new, updated, cancelled)</label>
           <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="slotChanges" /> Slot signups &amp; cancellations</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="checkIn" /> ✅ Umpire check-ins</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="rainout" /> 🌧 Rain-outs</label>
           <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="dayOfReminders" /> Day-of reminders (7 AM)</label>
           <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="dailySummary" /> Daily game summary (7 AM)</label>
           <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="openSlots" /> Open slot alerts</label>
           <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="cancellationRequests" /> Cancellation requests</label>
-          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="incidentReports" /> Incident reports</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="incidentReports" /> 🚨 Incident reports</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="fieldIssues" /> ⚠️ Field issue reports</label>
           <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="tournamentSwaps" /> Tournament field swaps</label>
-          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="coachRegistration" /> Coach registrations</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="umpireRegistration" /> 🆕 Umpire registrations</label>
+          <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="coachRegistration" /> 🆕 Coach registrations</label>
           <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="umpireRequests" /> Coach umpire requests</label>
           <label class="webhook-check-label"><input type="checkbox" class="webhook-event-cb" value="practiceRequests" /> Practice requests</label>
         </div>
 
         <label style="display:block;margin-bottom:8px;font-weight:600">Division filter <span style="font-weight:normal;color:var(--light-text)">(leave all unchecked for all divisions)</span></label>
-        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px" id="webhookDivisionsGrid">
-          <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="10U" /> 10U</label>
-          <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="12U" /> 12U</label>
-          <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="14U" /> 14U</label>
-          <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="HS JV" /> HS JV</label>
-          <label class="webhook-check-label"><input type="checkbox" class="webhook-div-cb" value="HS Varsity" /> HS Varsity</label>
-        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px" id="webhookDivisionsGrid" data-org-divisions-check></div>
 
         <label class="webhook-check-label" style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
           <input type="checkbox" id="webhookHomeUmpireOnly" />
@@ -230,7 +228,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-alerts.js?v=1"></script>
+  <script type="module" src="admin-alerts.js?v=4"></script>
   <script type="module" src="/pwa.js?v=1"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

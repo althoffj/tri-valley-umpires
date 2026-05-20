@@ -410,11 +410,71 @@ document.getElementById("saveCreateUmpireBtn")?.addEventListener("click", async 
 
 const createCoachAccountFn = httpsCallable(getFunctions(app), "createCoachAccount");
 
-function openCreateCoachModal() {
-  ["ccFirstName","ccLastName","ccEmail","ccPhone","ccTeam","ccCity"].forEach(id => {
+// Teams cache for the coach team dropdown
+let _coachTeamList = [];  // [{id, name, division, city}]
+
+async function loadCoachTeamList() {
+  if (_coachTeamList.length) return;          // already loaded
+  try {
+    const snap = await getDoc(doc(db, "config/teamCalendars"));
+    const raw  = snap.exists() ? (snap.data().teams || []) : [];
+    _coachTeamList = raw
+      .filter(t => t.name)
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  } catch { /* non-fatal — select stays empty */ }
+}
+
+function populateCoachTeamSelect() {
+  const sel = document.getElementById("ccTeam");
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— Select a team —</option>';
+  _coachTeamList.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value       = t.name;
+    opt.textContent = t.name + (t.division ? " (" + t.division + ")" : "");
+    opt.dataset.division = t.division || "";
+    opt.dataset.city     = t.city     || "";
+    sel.appendChild(opt);
+  });
+  if (current) sel.value = current;
+}
+
+// Auto-fill division + city when a team is chosen
+document.getElementById("ccTeam")?.addEventListener("change", function() {
+  const selected = this.options[this.selectedIndex];
+  if (!selected || !selected.value) return;
+  const divSel  = document.getElementById("ccDivision");
+  const citySel = document.getElementById("ccCity");
+  if (divSel  && selected.dataset.division) divSel.value  = selected.dataset.division;
+  if (citySel && selected.dataset.city)     citySel.value = selected.dataset.city;
+});
+
+function updateCreateCoachSignInUI() {
+  const allow      = document.getElementById("ccAllowSignIn")?.checked !== false;
+  const emailInput = document.getElementById("ccEmail");
+  const emailLabel = document.getElementById("ccEmailLabel");
+  const noteText   = document.getElementById("ccModalNoteText");
+  if (emailInput) {
+    emailInput.required = allow;
+    emailInput.closest("div,form")?.querySelectorAll("label[for='ccEmail']");
+  }
+  if (emailLabel) emailLabel.textContent = allow ? "Email *" : "Email (optional)";
+  if (noteText) noteText.textContent = allow
+    ? "Creates a Firebase account and an approved coach profile. A password-setup email is sent so they can sign in to the Coach Portal."
+    : "Adds a coach record for contact and scheduling purposes. No sign-in account will be created.";
+}
+
+async function openCreateCoachModal() {
+  ["ccFirstName","ccLastName","ccEmail","ccPhone","ccCity"].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = "";
   });
-  const divEl = document.getElementById("ccDivision"); if (divEl) divEl.value = "";
+  const divEl   = document.getElementById("ccDivision"); if (divEl)   divEl.value   = "";
+  const allowEl = document.getElementById("ccAllowSignIn"); if (allowEl) allowEl.checked = true;
+  await loadCoachTeamList();
+  populateCoachTeamSelect();
+  document.getElementById("ccTeam").value = "";
+  updateCreateCoachSignInUI();
   setMsg("createCoachMsg", "", "info");
   document.getElementById("createCoachModal").style.display = "flex";
 }
@@ -423,6 +483,7 @@ function closeCreateCoachModal() {
   document.getElementById("createCoachModal").style.display = "none";
 }
 
+document.getElementById("ccAllowSignIn")?.addEventListener("change", updateCreateCoachSignInUI);
 document.getElementById("addCoachBtn")?.addEventListener("click", openCreateCoachModal);
 document.getElementById("cancelCreateCoachBtn")?.addEventListener("click", closeCreateCoachModal);
 document.getElementById("createCoachModal")?.addEventListener("click", e => {
@@ -430,31 +491,59 @@ document.getElementById("createCoachModal")?.addEventListener("click", e => {
 });
 
 document.getElementById("saveCreateCoachBtn")?.addEventListener("click", async () => {
-  const firstName = document.getElementById("ccFirstName").value.trim();
-  const lastName  = document.getElementById("ccLastName").value.trim();
-  const email     = document.getElementById("ccEmail").value.trim();
-  const phone     = document.getElementById("ccTeam") ? document.getElementById("ccPhone").value.trim() : "";
-  const teamName  = document.getElementById("ccTeam").value.trim();
-  const division  = document.getElementById("ccDivision").value;
-  const city      = document.getElementById("ccCity").value.trim();
-  if (!firstName || !lastName || !email) {
-    setMsg("createCoachMsg", "First name, last name, and email are required.", "error"); return;
+  const firstName   = document.getElementById("ccFirstName").value.trim();
+  const lastName    = document.getElementById("ccLastName").value.trim();
+  const email       = document.getElementById("ccEmail").value.trim();
+  const phone       = document.getElementById("ccPhone").value.trim();
+  const teamName    = document.getElementById("ccTeam").value;
+  const division    = document.getElementById("ccDivision").value;
+  const city        = document.getElementById("ccCity").value;
+  const allowSignIn = document.getElementById("ccAllowSignIn")?.checked !== false;
+
+  if (!firstName || !lastName) {
+    setMsg("createCoachMsg", "First name and last name are required.", "error"); return;
   }
+  if (allowSignIn && !email) {
+    setMsg("createCoachMsg", "Email is required when sign-in is enabled.", "error"); return;
+  }
+
   const btn = document.getElementById("saveCreateCoachBtn");
   btn.disabled = true;
-  setMsg("createCoachMsg", "Creating account…", "info");
-  try {
-    const result = await createCoachAccountFn({ firstName, lastName, email, phone, teamName, division, city });
-    const { isNew } = result.data;
-    setMsg("createCoachMsg",
-      isNew ? `✓ Account created. A password-setup email has been sent to ${email}.`
-            : `✓ Existing user linked as coach.`,
-      "success");
-    await loadCoachRoster();
-    setTimeout(closeCreateCoachModal, 2000);
-  } catch (err) {
-    setMsg("createCoachMsg", err.message || "Failed to create account.", "error");
-  } finally { btn.disabled = false; }
+
+  if (allowSignIn) {
+    // Create Firebase Auth account via cloud function
+    setMsg("createCoachMsg", "Creating account…", "info");
+    try {
+      const result = await createCoachAccountFn({ firstName, lastName, email, phone, teamName, division, city });
+      const { isNew } = result.data;
+      setMsg("createCoachMsg",
+        isNew ? `✓ Account created. A password-setup email has been sent to ${email}.`
+              : `✓ Existing user linked as coach.`,
+        "success");
+      await loadCoachRoster();
+      setTimeout(closeCreateCoachModal, 2000);
+    } catch (err) {
+      setMsg("createCoachMsg", err.message || "Failed to create account.", "error");
+    } finally { btn.disabled = false; }
+  } else {
+    // No sign-in account — write coach record directly to Firestore
+    setMsg("createCoachMsg", "Saving…", "info");
+    try {
+      await addDoc(collection(db, "coaches"), {
+        name: [firstName, lastName].filter(Boolean).join(" "),
+        email, phone, teamName, division, city,
+        approved: true,
+        active: true,
+        allowSignIn: false,
+        createdAt: serverTimestamp(),
+      });
+      setMsg("createCoachMsg", "✓ Coach added.", "success");
+      await loadCoachRoster();
+      setTimeout(closeCreateCoachModal, 1500);
+    } catch (err) {
+      setMsg("createCoachMsg", err.message || "Failed to save.", "error");
+    } finally { btn.disabled = false; }
+  }
 });
 
 // ── Export Coach CSV ──────────────────────────────────────────────────────────
@@ -1096,6 +1185,7 @@ function renderCoachRoster() {
       data-division="${esc(c.division||"")}"
       data-city="${esc(c.city||"")}"
       data-approved="${c.approved ? "1" : "0"}"
+      data-allow-sign-in="${c.allowSignIn === false ? "0" : "1"}"
       style="font-size:0.78rem;padding:3px 10px">Edit</button>`);
 
     if (!isPending && !isInactive) {
@@ -1127,9 +1217,38 @@ document.getElementById("coachFilterDivision")?.addEventListener("change", rende
 
 // Edit coach modal
 let editingCoachUid = null;
+let _editCoachOriginalAllowSignIn = true;  // true = has auth account, false = no auth account
+
+function updateEditCoachSignInUI() {
+  const allowEl    = document.getElementById("editCoachAllowSignIn");
+  const emailInput = document.getElementById("editCoachEmail");
+  const emailLabel = document.getElementById("editCoachEmailLabel");
+  const noteEl     = document.getElementById("editCoachSignInNote");
+  if (!allowEl) return;
+
+  const allow = allowEl.checked;
+
+  if (_editCoachOriginalAllowSignIn) {
+    // Coach has a Firebase Auth account — email is always readonly; note explains it
+    if (emailInput) { emailInput.readOnly = true; emailInput.required = false; emailInput.style.opacity = "0.6"; }
+    if (emailLabel) emailLabel.textContent = "Email (account email — read-only)";
+    if (noteEl) noteEl.textContent = allow
+      ? "This coach has a portal account. Sign-in is enabled."
+      : "Disabling sign-in will prevent this coach from logging in. Their account will remain in Firebase.";
+  } else {
+    // Coach has no auth account — email is editable; requirement depends on toggle
+    if (emailInput) { emailInput.readOnly = false; emailInput.required = allow; emailInput.style.opacity = ""; }
+    if (emailLabel) emailLabel.textContent = allow ? "Email *" : "Email (optional)";
+    if (noteEl) noteEl.textContent = allow
+      ? "Enabling sign-in will create a Firebase account. A password-setup email will be sent on save."
+      : "No sign-in account. Coach is for contact and scheduling purposes only.";
+  }
+}
 
 function openEditCoachModal(data) {
   editingCoachUid = data.uid;
+  _editCoachOriginalAllowSignIn = data.allowSignIn !== "0";
+
   const [firstName, ...rest] = (data.name || "").split(" ");
   document.getElementById("editCoachUid").value         = data.uid;
   document.getElementById("editCoachFirstName").value   = firstName || "";
@@ -1140,6 +1259,12 @@ function openEditCoachModal(data) {
   document.getElementById("editCoachDivision").value    = data.division || "";
   document.getElementById("editCoachCity").value        = data.city  || "";
   document.getElementById("editCoachApproved").checked  = data.approved === "1";
+
+  const allowEl = document.getElementById("editCoachAllowSignIn");
+  if (allowEl) allowEl.checked = _editCoachOriginalAllowSignIn;
+
+  updateEditCoachSignInUI();
+
   document.getElementById("editCoachMsg").textContent   = "";
   const modal = document.getElementById("editCoachModal");
   modal.style.display = "flex";
@@ -1150,6 +1275,8 @@ function closeEditCoachModal() {
   editingCoachUid = null;
 }
 
+document.getElementById("editCoachAllowSignIn")?.addEventListener("change", updateEditCoachSignInUI);
+
 async function saveCoachEdits() {
   const uid  = editingCoachUid;
   if (!uid) return;
@@ -1157,19 +1284,56 @@ async function saveCoachEdits() {
   const msg  = document.getElementById("editCoachMsg");
   btn.disabled = true;
   msg.textContent = "Saving…"; msg.className = "signup-message info";
-  const first    = document.getElementById("editCoachFirstName").value.trim();
-  const last     = document.getElementById("editCoachLastName").value.trim();
-  const approved = document.getElementById("editCoachApproved").checked;
+
+  const first      = document.getElementById("editCoachFirstName").value.trim();
+  const last       = document.getElementById("editCoachLastName").value.trim();
+  const approved   = document.getElementById("editCoachApproved").checked;
+  const allowSignIn = document.getElementById("editCoachAllowSignIn")?.checked !== false;
+
+  // Validate: if enabling sign-in for a no-account coach, email is required
+  if (!_editCoachOriginalAllowSignIn && allowSignIn) {
+    const email = document.getElementById("editCoachEmail").value.trim();
+    if (!email) {
+      msg.textContent = "Email is required to enable sign-in."; msg.className = "signup-message error";
+      btn.disabled = false;
+      return;
+    }
+  }
+
   try {
     const updates = {
-      name:     [first, last].filter(Boolean).join(" "),
-      phone:    document.getElementById("editCoachPhone").value.trim(),
-      teamName: document.getElementById("editCoachTeam").value.trim(),
-      division: document.getElementById("editCoachDivision").value,
-      city:     document.getElementById("editCoachCity").value.trim(),
+      name:       [first, last].filter(Boolean).join(" "),
+      phone:      document.getElementById("editCoachPhone").value.trim(),
+      teamName:   document.getElementById("editCoachTeam").value.trim(),
+      division:   document.getElementById("editCoachDivision").value,
+      city:       document.getElementById("editCoachCity").value.trim(),
       approved,
+      allowSignIn,
     };
     if (approved) updates.approvedAt = serverTimestamp();
+
+    // Only update email when coach has no auth account (auth-account email is managed by Firebase)
+    if (!_editCoachOriginalAllowSignIn) {
+      updates.email = document.getElementById("editCoachEmail").value.trim();
+    }
+
+    // If enabling sign-in for a previously no-account coach, create the account via cloud function
+    if (!_editCoachOriginalAllowSignIn && allowSignIn) {
+      msg.textContent = "Creating sign-in account…"; msg.className = "signup-message info";
+      const fns = getFunctions(app, "us-central1");
+      await httpsCallable(fns, "createCoachAccount")({
+        firstName: first,
+        lastName:  last,
+        email:     updates.email,
+        phone:     updates.phone,
+        teamName:  updates.teamName,
+        division:  updates.division,
+        city:      updates.city,
+        existingDocId: uid,
+      });
+      // Cloud function creates the auth account; update remaining fields in Firestore directly
+    }
+
     await updateDoc(doc(db, "coaches", uid), updates);
     msg.textContent = "Saved!"; msg.className = "signup-message success";
     await loadCoachRoster();
