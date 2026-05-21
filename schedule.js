@@ -315,6 +315,7 @@ function matchFacility(facilities, cityName) {
 
 function showShedCodeDialog(shedCode, facilityName, gameCity, gameNotes) {
   const overlay = document.createElement("div");
+  overlay.dataset.modal = "remove"; // enables swipe-down dismiss via pwa.js
   overlay.style.cssText = [
     "position:fixed", "inset:0", "background:rgba(0,0,0,0.65)",
     "z-index:99998", "display:flex", "align-items:center", "justify-content:center",
@@ -1495,6 +1496,53 @@ async function initUmpireCalendar(uid) {
     alert("New URL generated and copied to clipboard.");
   });
 }
+
+// ── Swipe left/right on date filter bar to cycle filters ─────────────────────
+// Ordered list — "custom" is intentionally excluded (it opens a date picker).
+const DATE_FILTER_ORDER = ["today", "week", "month", "upcoming", "past", "all"];
+
+function applyDateFilter(val) {
+  dateFilter = val;
+  document.querySelectorAll(".date-filter-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.date === val)
+  );
+  const customRow = document.getElementById("customDateRow");
+  if (customRow) customRow.style.display = "none";
+  renderGameRows();
+}
+
+(function wireFilterBarSwipe() {
+  const bar = document.getElementById("dateFilterBar");
+  if (!bar) return;
+
+  const SWIPE_MIN_X  = 40;  // px horizontal travel needed
+  const SWIPE_MAX_Y  = 30;  // px vertical travel before we give up
+  let sfStartX = null, sfStartY = null;
+
+  bar.addEventListener("touchstart", e => {
+    sfStartX = e.touches[0].clientX;
+    sfStartY = e.touches[0].clientY;
+  }, { passive: true });
+
+  bar.addEventListener("touchend", e => {
+    if (sfStartX === null) return;
+    const dx = e.changedTouches[0].clientX - sfStartX;
+    const dy = Math.abs(e.changedTouches[0].clientY - sfStartY);
+    sfStartX = sfStartY = null;
+
+    if (Math.abs(dx) < SWIPE_MIN_X || dy > SWIPE_MAX_Y) return;
+
+    const cur = DATE_FILTER_ORDER.indexOf(dateFilter);
+    const base = cur === -1 ? 0 : cur;
+    // Swipe left → next filter (forward in time); swipe right → previous
+    const next = dx < 0
+      ? Math.min(base + 1, DATE_FILTER_ORDER.length - 1)
+      : Math.max(base - 1, 0);
+    if (next !== base) applyDateFilter(DATE_FILTER_ORDER[next]);
+  }, { passive: true });
+
+  bar.addEventListener("touchcancel", () => { sfStartX = sfStartY = null; }, { passive: true });
+})();
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

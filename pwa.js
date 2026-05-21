@@ -80,6 +80,143 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+// ── Swipe-down to dismiss modals ─────────────────────────────────────────────
+// Works on any position:fixed full-screen overlay whose id ends in "Modal",
+// and on dynamically-created overlays that set data-modal="remove".
+// Only triggers when the inner sheet is scrolled to the top.
+const SD_THRESHOLD = 80; // px of downward drag to commit a dismiss
+let _sdOverlay = null;
+let _sdSheet   = null;
+let _sdStartY  = null;
+let _sdDy      = 0;
+
+document.addEventListener("touchstart", e => {
+  // Find nearest qualifying modal overlay
+  const overlay = e.target.closest('[id$="Modal"], [data-modal]');
+  if (!overlay) return;
+  const cs = getComputedStyle(overlay);
+  if (cs.position !== "fixed" || cs.display === "none") return;
+
+  const sheet = overlay.firstElementChild;
+  if (!sheet || !sheet.contains(e.target)) return; // touching backdrop, not sheet
+  if (sheet.scrollTop > 0) return;                 // sheet is mid-scroll — let scroll win
+
+  _sdOverlay = overlay;
+  _sdSheet   = sheet;
+  _sdStartY  = e.touches[0].clientY;
+  _sdDy      = 0;
+  sheet.style.transition = "none";
+}, { passive: true });
+
+document.addEventListener("touchmove", e => {
+  if (!_sdSheet) return;
+  const dy = e.touches[0].clientY - _sdStartY;
+  if (dy <= 0) {
+    // Moved up — cancel gesture, let normal scroll take over
+    _sdSheet.style.transform  = "";
+    _sdSheet.style.transition = "";
+    _sdSheet = _sdOverlay = null;
+    return;
+  }
+  _sdDy = dy;
+  _sdSheet.style.transform = `translateY(${dy}px)`;
+}, { passive: true });
+
+document.addEventListener("touchend", () => {
+  if (!_sdSheet) return;
+  const sheet   = _sdSheet;
+  const overlay = _sdOverlay;
+  const dy      = _sdDy;
+  _sdSheet = _sdOverlay = null;
+  _sdStartY = null;
+
+  if (dy >= SD_THRESHOLD) {
+    // Animate the sheet off-screen then close
+    sheet.style.transition = "transform 0.22s ease-in";
+    sheet.style.transform  = "translateY(110%)";
+    setTimeout(() => {
+      sheet.style.transform  = "";
+      sheet.style.transition = "";
+      if (overlay.dataset.modal === "remove") {
+        overlay.remove();
+      } else {
+        overlay.style.display = "none";
+        // Dispatch a synthetic close event so page JS can do cleanup
+        overlay.dispatchEvent(new CustomEvent("swipe-dismissed", { bubbles: true }));
+      }
+    }, 220);
+  } else {
+    // Spring back with a slight overshoot so it feels alive
+    sheet.style.transition = "transform 0.3s cubic-bezier(0.34,1.56,0.64,1)";
+    sheet.style.transform  = "translateY(0)";
+    setTimeout(() => { sheet.style.transform = ""; sheet.style.transition = ""; }, 320);
+  }
+});
+
+document.addEventListener("touchcancel", () => {
+  if (_sdSheet) {
+    _sdSheet.style.transform  = "";
+    _sdSheet.style.transition = "";
+    _sdSheet = _sdOverlay = null;
+  }
+}, { passive: true });
+
+// ── Left-edge swipe to go back ────────────────────────────────────────────────
+// iOS PWA has no browser back button — edge swipe restores that muscle memory.
+const BACK_EDGE   = 28;  // px from left edge that counts as an edge-swipe start
+const BACK_THRESH = 80;  // px horizontal travel needed to trigger history.back()
+let _backStartX = null;
+let _backStartY = null;
+let _backEl     = null;
+
+document.addEventListener("touchstart", e => {
+  const touch = e.touches[0];
+  if (touch.clientX > BACK_EDGE) return;
+  if (window.history.length <= 1) return; // nothing to go back to
+  _backStartX = touch.clientX;
+  _backStartY = touch.clientY;
+  // Visual edge indicator
+  _backEl = document.createElement("div");
+  _backEl.style.cssText = [
+    "position:fixed", "left:0", "top:50%", "transform:translateY(-50%)",
+    "width:4px", "height:56px",
+    "background:var(--accent,#601929)",
+    "border-radius:0 6px 6px 0",
+    "z-index:99999", "opacity:0",
+    "transition:opacity 0.08s,width 0.08s",
+    "pointer-events:none"
+  ].join(";");
+  document.body.appendChild(_backEl);
+}, { passive: true });
+
+document.addEventListener("touchmove", e => {
+  if (_backStartX === null) return;
+  const touch = e.touches[0];
+  const dx    = touch.clientX - _backStartX;
+  const dy    = Math.abs(touch.clientY - _backStartY);
+  // Cancel if gesture is more vertical than horizontal
+  if (dy > dx * 1.2 && dx < 20) { _cleanBackEl(); return; }
+  if (dx > 0 && _backEl) {
+    const progress = Math.min(dx / BACK_THRESH, 1);
+    _backEl.style.opacity = String(progress * 0.9);
+    _backEl.style.width   = (4 + progress * 24) + "px";
+  }
+}, { passive: true });
+
+document.addEventListener("touchend", e => {
+  if (_backStartX === null) return;
+  const dx = e.changedTouches[0].clientX - _backStartX;
+  _cleanBackEl();
+  if (dx >= BACK_THRESH) history.back();
+});
+
+document.addEventListener("touchcancel", _cleanBackEl, { passive: true });
+
+function _cleanBackEl() {
+  if (_backEl) { _backEl.remove(); _backEl = null; }
+  _backStartX = _backStartY = null;
+}
+
 // ── Pull-to-refresh (PWA standalone only) ────────────────────────────────────
 // Browsers have native pull-to-refresh; we only add our own in standalone PWA
 // mode where there's no browser chrome to provide it.

@@ -774,6 +774,10 @@ document.getElementById("assignModal").addEventListener("click", e => {
   if (e.target === document.getElementById("assignModal"))
     document.getElementById("assignModal").style.display = "none";
 });
+// Swipe-dismiss cleanup: clear assignTarget when modal is dismissed by gesture
+document.getElementById("assignModal").addEventListener("swipe-dismissed", () => {
+  assignTarget = null;
+});
 
 
 async function loadLeagues() {

@@ -70,6 +70,7 @@ function matchFacility(facilities, cityName) {
 // ── Shed code dialog ──────────────────────────────────────────────────────────
 function showShedCodeDialog(shedCode, facilityName, gameCity, gameNotes) {
   const overlay = document.createElement("div");
+  overlay.dataset.modal = "remove"; // enables swipe-down dismiss via pwa.js
   overlay.style.cssText = [
     "position:fixed", "inset:0", "background:rgba(0,0,0,0.65)",
     "z-index:99998", "display:flex", "align-items:center", "justify-content:center",
