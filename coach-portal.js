@@ -1,7 +1,7 @@
 // coach-portal.js — Coach dashboard
 import { db } from "./firebase.js";
 import { authReadyPromise, isCoach, isAdmin, getCurrentUser, getCurrentCoachProfile } from "./auth.js";
-import { esc, fmtDate, fmtTime, setMsg } from "./utils.js";
+import { esc, fmtDate, fmtTime, todayISO, setMsg } from "./utils.js";
 import { getOrgSettings } from "./org.js";
 
 import {
@@ -12,10 +12,6 @@ import {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function val(id) { return (document.getElementById(id)?.value || "").trim(); }
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function fieldError(id, msg) {
   const el = document.getElementById(id);

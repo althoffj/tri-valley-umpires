@@ -2,7 +2,7 @@
 import { getOrgSettings } from "./org.js";
 import { db, auth } from "./firebase.js";
 import { gamesToIcs, downloadIcs } from "./cal.js";
-import { esc, fmtDate, fmtTime, todayISO, showToast, showConfirm } from "./utils.js";
+import { esc, fmtDate, fmtTime, todayISO, weekEndISO, showToast, showConfirm } from "./utils.js";
 import { getFacilities, getShedCodes, matchFacility, showShedCodeDialog } from "./facilities.js";
 
 import {
@@ -223,12 +223,6 @@ function gameMatchesFilter(game) {
   if (umpireFilter && !getSlots(game).some(s => s.assignedUid === umpireFilter)) return false;
 
   return true;
-}
-
-function weekEndISO() {
-  const d = new Date();
-  d.setDate(d.getDate() + 6);
-  return d.toISOString().slice(0, 10);
 }
 
 // ── Pay summary ───────────────────────────────────────────────────────────────

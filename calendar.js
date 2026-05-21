@@ -39,6 +39,8 @@ function isoFromDate(dt) {
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
 }
 
+// Intentionally uses "Dow, M/D/YYYY" format for calendar event display — different
+// from utils.fmtDate which returns "M/D/YYYY". No import needed here.
 function fmtDate(iso) {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-").map(Number);

@@ -9,7 +9,7 @@ document.querySelectorAll("#seasonYear, .season-year").forEach(el => {
 document.title = `Tri-Valley Baseball Umpires - ${SEASON_YEAR}`;
 import { db } from "./firebase.js";
 import { getOrgSettings } from "./org.js";
-import { esc, fmtTime, todayISO, showToast } from "./utils.js";
+import { esc, fmtTime, todayISO, weekEndISO, showToast } from "./utils.js";
 import { getFacilities, getShedCodes, matchFacility, showShedCodeDialog } from "./facilities.js";
 
 // Refresh title with org name once settings resolve
@@ -103,12 +103,8 @@ async function loadAnnouncements() {
   }
 }
 
-function weekEndISO() {
-  const d = new Date();
-  d.setDate(d.getDate() + 6);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-
+// fmtDate here intentionally uses "Dow M/D" format for the agenda view, not the M/D/YYYY
+// used by utils.fmtDate. Both are in scope; this one shadows the import deliberately.
 function fmtDate(iso) {
   if (!iso) return "";
   const [y, mo, d] = iso.split("-");

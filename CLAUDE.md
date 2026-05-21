@@ -44,7 +44,8 @@ For Cloud Functions (`functions/` directory): Node 22, CommonJS (`require`). No 
 | `utils.js` | `esc()`, `fmtDate()`, `fmtTime()`, `todayISO()`, `setMsg()`, `showToast()`, `showConfirm()` |
 | `nav.js` | Injects top nav HTML based on auth role; single source of truth for nav links |
 | `tabs.js` | Injects mobile bottom tab bar |
-| `pwa.js` | Service worker registration, stale-page reload, install prompt |
+| `pwa.js` | Service worker registration, stale-page reload, install prompt, pull-to-refresh, swipe-down modal dismiss, left-edge back swipe |
+| `facilities.js` | Shared facility lookup, shed-code cache (`getFacilities`, `getShedCodes`, `matchFacility`), and `showShedCodeDialog` |
 | `cal.js` | Client-side ICS generation |
 | `slack-webhooks.js` | Client-side Slack notification helpers |
 
