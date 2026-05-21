@@ -1,4 +1,4 @@
-// pwa.js — service worker registration and install prompt handling
+// pwa.js — service worker registration, install prompt, and stale-page refresh
 let deferredPrompt = null;
 
 export function isPWAMode() {
@@ -28,21 +28,66 @@ export async function triggerInstall() {
   return outcome === "accepted";
 }
 
-// Register the combined FCM + app shell service worker
+// ── Service Worker registration ───────────────────────────────────────────────
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/firebase-messaging-sw.js").catch(() => {});
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+
+      // When a new SW is found, wait for it to finish installing, then reload.
+      reg.addEventListener("updatefound", () => {
+        const newSW = reg.installing;
+        newSW.addEventListener("statechange", () => {
+          // "installed" + existing controller = update is ready, old SW still running.
+          if (newSW.state === "installed" && navigator.serviceWorker.controller) {
+            // The new SW called skipWaiting(), so it will activate shortly.
+            // Reload once it does to pick up fresh assets.
+            navigator.serviceWorker.addEventListener("controllerchange", () => {
+              window.location.reload();
+            }, { once: true });
+          }
+        });
+      });
+
+      // Also handle the SW_ACTIVATED message (sent by the SW on activate).
+      navigator.serviceWorker.addEventListener("message", event => {
+        if (event.data?.type === "SW_ACTIVATED") {
+          window.location.reload();
+        }
+      });
+
+    } catch (_) {
+      // SW registration failure is non-fatal.
+    }
   });
 }
 
-// Capture Android/Chrome install prompt before browser shows it
+// ── Stale-page reload (mobile PWA) ────────────────────────────────────────────
+// On mobile, the OS can suspend the PWA for hours. When the user reopens it,
+// the page is still "alive" but Firestore listeners may have dropped and
+// the UI can be hours out of date. Reload if backgrounded for > 10 minutes.
+const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+let _hiddenAt = null;
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    _hiddenAt = Date.now();
+  } else if (document.visibilityState === "visible" && _hiddenAt !== null) {
+    if (Date.now() - _hiddenAt > STALE_THRESHOLD_MS) {
+      window.location.reload();
+    }
+    _hiddenAt = null;
+  }
+});
+
+// ── Install prompt handling ───────────────────────────────────────────────────
+// Capture Android/Chrome install prompt before the browser shows it.
 window.addEventListener("beforeinstallprompt", e => {
   e.preventDefault();
   deferredPrompt = e;
   window.dispatchEvent(new CustomEvent("pwa-install-available"));
 });
 
-// After install succeeds, clear prompt and notify
 window.addEventListener("appinstalled", () => {
   deferredPrompt = null;
   window.dispatchEvent(new CustomEvent("pwa-installed"));
