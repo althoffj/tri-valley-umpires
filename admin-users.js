@@ -2,7 +2,7 @@
 
 import { app, db } from "./firebase.js";
 import { authReadyPromise, isAdmin, isSuperAdmin, getCurrentUser } from "./auth.js";
-import { esc, setMsg, csvCell, showToast, showConfirm } from "./utils.js";
+import { esc, todayISO, setMsg, csvCell, showToast, showConfirm } from "./utils.js";
 
 import {
   getFunctions,
@@ -347,7 +347,7 @@ async function exportRosterCSV() {
     const url  = URL.createObjectURL(blob);
     const a    = Object.assign(document.createElement("a"), {
       href: url,
-      download: `umpire-roster-${new Date().toISOString().slice(0,10)}.csv`
+      download: `umpire-roster-${todayISO()}.csv`
     });
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
@@ -587,7 +587,7 @@ async function exportCoachCSV() {
     const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url  = URL.createObjectURL(blob);
     const a    = Object.assign(document.createElement("a"), {
-      href: url, download: `coach-directory-${new Date().toISOString().slice(0,10)}.csv`
+      href: url, download: `coach-directory-${todayISO()}.csv`
     });
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);

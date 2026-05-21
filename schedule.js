@@ -198,8 +198,8 @@ function gameMatchesFilter(game) {
     case "month": {
       const [y, m] = today.split("-");
       const monthStart = `${y}-${m}-01`;
-      const monthEnd   = new Date(Number(y), Number(m), 0)
-        .toISOString().slice(0, 10);
+      const lastDay    = new Date(Number(y), Number(m), 0); // day 0 = last day of previous month
+      const monthEnd   = `${lastDay.getFullYear()}-${String(lastDay.getMonth()+1).padStart(2,"0")}-${String(lastDay.getDate()).padStart(2,"0")}`;
       if (game.date < monthStart || game.date > monthEnd) return false;
       break;
     }
