@@ -2,7 +2,7 @@
 import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
 import { getOrgSettings, getSeasonRange } from "./org.js";
-import { esc, fmtDate, fmtTime, setMsg, thisYearRange, lastYearRange, showToast, showConfirm } from "./utils.js";
+import { esc, fmtDate, fmtTime, todayISO, setMsg, thisYearRange, lastYearRange, showToast, showConfirm } from "./utils.js";
 
 import {
   collection, getDocs, getDoc, addDoc, deleteDoc, doc, updateDoc, writeBatch, query, orderBy, serverTimestamp
@@ -676,7 +676,7 @@ function exportCSV() {
   const blob  = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
   const url   = URL.createObjectURL(blob);
   const a     = document.createElement("a");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   a.href = url; a.download = `payroll-${today}.csv`;
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
@@ -790,7 +790,7 @@ document.getElementById("mpDivision")?.addEventListener("change", function() {
 document.getElementById("addManualPayBtn")?.addEventListener("click", async () => {
   await loadUmpireList();
   populateUmpireSelect();
-  document.getElementById("mpDate").value       = new Date().toISOString().slice(0, 10);
+  document.getElementById("mpDate").value       = todayISO();
   document.getElementById("mpDivision").value   = "";
   document.getElementById("mpUmpire").value     = "";
   document.getElementById("mpAmount").value     = "";
