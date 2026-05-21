@@ -6,7 +6,7 @@ importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 
 // ── App Shell Caching ─────────────────────────────────────────────────────────
 // Bump CACHE_NAME whenever you want to force all clients to drop the old cache.
-const CACHE_NAME = "tvu-shell-v5";
+const CACHE_NAME = "tvu-shell-v6";
 
 // Only truly-static, never-versioned assets go here.
 // JS/CSS files are referenced with ?v=N query strings in HTML, so they never
@@ -28,14 +28,21 @@ self.addEventListener("install", event => {
 });
 
 self.addEventListener("activate", event => {
-  // Delete every cache except the current one.
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+    Promise.all([
+      // Delete every cache except the current one.
+      caches.keys().then(keys =>
+        Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+      ),
+      // Claim all open clients so this SW controls them without a reload,
+      // then notify them so pwa.js can trigger a page refresh.
+      self.clients.claim().then(() =>
+        self.clients.matchAll({ type: "window" }).then(clients =>
+          clients.forEach(client => client.postMessage({ type: "SW_ACTIVATED" }))
+        )
+      )
+    ])
   );
-  // Claim all open clients so this SW controls them without a reload.
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", event => {
@@ -93,14 +100,6 @@ self.addEventListener("fetch", event => {
       })
       .catch(() => caches.match(request))
   );
-});
-
-// ── Notify open tabs when this SW becomes active ───────────────────────────
-// pwa.js listens for this message and reloads the page.
-self.addEventListener("activate", () => {
-  self.clients.matchAll({ type: "window" }).then(clients => {
-    clients.forEach(client => client.postMessage({ type: "SW_ACTIVATED" }));
-  });
 });
 
 // ── FCM ────────────────────────────────────────────────────────────────────

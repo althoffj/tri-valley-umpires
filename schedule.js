@@ -3,6 +3,7 @@ import { getOrgSettings } from "./org.js";
 import { db, auth } from "./firebase.js";
 import { gamesToIcs, downloadIcs } from "./cal.js";
 import { esc, fmtDate, fmtTime, todayISO, showToast, showConfirm } from "./utils.js";
+import { getFacilities, getShedCodes, matchFacility, showShedCodeDialog } from "./facilities.js";
 
 import {
   authReadyPromise,
@@ -43,6 +44,7 @@ let pendingGameId   = null;
 let pendingSlotType = null;
 
 let _gameDayBarCache = null; // { date: "YYYY-MM-DD", data: { todayGames, facilities, shedCodes, weatherMap } }
+let _renderToday     = "";   // cached todayISO() for the current render pass
 
 // Pending cancellation requests for the current user: "gameId|slotType" → requestDocId
 let pendingCancels = {};
@@ -136,7 +138,7 @@ async function fetchWeather(city, date, timeStr) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function gameDateStatus(dateISO) {
-  const today = todayISO();
+  const today = _renderToday || todayISO();
   if (dateISO < today)   return "past";
   if (dateISO === today) return "today";
   return "upcoming";
@@ -176,7 +178,7 @@ function allSlotsFilled(game) {
 // ── Filtering ─────────────────────────────────────────────────────────────────
 
 function gameMatchesFilter(game) {
-  const today = todayISO();
+  const today = _renderToday || todayISO();
 
   // ── Status filter ────────────────────────────────────────────────────────
   if (statusFilter === "needs"  && (game.cancelled || openSlots(game).length === 0)) return false;
@@ -278,124 +280,6 @@ function renderCount() {
 }
 
 // ── Game Day bar ──────────────────────────────────────────────────────────────
-
-let facilitiesCache = null;
-let shedCodesCache  = null;
-
-async function getFacilities() {
-  if (facilitiesCache) return facilitiesCache;
-  try {
-    const snap = await getDocs(collection(db, "facilities"));
-    facilitiesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (_) { facilitiesCache = []; }
-  return facilitiesCache;
-}
-
-async function getShedCodes() {
-  if (shedCodesCache) return shedCodesCache;
-  try {
-    const snap = await getDocs(collection(db, "facilityCodes"));
-    shedCodesCache = {};
-    snap.docs.forEach(d => { shedCodesCache[d.id] = d.data().shedCode || ""; });
-  } catch (_) { return {}; } // don't cache on error — retry next call
-  return shedCodesCache;
-}
-
-function matchFacility(facilities, cityName) {
-  if (!cityName || !facilities.length) return null;
-  // Match on any word > 3 chars from the game city name against facility name
-  const words = cityName.split(/\s+/).filter(w => w.length > 3);
-  return facilities.find(f =>
-    words.some(w => f.name?.toLowerCase().includes(w.toLowerCase()))
-  ) || null;
-}
-
-// targetUid: the umpire being checked in. Defaults to current user.
-// ── Shed code dialog shown after a successful check-in ────────────────────────
-
-function showShedCodeDialog(shedCode, facilityName, gameCity, gameNotes) {
-  const overlay = document.createElement("div");
-  overlay.dataset.modal = "remove"; // enables swipe-down dismiss via pwa.js
-  overlay.style.cssText = [
-    "position:fixed", "inset:0", "background:rgba(0,0,0,0.65)",
-    "z-index:99998", "display:flex", "align-items:center", "justify-content:center",
-    "padding:16px"
-  ].join(";");
-
-  const box = document.createElement("div");
-  box.style.cssText = [
-    "background:#1e1e2e", "color:#e8e8f0", "padding:32px 28px",
-    "border-radius:14px", "max-width:380px", "width:100%",
-    "box-shadow:0 8px 32px rgba(0,0,0,0.55)", "font-family:inherit",
-    "text-align:center"
-  ].join(";");
-
-  const title = document.createElement("p");
-  title.style.cssText = "margin:0 0 6px;font-size:1rem;color:var(--light-text,#aaa)";
-  title.textContent = "✓ Checked In";
-
-  const loc = document.createElement("p");
-  loc.style.cssText = "margin:0 0 20px;font-size:0.9rem;color:var(--light-text,#aaa)";
-  loc.textContent = facilityName || gameCity || "";
-
-  const label = document.createElement("p");
-  label.style.cssText = "margin:0 0 8px;font-size:0.85rem;color:var(--light-text,#aaa);letter-spacing:0.04em;text-transform:uppercase";
-  label.textContent = "🔑 Shed Code";
-
-  const codeEl = document.createElement("div");
-  codeEl.style.cssText = [
-    "font-size:2.4rem", "font-weight:700", "letter-spacing:0.12em",
-    "color:#f0a500", "margin:0 0 28px",
-    "padding:14px 20px", "background:rgba(240,165,0,0.1)",
-    "border:2px solid rgba(240,165,0,0.35)", "border-radius:10px",
-    "user-select:all"
-  ].join(";");
-  codeEl.textContent = shedCode;
-
-  const dismissBtn = document.createElement("button");
-  dismissBtn.textContent   = "Got It";
-  dismissBtn.className     = "btn";
-  dismissBtn.style.cssText = "width:100%;padding:10px;font-size:1rem";
-
-  function close() {
-    overlay.remove();
-    document.removeEventListener("keydown", onKey);
-  }
-  function onKey(e) {
-    if (e.key === "Escape" || e.key === "Enter") close();
-  }
-  dismissBtn.addEventListener("click", close);
-  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
-  document.addEventListener("keydown", onKey);
-
-  const children = [title];
-  if (loc.textContent) children.push(loc);
-  children.push(label, codeEl);
-
-  // Game notes — shown below the shed code if present
-  if (gameNotes) {
-    const notesEl = document.createElement("div");
-    notesEl.style.cssText = [
-      "text-align:left", "background:rgba(255,255,255,0.05)",
-      "border:1px solid #444", "border-radius:8px",
-      "padding:12px 14px", "margin:0 0 20px",
-      "font-size:0.88rem", "color:#e8e8f0", "white-space:pre-wrap", "word-break:break-word"
-    ].join(";");
-    const notesLabel = document.createElement("div");
-    notesLabel.style.cssText = "font-size:0.75rem;color:var(--light-text,#aaa);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px";
-    notesLabel.textContent = "📋 Game Notes";
-    const notesText = document.createElement("div");
-    notesText.textContent = gameNotes;
-    notesEl.append(notesLabel, notesText);
-    children.push(notesEl);
-  }
-
-  children.push(dismissBtn);
-  box.append(...children);
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-  dismissBtn.focus();
-}
 
 // Admins can pass any umpire's uid to check in on their behalf.
 async function checkIn(gameId, slotType, targetUid) {
@@ -910,6 +794,7 @@ function renderGameRows() {
   const container = document.getElementById("gameSchedule");
   if (!container) return;
 
+  _renderToday = todayISO(); // compute once for the entire render pass
   populateSecondaryFilters();
 
   // Exclude games with no umpire slots configured — they have nothing for umpires to sign up for
@@ -1583,10 +1468,15 @@ authReadyPromise.then(() => {
   loadGames();
 });
 
-// Re-render buttons whenever auth state changes (sign in / sign out / token refresh)
-// so signup buttons appear immediately without requiring a page reload.
+// Re-render buttons whenever auth role changes (sign in / sign out).
+// Skip re-renders on silent token refreshes that don't affect role or approval.
+let _lastAuthKey = null;
 onAuthStateChanged(auth, () => {
   const myGamesBtn = document.getElementById("myGamesBtn");
   if (myGamesBtn) myGamesBtn.style.display = isLoggedIn() ? "" : "none";
-  if (games.length > 0) renderGameRows();
+  const authKey = `${isAdmin()}:${isApproved()}:${isLoggedIn()}`;
+  if (games.length > 0 && authKey !== _lastAuthKey) {
+    _lastAuthKey = authKey;
+    renderGameRows();
+  }
 });

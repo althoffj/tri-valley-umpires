@@ -34,14 +34,10 @@ if ("serviceWorker" in navigator) {
     try {
       const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
 
-      // When a new SW is found, wait for it to finish installing, then reload.
       reg.addEventListener("updatefound", () => {
         const newSW = reg.installing;
         newSW.addEventListener("statechange", () => {
-          // "installed" + existing controller = update is ready, old SW still running.
           if (newSW.state === "installed" && navigator.serviceWorker.controller) {
-            // The new SW called skipWaiting(), so it will activate shortly.
-            // Reload once it does to pick up fresh assets.
             navigator.serviceWorker.addEventListener("controllerchange", () => {
               window.location.reload();
             }, { once: true });
@@ -94,8 +90,9 @@ document.addEventListener("touchstart", e => {
   // Find nearest qualifying modal overlay
   const overlay = e.target.closest('[id$="Modal"], [data-modal]');
   if (!overlay) return;
-  const cs = getComputedStyle(overlay);
-  if (cs.position !== "fixed" || cs.display === "none") return;
+  // [id$="Modal"] elements hide via inline style.display; [data-modal] elements
+  // are appended when shown and removed when dismissed, so never hidden.
+  if (overlay.style.display === "none") return;
 
   const sheet = overlay.firstElementChild;
   if (!sheet || !sheet.contains(e.target)) return; // touching backdrop, not sheet
