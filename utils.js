@@ -16,9 +16,15 @@ export function esc(v) {
 
 // ── Date / time formatting ────────────────────────────────────────────────────
 
-/** Format an ISO date string (YYYY-MM-DD) as M/D/YYYY. Returns "—" for empty. */
+/** Format an ISO date string (YYYY-MM-DD), JS Date, or Firestore Timestamp as M/D/YYYY. */
 export function fmtDate(iso) {
   if (!iso) return "—";
+  // Firestore Timestamp → JS Date
+  if (typeof iso.toDate === "function") iso = iso.toDate();
+  // JS Date → format directly
+  if (iso instanceof Date) {
+    return `${iso.getMonth() + 1}/${iso.getDate()}/${iso.getFullYear()}`;
+  }
   const [y, m, d] = iso.split("-");
   return `${parseInt(m)}/${parseInt(d)}/${y}`;
 }

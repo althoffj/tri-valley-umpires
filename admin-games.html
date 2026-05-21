@@ -36,106 +36,6 @@
       <a href="admin-users.html">Users</a>
     </nav>
 
-    <!-- ── Add Game ───────────────────────────────────────────────────────── -->
-    <h2>Add Game</h2>
-    <form id="addGameForm" class="signup-form">
-      <div class="form-row">
-        <div class="form-group">
-          <label for="gameLeague">League / Program</label>
-          <select id="gameLeague">
-            <option value="">— None —</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="gameCity">City / Town *</label>
-          <input type="text" id="gameCity" required placeholder="e.g. Crooks" />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="gameDivision">Division</label>
-          <select id="gameDivision" required data-org-divisions>
-            <option value="">-- Select --</option>
-            <option value="10U">10U</option>
-            <option value="12U">12U</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="gameDate">Date</label>
-          <input type="date" id="gameDate" required />
-        </div>
-        <div class="form-group">
-          <label for="gameTime">Time</label>
-          <input type="time" id="gameTime" required />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="gameType">Game Type</label>
-          <select id="gameType" required>
-            <option value="Regular">Regular</option>
-            <option value="Playoff">Playoff</option>
-            <option value="Tournament">Tournament</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="gameFacility">Facility</label>
-          <select id="gameFacility">
-            <option value="">-- None / Other --</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="gameFieldSelect">Field / Location</label>
-          <select id="gameFieldSelect" style="display:none"></select>
-          <input type="text" id="gameField" placeholder="e.g. NH-North, East" />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="gameHomeTeam">Home Team <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
-          <input type="text" id="gameHomeTeam" placeholder="e.g. Crooks Red" />
-        </div>
-        <div class="form-group">
-          <label for="gameAwayTeam">Away Team <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
-          <input type="text" id="gameAwayTeam" placeholder="e.g. Colton Blue" />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label>Umpire Positions &amp; Pay</label>
-          <div id="gameUmpireTypes" class="slot-check-table">
-            <label><input type="checkbox" value="Plate" /> Plate</label>
-            <span></span>
-            <input type="number" class="slot-pay-input" data-slot-type="Plate" min="0" step="0.01" placeholder="$" disabled />
-
-            <label><input type="checkbox" value="Field" /> Field</label>
-            <span></span>
-            <input type="number" class="slot-pay-input" data-slot-type="Field" min="0" step="0.01" placeholder="$" disabled />
-
-            <label><input type="checkbox" value="Extra" /> Extra</label>
-            <span></span>
-            <input type="number" class="slot-pay-input" data-slot-type="Extra" min="0" step="0.01" placeholder="$" disabled />
-          </div>
-          <p class="field-error" id="umpireTypesError"></p>
-        </div>
-      </div>
-
-      <div class="page-actions" style="margin-top:16px">
-        <button type="submit" class="btn" id="addGameBtn">Add Game</button>
-      </div>
-      <p id="addGameMessage" class="signup-message" aria-live="polite"></p>
-    </form>
-
     <!-- ── Pending Cancellations ────────────────────────────────────────── -->
     <div id="pendingCancellationsSection" style="display:none">
       <h2 style="color:#ffcc80">⏳ Pending Cancellation Requests</h2>
@@ -146,7 +46,10 @@
     </div>
 
     <!-- ── Game List ──────────────────────────────────────────────────────── -->
-    <h2>All Games</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <h2 style="margin:0">All Games</h2>
+      <a href="admin-add-game.html" class="btn">+ Add Game</a>
+    </div>
 
     <!-- Status + date range row -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
@@ -379,7 +282,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-games.js?v=28"></script>
+  <script type="module" src="admin-games.js?v=29"></script>
   <script type="module" src="/pwa.js?v=2"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>

@@ -25,27 +25,39 @@ function statusBadge(status) {
   return `<span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:0.75rem;font-weight:700;background:${color}22;color:${color};border:1px solid ${color}55">${esc(label)}</span>`;
 }
 
-// ── Load & render ─────────────────────────────────────────────────────────────
+// ── Filter state ─────────────────────────────────────────────────────────────
 
-async function loadIncidents() {
+let incidentFilter = "open";
+let allIncidents   = []; // [{ id, data }]
+
+function renderIncidents() {
   const listEl = document.getElementById("incidentList");
   const noteEl = document.getElementById("incidentNote");
   if (!listEl) return;
 
-  try {
-    const snap = await getDocs(
-      query(collection(db, "incidentReports"), orderBy("submittedAt", "desc"))
-    );
+  const filtered = incidentFilter === "all"
+    ? allIncidents
+    : allIncidents.filter(({ data: r }) => (r.status || "open") === incidentFilter);
 
-    if (snap.empty) {
-      noteEl.textContent = "No incident reports submitted yet.";
-      listEl.innerHTML   = "";
-      return;
-    }
+  const total = allIncidents.length;
+  if (total === 0) {
+    noteEl.textContent = "No incident reports submitted yet.";
+    listEl.innerHTML   = "";
+    return;
+  }
 
-    noteEl.textContent = `${snap.size} report${snap.size === 1 ? "" : "s"} on file.`;
+  if (incidentFilter === "all") {
+    noteEl.textContent = `${total} report${total === 1 ? "" : "s"} on file.`;
+  } else {
+    noteEl.textContent = `${filtered.length} ${incidentFilter} report${filtered.length === 1 ? "" : "s"} (${total} total).`;
+  }
 
-    listEl.innerHTML = snap.docs.map(d => {
+  if (filtered.length === 0) {
+    listEl.innerHTML = `<p style="color:var(--light-text)">No ${incidentFilter} reports.</p>`;
+    return;
+  }
+
+  listEl.innerHTML = filtered.map(({ id: rid, data: r }) => {
       const r   = d.data();
       const rid = d.id;
 
@@ -155,11 +167,25 @@ async function loadIncidents() {
         </div>`;
     }).join("");
 
-    // Wire up save buttons
-    listEl.querySelectorAll(".incident-save-btn").forEach(btn => {
-      btn.addEventListener("click", () => saveIncidentUpdate(btn));
-    });
+  // Wire up save buttons
+  listEl.querySelectorAll(".incident-save-btn").forEach(btn => {
+    btn.addEventListener("click", () => saveIncidentUpdate(btn));
+  });
+}
 
+// ── Load from Firestore ───────────────────────────────────────────────────────
+
+async function loadIncidents() {
+  const listEl = document.getElementById("incidentList");
+  if (!listEl) return;
+  listEl.innerHTML = '<p style="color:var(--light-text)">Loading reports…</p>';
+
+  try {
+    const snap = await getDocs(
+      query(collection(db, "incidentReports"), orderBy("submittedAt", "desc"))
+    );
+    allIncidents = snap.docs.map(d => ({ id: d.id, data: d.data() }));
+    renderIncidents();
   } catch (err) {
     console.error(err);
     listEl.innerHTML = '<p style="color:#ffb4b4">Error loading incident reports.</p>';
@@ -195,6 +221,10 @@ async function saveIncidentUpdate(btn) {
       msgEl.textContent = "Saved ✓";
       setTimeout(() => { if (msgEl) msgEl.textContent = ""; }, 3000);
     }
+    // Update in-memory cache so filter tabs reflect the new status instantly
+    const cached = allIncidents.find(x => x.id === id);
+    if (cached) { cached.data.status = status; cached.data.adminNotes = adminNotes; }
+
     // Update the badge in-place
     const badge = card?.querySelector(".incident-card > div:first-child span:last-child");
     if (badge) badge.outerHTML = statusBadge(status);
@@ -217,6 +247,18 @@ async function saveIncidentUpdate(btn) {
     btn.disabled = false;
   }
 }
+
+// ── Filter button wiring ──────────────────────────────────────────────────────
+
+document.querySelectorAll(".incident-filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    incidentFilter = btn.dataset.filter;
+    document.querySelectorAll(".incident-filter-btn").forEach(b =>
+      b.classList.toggle("active", b === btn)
+    );
+    renderIncidents();
+  });
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

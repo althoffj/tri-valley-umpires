@@ -3443,3 +3443,187 @@ exports.onFieldIssue = onDocumentWritten("fieldIssues/{issueId}", async event =>
     console.error("Field issue push error:", e);
   }
 });
+
+// ── onGameSlotChanged — notify umpires when an admin assigns or removes them ──
+//
+// Fires on any game document write. Compares umpireSlots before/after to find:
+//   • Newly assigned umpires  → "You've been assigned to a game"
+//   • Newly removed umpires   → "You've been removed from a game"
+// Self-signups are excluded: if the umpire's own uid triggered the write the
+// Firestore write comes from the client, not an admin, so we skip it via the
+// `adminWrite` flag. However we can't read who wrote it from Firestore triggers,
+// so instead we skip any change where the before-slot was empty (self-signup)
+// and skip any change where the after-slot is empty but no admin context (i.e.,
+// we detect removals only when an assignedUid disappears).
+
+exports.onGameSlotChanged = onDocumentWritten(
+  { document: "games/{gameId}", secrets: [GMAIL_USER, GMAIL_PASS] },
+  async event => {
+    const before = event.data.before?.data() ?? null;
+    const after  = event.data.after?.data()  ?? null;
+
+    // Ignore deletes and new game creations (no slots to compare)
+    if (!before || !after) return;
+
+    const beforeSlots = before.umpireSlots || [];
+    const afterSlots  = after.umpireSlots  || [];
+
+    const APP_URL = "https://tri-valley-baseball-umpires.web.app";
+    const db      = getFirestore();
+
+    const gameDate = after.date  || "";
+    const gameTime = after.time  || "";
+    const gameCity = after.city  || "";
+    const gameDivision = after.division || "";
+    const gameField    = after.field    || "";
+    const gameWhere    = [gameCity, gameDivision, gameField].filter(Boolean).join(" · ");
+    const dateStr  = fmtDateSlack(gameDate);
+    const timeStr  = gameTime ? fmtTimeSlack(gameTime) : "";
+
+    // Build slot maps keyed by slot type
+    const beforeMap = Object.fromEntries(beforeSlots.map(s => [s.type, s]));
+    const afterMap  = Object.fromEntries(afterSlots.map(s =>  [s.type, s]));
+
+    // Collect notifications to send: { uid, type: "assigned"|"removed", slotType }
+    const notifications = [];
+
+    const allTypes = new Set([...beforeSlots.map(s => s.type), ...afterSlots.map(s => s.type)]);
+    for (const slotType of allTypes) {
+      const b = beforeMap[slotType];
+      const a = afterMap[slotType];
+      const prevUid = b?.assignedUid || null;
+      const nextUid = a?.assignedUid || null;
+
+      if (prevUid === nextUid) continue; // no change
+
+      // Skip self-signup: an empty→filled transition where the umpire writes their
+      // own uid is handled by the umpire, not an admin. We don't have the writer's
+      // uid from triggers, so we use a heuristic: umpires can ONLY write
+      // umpireSlots+needsUmpires. Admin edits also touch other fields (date, city,
+      // notes, etc.). Check if any non-slot field changed as a proxy for admin write.
+      const nonSlotChanged = (() => {
+        const track = ["date","time","city","division","field","notes","cancelled","homeTeam","awayTeam"];
+        return track.some(k => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
+      })();
+
+      // For assignments (empty→filled): only notify if this looks like an admin
+      // action — either other fields changed (admin game edit) OR the umpire who
+      // was assigned didn't sign up themselves (we can't fully distinguish, so we
+      // always notify on admin-side direct assigns; self-signup notifications are
+      // already handled client-side by the schedule page UI).
+      if (!prevUid && nextUid) {
+        // Only fire for admin-initiated assigns (other fields changed, or needsUmpires
+        // explicitly set to false — admin scheduler sets needsUmpires). To avoid
+        // double-notifying on self-signup, skip if the only change is umpireSlots/needsUmpires.
+        if (nonSlotChanged) {
+          notifications.push({ uid: nextUid, action: "assigned", slotType });
+        }
+        // Note: self-signups on schedule.html only write umpireSlots+needsUmpires,
+        // so nonSlotChanged will be false and we skip them correctly.
+      }
+
+      // For removals (filled→empty): always notify the umpire who was removed.
+      if (prevUid && !nextUid) {
+        notifications.push({ uid: prevUid, action: "removed", slotType });
+      }
+
+      // For swaps (uid A → uid B): notify both the removed and newly assigned umpire.
+      if (prevUid && nextUid && prevUid !== nextUid) {
+        notifications.push({ uid: prevUid, action: "removed",  slotType });
+        notifications.push({ uid: nextUid, action: "assigned", slotType });
+      }
+    }
+
+    if (!notifications.length) return;
+
+    // Load org settings once for email branding
+    let orgName = "Tri-Valley Baseball Umpires", coord = "", coordPhone = "";
+    try {
+      const orgSnap = await db.doc("config/orgSettings").get();
+      if (orgSnap.exists) {
+        const org = orgSnap.data();
+        orgName    = org.assocName        || orgName;
+        coord      = org.coordinatorName  || "";
+        coordPhone = org.coordinatorPhone || "";
+      }
+    } catch (_) {}
+
+    await Promise.allSettled(notifications.map(async ({ uid, action, slotType }) => {
+      let umpireName = "Umpire", umpireEmail = null;
+      try {
+        const snap = await db.doc(`umpires/${uid}`).get();
+        if (snap.exists) {
+          umpireName  = snap.data().name  || umpireName;
+          umpireEmail = snap.data().email || null;
+        }
+      } catch (_) {}
+
+      const isAssigned = action === "assigned";
+      const pushTitle  = isAssigned ? "📋 Game Assignment" : "🔔 Assignment Removed";
+      const pushBody   = isAssigned
+        ? `You've been assigned as ${slotType} on ${dateStr}${timeStr ? " at " + timeStr : ""} in ${gameCity || "—"}.`
+        : `Your ${slotType} assignment on ${dateStr}${timeStr ? " at " + timeStr : ""} in ${gameCity || "—"} has been removed.`;
+
+      // Push notification
+      try {
+        const tokenSnap = await db.doc(`notifications/${uid}`).get();
+        const token = tokenSnap.exists ? tokenSnap.data()?.token : null;
+        if (token) {
+          const result = await getMessaging().sendEachForMulticast({
+            tokens: [token],
+            notification: { title: pushTitle, body: pushBody },
+            webpush: { fcmOptions: { link: `${APP_URL}/schedule.html` } },
+          });
+          if (result.responses[0]?.error?.code === "messaging/registration-token-not-registered") {
+            await db.doc(`notifications/${uid}`).delete();
+          }
+        }
+      } catch (err) {
+        console.error("onGameSlotChanged push:", err);
+      }
+
+      // Email notification
+      if (!umpireEmail) return;
+      try {
+        const subject = isAssigned
+          ? `Game Assignment — ${slotType} on ${dateStr}`
+          : `Assignment Removed — ${slotType} on ${dateStr}`;
+
+        const bodyHtml = `
+          <div style="font-family:-apple-system,sans-serif;max-width:540px;margin:0 auto;color:#111">
+            <div style="background:#601929;color:#fff;padding:16px 24px;border-radius:8px 8px 0 0">
+              <strong style="font-size:1.1rem">${isAssigned ? "📋 Game Assignment" : "🔔 Assignment Removed"}</strong>
+            </div>
+            <div style="background:#f7f2f3;padding:20px 24px;border-radius:0 0 8px 8px;border:1px solid #d9b8bb;border-top:none">
+              <p>Hi ${umpireName},</p>
+              <p>${isAssigned
+                ? `You have been <strong>assigned</strong> to the following game as <strong>${slotType}</strong>.`
+                : `Your <strong>${slotType}</strong> assignment for the following game has been <strong>removed</strong> by an administrator.`}
+              </p>
+              <div style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:12px 16px;margin:16px 0;font-size:0.9rem">
+                <strong>Game Details</strong><br>
+                📅 ${dateStr}${timeStr ? " at " + timeStr : ""}<br>
+                📍 ${gameWhere || "—"}
+              </div>
+              ${isAssigned
+                ? `<p>Log in to view your full schedule and check in on game day.</p>`
+                : `<p>If you have questions about this change, contact ${coord ? coord + (coordPhone ? " at " + coordPhone : "") : "your coordinator"}.</p>`}
+              <p><a href="${APP_URL}/schedule.html" style="color:#601929">View your schedule →</a></p>
+              <hr style="border:none;border-top:1px solid #ddd;margin:16px 0">
+              <p style="font-size:0.8rem;color:#777">${orgName}${coord ? " · " + coord : ""}${coordPhone ? " · " + coordPhone : ""}</p>
+            </div>
+          </div>`;
+
+        const transport = buildTransport();
+        await transport.sendMail({
+          from:    `"${orgName}" <${GMAIL_USER.value()}>`,
+          to:      umpireEmail,
+          subject,
+          html:    bodyHtml,
+        });
+      } catch (err) {
+        console.error("onGameSlotChanged email:", err);
+      }
+    }));
+  }
+);

@@ -14,7 +14,6 @@ import {
   getDoc,
   doc,
   updateDoc,
-  addDoc,
   deleteDoc,
   query,
   orderBy,
@@ -25,7 +24,6 @@ import {
 
 let allGames       = [];
 let gameFilter     = "today";
-let currentRates   = { plate: 0, field: 0, extra: 0 };
 let facilitiesData = []; // [{ id, name, fields:[{name,notes}] }]
 let leaguesData    = []; // [{ id, name }] from leagues collection
 
@@ -73,13 +71,10 @@ async function loadFacilitiesIntoSelects() {
     const options = facilitiesData.map(f =>
       `<option value="${esc(f.id)}">${esc(f.name)}</option>`
     ).join("");
-    const addSel  = document.getElementById("gameFacility");
     const editSel = document.getElementById("editGameFacility");
-    if (addSel)  addSel.innerHTML  = `<option value="">-- None / Other --</option>${options}`;
     if (editSel) editSel.innerHTML = `<option value="">-- None / Other --</option>${options}`;
 
-    // Wire cascade listeners
-    addSel?.addEventListener("change",  () => cascadeFields("gameFacility",     "gameFieldSelect",     "gameField"));
+    // Wire cascade listener for edit modal
     editSel?.addEventListener("change", () => cascadeFields("editGameFacility", "editGameFieldSelect", "editGameField"));
   } catch (_) {}
 }
@@ -327,38 +322,7 @@ function openCancelModal(gameId) {
 // ── Schedule Makeup ───────────────────────────────────────────────────────────
 
 function scheduleMakeup(gameId) {
-  const g = allGames.find(g => g.id === gameId);
-  if (!g) return;
-  // Scroll to the Add Game form
-  const formEl = document.getElementById("addGameForm");
-  formEl?.scrollIntoView({ behavior: "smooth", block: "start" });
-  // Pre-fill matching fields; leave date blank so admin must pick the new date
-  const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
-  set("gameLeague",   g.league   || "");
-  set("gameCity",     g.city     || "");
-  set("gameDivision", g.division || "");
-  set("gameTime",     g.time     || "");
-  set("gameType",     g.type     || "");
-  set("gameHomeTeam", g.homeTeam || "");
-  set("gameAwayTeam", g.awayTeam || "");
-  set("gameDate",     "");  // must be chosen by admin
-  // Field text input
-  const fieldInp = document.getElementById("gameField");
-  const fieldSel = document.getElementById("gameFieldSelect");
-  if (fieldInp) { fieldInp.value = g.field || ""; fieldInp.style.display = ""; }
-  if (fieldSel) fieldSel.style.display = "none";
-  // Restore umpire slot checkboxes + pay rates from original game
-  document.querySelectorAll("#gameUmpireTypes input[type=checkbox]").forEach(cb => { cb.checked = false; });
-  document.querySelectorAll(".slot-pay-input").forEach(inp => { inp.disabled = true; inp.value = ""; });
-  (g.umpireSlots || []).forEach(slot => {
-    const cb = document.querySelector(`#gameUmpireTypes input[value="${slot.type}"]`);
-    if (cb) {
-      cb.checked = true;
-      const payInp = document.querySelector(`.slot-pay-input[data-slot-type="${slot.type}"]`);
-      if (payInp) { payInp.value = slot.payRate != null ? slot.payRate : ""; payInp.disabled = false; }
-    }
-  });
-  setMsg("addGameMessage", `ℹ Makeup game pre-filled from ${fmtDate(g.date)} rescheduled game — set a new date and submit.`, "info");
+  window.location.href = `admin-add-game.html?makeup=${encodeURIComponent(gameId)}`;
 }
 
 // Show/hide the reschedule note when radio changes
@@ -811,88 +775,6 @@ document.getElementById("assignModal").addEventListener("click", e => {
     document.getElementById("assignModal").style.display = "none";
 });
 
-// ── Add game form ─────────────────────────────────────────────────────────────
-
-document.getElementById("addGameForm").addEventListener("submit", async function(e) {
-  e.preventDefault();
-  const btn = document.getElementById("addGameBtn");
-
-  const checkedTypes = [...document.querySelectorAll("#gameUmpireTypes input:checked")].map(cb => cb.value);
-  if (checkedTypes.length === 0) {
-    document.getElementById("umpireTypesError").textContent = "Select at least one umpire position.";
-    return;
-  }
-  document.getElementById("umpireTypesError").textContent = "";
-
-  const league   = document.getElementById("gameLeague").value.trim();
-  const city     = document.getElementById("gameCity").value.trim();
-  const division = document.getElementById("gameDivision").value;
-  const date     = document.getElementById("gameDate").value;
-
-  if (!date)     { setMsg("addGameMessage", "Date is required.", "error"); return; }
-  if (!division) { setMsg("addGameMessage", "Division is required.", "error"); return; }
-  if (!league && !city) { setMsg("addGameMessage", "League or city is required.", "error"); return; }
-
-  btn.disabled = true;
-  setMsg("addGameMessage", "Adding game…", "info");
-  const time       = document.getElementById("gameTime").value;
-  const type       = document.getElementById("gameType").value;
-  const field      = getFieldValue("gameFieldSelect", "gameField");
-  const facilityId = document.getElementById("gameFacility")?.value || "";
-  const homeTeam   = document.getElementById("gameHomeTeam")?.value.trim() || "";
-  const awayTeam   = document.getElementById("gameAwayTeam")?.value.trim() || "";
-
-  // Build slots with per-slot pay from inline inputs
-  const umpireSlots = checkedTypes.map(t => {
-    const payInput = document.querySelector(`.slot-pay-input[data-slot-type="${t}"]`);
-    const payRate  = payInput ? (parseFloat(payInput.value) || 0) : 0;
-    return { type: t, assignedUid: null, assignedName: null, payRate };
-  });
-
-  try {
-    const gameData = {
-      league, city, division, date, time, type, field, facilityId,
-      umpireSlots,
-      needsUmpires: true,
-      cancelled: false,
-      createdAt: serverTimestamp()
-    };
-    if (homeTeam) gameData.homeTeam = homeTeam;
-    if (awayTeam) gameData.awayTeam = awayTeam;
-    await addDoc(collection(db, "games"), gameData);
-    setMsg("addGameMessage", "Game added!", "success");
-    this.reset();
-    // Reset field cascade back to text input
-    const fieldSel = document.getElementById("gameFieldSelect");
-    if (fieldSel) fieldSel.style.display = "none";
-    const fieldInp = document.getElementById("gameField");
-    if (fieldInp) fieldInp.style.display = "";
-    document.querySelectorAll("#gameUmpireTypes input[type=checkbox]").forEach(cb => cb.checked = false);
-    document.querySelectorAll(".slot-pay-input").forEach(inp => { inp.disabled = true; inp.value = ""; });
-    const homeTeamInp = document.getElementById("gameHomeTeam");
-    if (homeTeamInp) homeTeamInp.value = "";
-    const awayTeamInp = document.getElementById("gameAwayTeam");
-    if (awayTeamInp) awayTeamInp.value = "";
-    await loadGames();
-  } catch (err) {
-    setMsg("addGameMessage", err.message, "error");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-// ── Pay rates (load only for pre-filling Add Game form) ───────────────────────
-
-async function loadPayRates() {
-  try {
-    const snap = await getDoc(doc(db, "config", "payRates"));
-    if (snap.exists()) {
-      const r = snap.data();
-      currentRates = { plate: r.plate || 0, field: r.field || 0, extra: r.extra || 0 };
-      prefillSlotPays();
-    }
-  } catch (_) {}
-}
 
 async function loadLeagues() {
   try {
@@ -906,33 +788,13 @@ async function loadLeagues() {
 
 function populateLeagueSelects() {
   const opts = leaguesData.map(l => `<option value="${esc(l.name)}">${esc(l.name)}</option>`).join("");
-  ["gameLeague", "editGameLeague"].forEach(id => {
-    const sel = document.getElementById(id);
-    if (!sel) return;
+  const sel = document.getElementById("editGameLeague");
+  if (sel) {
     const cur = sel.value;
     sel.innerHTML = `<option value="">— None —</option>${opts}`;
     if (cur) sel.value = cur;
-  });
-}
-
-function prefillSlotPays() {
-  const map = { Plate: currentRates.plate, Field: currentRates.field, Extra: currentRates.extra };
-  document.querySelectorAll(".slot-pay-input").forEach(input => {
-    if (!input.value) input.value = map[input.dataset.slotType] || "";
-  });
-}
-
-// Pre-fill slot pay inputs when a checkbox is checked
-document.getElementById("gameUmpireTypes").addEventListener("change", e => {
-  if (e.target.type !== "checkbox") return;
-  const type     = e.target.value;
-  const payInput = document.querySelector(`.slot-pay-input[data-slot-type="${type}"]`);
-  if (!payInput) return;
-  if (e.target.checked && !payInput.value) {
-    payInput.value = currentRates[type.toLowerCase()] || "";
   }
-  payInput.disabled = !e.target.checked;
-});
+}
 
 // ── Edit modal wiring ─────────────────────────────────────────────────────────
 
@@ -1143,7 +1005,6 @@ authReadyPromise.then(() => {
   document.getElementById("adminContent").style.display = "";
   document.getElementById("noAccess").style.display = "none";
 
-  loadPayRates();
   loadLeagues();
   loadGames();
   loadFacilitiesIntoSelects();

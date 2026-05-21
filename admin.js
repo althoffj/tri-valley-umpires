@@ -380,7 +380,7 @@ async function loadAdminQuickStats() {
 
     const upcoming = upcomingSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(g => g.date <= weekEnd && !g.cancelled && g.needsUmpires !== false)
+      .filter(g => g.date <= weekEnd && !g.cancelled)
       .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "").localeCompare(b.time || "")));
     const todayGames = upcoming.filter(g => g.date === today);
 
@@ -429,7 +429,7 @@ async function loadAdminQuickStats() {
         color: payColor, link: "admin-payroll.html" },
     ].map(c => `
       <div class="analytics-card" style="${c.link ? "cursor:pointer" : ""}"
-           ${c.link ? `onclick="location.href='${c.link}'"` : ""}>
+           ${c.link ? `data-link="${esc(c.link)}"` : ""}>
         <div class="analytics-card-value" style="color:${c.color}">${c.value}</div>
         <div class="analytics-card-label">${c.label}</div>
         <div style="font-size:0.72rem;color:var(--light-text);margin-top:2px">${c.sub}</div>
@@ -437,8 +437,19 @@ async function loadAdminQuickStats() {
 
     if (todayGames.length === 0) { todayEl.innerHTML = ""; return; }
 
-    const rows = todayGames.map(g => {
+    // Home games first, then away games
+    const sortedToday = [...todayGames].sort((a, b) => {
+      const aAway = a.isAway ? 1 : 0;
+      const bAway = b.isAway ? 1 : 0;
+      if (aAway !== bAway) return aAway - bAway;
+      return (a.time || "").localeCompare(b.time || "");
+    });
+
+    const rows = sortedToday.map(g => {
       const time  = g.time ? fmtTime(g.time) : "—";
+      const awayBadge = g.isAway
+        ? `<span style="font-size:0.68rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 4px;margin-right:4px">AWAY</span>`
+        : "";
       const slots = (g.umpireSlots || []).map(s => {
         const who = s.assignedName
           ? `<span style="color:#b8f2c4">${esc(s.assignedName)}</span>`
@@ -448,7 +459,7 @@ async function loadAdminQuickStats() {
       }).join(" &nbsp; ");
       return `<tr>
         <td style="white-space:nowrap">${esc(time)}</td>
-        <td>${esc(g.division || "")}</td>
+        <td>${awayBadge}${esc(g.division || "")}</td>
         <td>${esc(g.field || "")}</td>
         <td>${slots}</td>
       </tr>`;
@@ -471,6 +482,9 @@ async function loadAdminQuickStats() {
 // ── Event delegation ──────────────────────────────────────────────────────────
 
 document.addEventListener("click", e => {
+  const card = e.target.closest(".analytics-card[data-link]");
+  if (card) { location.href = card.dataset.link; return; }
+
   const approveBtn = e.target.closest(".approve-btn");
   if (approveBtn) { approveUmpire(approveBtn.dataset.uid); return; }
 

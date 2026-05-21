@@ -33,7 +33,12 @@ import {
 document.getElementById("scheduleYear").textContent = new Date().getFullYear();
 
 let games = [];
-let activeFilter    = "all";
+let statusFilter  = "all";   // all | needs | filled | mine
+let dateFilter    = "today"; // today | week | month | upcoming | past | all | custom
+let dateFrom      = "";      // YYYY-MM-DD  (custom range start)
+let dateTo        = "";      // YYYY-MM-DD  (custom range end)
+let cityFilter    = "";      // "" = all cities
+let umpireFilter  = "";      // "" = all umpires (admin only)
 let pendingGameId   = null;
 let pendingSlotType = null;
 
@@ -171,12 +176,57 @@ function allSlotsFilled(game) {
 // ── Filtering ─────────────────────────────────────────────────────────────────
 
 function gameMatchesFilter(game) {
-  switch (activeFilter) {
-    case "needs":  return !game.cancelled && openSlots(game).length > 0;
-    case "filled": return !game.cancelled && allSlotsFilled(game);
-    case "mine":   return mySlots(game).length > 0;
-    default:       return true;
+  const today = todayISO();
+
+  // ── Status filter ────────────────────────────────────────────────────────
+  if (statusFilter === "needs"  && (game.cancelled || openSlots(game).length === 0)) return false;
+  if (statusFilter === "filled" && (game.cancelled || !allSlotsFilled(game)))        return false;
+  if (statusFilter === "mine"   && mySlots(game).length === 0)                       return false;
+
+  // ── Date filter ──────────────────────────────────────────────────────────
+  switch (dateFilter) {
+    case "today":
+      if (game.date !== today) return false;
+      break;
+    case "week": {
+      const end = weekEndISO();
+      if (game.date < today || game.date > end) return false;
+      break;
+    }
+    case "month": {
+      const [y, m] = today.split("-");
+      const monthStart = `${y}-${m}-01`;
+      const monthEnd   = new Date(Number(y), Number(m), 0)
+        .toISOString().slice(0, 10);
+      if (game.date < monthStart || game.date > monthEnd) return false;
+      break;
+    }
+    case "upcoming":
+      if (game.date < today) return false;
+      break;
+    case "past":
+      if (game.date >= today) return false;
+      break;
+    case "custom":
+      if (dateFrom && game.date < dateFrom) return false;
+      if (dateTo   && game.date > dateTo)   return false;
+      break;
+    // "all" — no restriction
   }
+
+  // ── City filter ──────────────────────────────────────────────────────────
+  if (cityFilter && (game.city || "") !== cityFilter) return false;
+
+  // ── Umpire filter (admin only) ───────────────────────────────────────────
+  if (umpireFilter && !getSlots(game).some(s => s.assignedUid === umpireFilter)) return false;
+
+  return true;
+}
+
+function weekEndISO() {
+  const d = new Date();
+  d.setDate(d.getDate() + 6);
+  return d.toISOString().slice(0, 10);
 }
 
 // ── Pay summary ───────────────────────────────────────────────────────────────
@@ -184,7 +234,7 @@ function gameMatchesFilter(game) {
 function renderPaySummary() {
   const el = document.getElementById("paySummary");
   if (!el) return;
-  if (activeFilter !== "mine") { el.style.display = "none"; return; }
+  if (statusFilter !== "mine") { el.style.display = "none"; return; }
 
   const mine = games.filter(g => mySlots(g).length > 0);
   if (mine.length === 0) { el.style.display = "none"; return; }
@@ -201,13 +251,30 @@ function renderPaySummary() {
 function renderCount() {
   const el = document.getElementById("signupCount");
   if (!el) return;
-  const active     = games.filter(g => !g.cancelled);
-  const totalSlots = active.reduce((n, g) => n + getSlots(g).length, 0);
+
+  // Visible games after all filters (same set rendered in the table)
+  const visible = games.filter(g => getSlots(g).length > 0).filter(gameMatchesFilter);
+  const active  = visible.filter(g => !g.cancelled);
+
+  if (visible.length === 0) {
+    el.textContent = "No games match this filter.";
+    return;
+  }
+
+  const totalSlots  = active.reduce((n, g) => n + getSlots(g).length, 0);
   const filledSlots = active.reduce((n, g) => n + getSlots(g).filter(s => s.assignedUid).length, 0);
   const openSlotCount = totalSlots - filledSlots;
+
+  // Label for active date filter
+  const dateLabels = { today:"today", week:"this week", month:"this month",
+    upcoming:"upcoming", past:"past", all:"all time", custom:"custom range" };
+  const dateLabel = dateLabels[dateFilter] || "";
+  const cityLabel = cityFilter ? ` · ${cityFilter}` : "";
+  const prefix    = `${active.length} game${active.length !== 1 ? "s" : ""} ${dateLabel}${cityLabel} — `;
+
   el.textContent = totalSlots === 0
-    ? "No games loaded yet."
-    : `${filledSlots} of ${totalSlots} slot${totalSlots !== 1 ? "s" : ""} filled — ${openSlotCount} still available`;
+    ? `${active.length} game${active.length !== 1 ? "s" : ""} ${dateLabel}${cityLabel}`
+    : `${prefix}${filledSlots} of ${totalSlots} slot${totalSlots !== 1 ? "s" : ""} filled, ${openSlotCount} open`;
 }
 
 // ── Game Day bar ──────────────────────────────────────────────────────────────
@@ -230,7 +297,7 @@ async function getShedCodes() {
     const snap = await getDocs(collection(db, "facilityCodes"));
     shedCodesCache = {};
     snap.docs.forEach(d => { shedCodesCache[d.id] = d.data().shedCode || ""; });
-  } catch (_) { shedCodesCache = {}; }
+  } catch (_) { return {}; } // don't cache on error — retry next call
   return shedCodesCache;
 }
 
@@ -244,6 +311,91 @@ function matchFacility(facilities, cityName) {
 }
 
 // targetUid: the umpire being checked in. Defaults to current user.
+// ── Shed code dialog shown after a successful check-in ────────────────────────
+
+function showShedCodeDialog(shedCode, facilityName, gameCity, gameNotes) {
+  const overlay = document.createElement("div");
+  overlay.style.cssText = [
+    "position:fixed", "inset:0", "background:rgba(0,0,0,0.65)",
+    "z-index:99998", "display:flex", "align-items:center", "justify-content:center",
+    "padding:16px"
+  ].join(";");
+
+  const box = document.createElement("div");
+  box.style.cssText = [
+    "background:#1e1e2e", "color:#e8e8f0", "padding:32px 28px",
+    "border-radius:14px", "max-width:380px", "width:100%",
+    "box-shadow:0 8px 32px rgba(0,0,0,0.55)", "font-family:inherit",
+    "text-align:center"
+  ].join(";");
+
+  const title = document.createElement("p");
+  title.style.cssText = "margin:0 0 6px;font-size:1rem;color:var(--light-text,#aaa)";
+  title.textContent = "✓ Checked In";
+
+  const loc = document.createElement("p");
+  loc.style.cssText = "margin:0 0 20px;font-size:0.9rem;color:var(--light-text,#aaa)";
+  loc.textContent = facilityName || gameCity || "";
+
+  const label = document.createElement("p");
+  label.style.cssText = "margin:0 0 8px;font-size:0.85rem;color:var(--light-text,#aaa);letter-spacing:0.04em;text-transform:uppercase";
+  label.textContent = "🔑 Shed Code";
+
+  const codeEl = document.createElement("div");
+  codeEl.style.cssText = [
+    "font-size:2.4rem", "font-weight:700", "letter-spacing:0.12em",
+    "color:#f0a500", "margin:0 0 28px",
+    "padding:14px 20px", "background:rgba(240,165,0,0.1)",
+    "border:2px solid rgba(240,165,0,0.35)", "border-radius:10px",
+    "user-select:all"
+  ].join(";");
+  codeEl.textContent = shedCode;
+
+  const dismissBtn = document.createElement("button");
+  dismissBtn.textContent   = "Got It";
+  dismissBtn.className     = "btn";
+  dismissBtn.style.cssText = "width:100%;padding:10px;font-size:1rem";
+
+  function close() {
+    overlay.remove();
+    document.removeEventListener("keydown", onKey);
+  }
+  function onKey(e) {
+    if (e.key === "Escape" || e.key === "Enter") close();
+  }
+  dismissBtn.addEventListener("click", close);
+  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", onKey);
+
+  const children = [title];
+  if (loc.textContent) children.push(loc);
+  children.push(label, codeEl);
+
+  // Game notes — shown below the shed code if present
+  if (gameNotes) {
+    const notesEl = document.createElement("div");
+    notesEl.style.cssText = [
+      "text-align:left", "background:rgba(255,255,255,0.05)",
+      "border:1px solid #444", "border-radius:8px",
+      "padding:12px 14px", "margin:0 0 20px",
+      "font-size:0.88rem", "color:#e8e8f0", "white-space:pre-wrap", "word-break:break-word"
+    ].join(";");
+    const notesLabel = document.createElement("div");
+    notesLabel.style.cssText = "font-size:0.75rem;color:var(--light-text,#aaa);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px";
+    notesLabel.textContent = "📋 Game Notes";
+    const notesText = document.createElement("div");
+    notesText.textContent = gameNotes;
+    notesEl.append(notesLabel, notesText);
+    children.push(notesEl);
+  }
+
+  children.push(dismissBtn);
+  box.append(...children);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  dismissBtn.focus();
+}
+
 // Admins can pass any umpire's uid to check in on their behalf.
 async function checkIn(gameId, slotType, targetUid) {
   const user = getCurrentUser();
@@ -273,6 +425,15 @@ async function checkIn(gameId, slotType, targetUid) {
     if (g) g.umpireSlots = updatedSlots;
     _gameDayBarCache = null;
     renderGameDayBar();
+
+    // Show shed code dialog for the checking-in umpire (not admin proxy check-ins)
+    if (!targetUid) {
+      const [facilities, shedCodes] = await Promise.all([getFacilities(), getShedCodes()]);
+      const game     = games.find(g => g.id === gameId);
+      const facility = game ? matchFacility(facilities, game.city) : null;
+      const code     = facility ? (shedCodes[facility.id] || "") : "";
+      if (code || game?.notes) showShedCodeDialog(code, facility?.name || "", game?.city || "", game?.notes || "");
+    }
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = "Check In"; }
     showToast(err.message);
@@ -586,8 +747,8 @@ async function renderGameDayBar() {
       where("date", "==", today),
       orderBy("time")
     ));
-    const all = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(g => !g.cancelled);
-    // Admins see every game today; umpires see only their own games
+    const all = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(g => !g.cancelled && !g.isAway);
+    // Admins see every home game today; umpires see only their own assigned home games
     todayGames = admin ? all : all.filter(g => getSlots(g).some(s => s.assignedUid === uid));
   } catch (_) {
     bar.style.display = "none";
@@ -692,6 +853,11 @@ function buildGameRow(g) {
         ? `<span style="font-size:0.72rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px;vertical-align:middle">AWAY</span>${esc(g.awayTeam)} <span style="color:var(--light-text)">@</span> ${esc(g.homeTeam)}`
         : `${esc(g.homeTeam)} <span style="color:var(--light-text)">vs</span> ${esc(g.awayTeam)}`)
     : "—";
+  const notesRow = (g.notes && (isApproved() || isAdmin()))
+    ? `<tr><td colspan="8" style="padding:0 8px 7px 14px;border-top:none">
+        <span style="font-size:0.8rem;color:#ffe066">📋 ${esc(g.notes)}</span>
+       </td></tr>`
+    : "";
   return `
     <tr>
       <td>${esc(fmtDate(g.date))} ${dateBadge(g)}</td>
@@ -702,12 +868,48 @@ function buildGameRow(g) {
       <td>${esc(g.field || "—")}</td>
       <td class="${buildStatusClass(g)}">${buildStatusCell(g)}</td>
       <td style="white-space:nowrap">${buildActionCell(g)}</td>
-    </tr>`;
+    </tr>${notesRow}`;
+}
+
+// ── Populate city + umpire filter dropdowns from current game set ─────────────
+
+function populateSecondaryFilters() {
+  // City dropdown — unique cities across all loaded games that have slots
+  const cityEl = document.getElementById("cityFilter");
+  if (cityEl) {
+    const cities = [...new Set(
+      games.filter(g => getSlots(g).length > 0 && g.city).map(g => g.city).sort()
+    )];
+    const prev = cityEl.value;
+    cityEl.innerHTML = `<option value="">All Cities</option>` +
+      cities.map(c => `<option value="${esc(c)}"${c === prev ? " selected" : ""}>${esc(c)}</option>`).join("");
+  }
+
+  // Umpire dropdown — admin only; unique assigned umpires across all loaded games
+  const umpEl = document.getElementById("umpireFilterSel");
+  if (umpEl) {
+    if (!isAdmin()) { umpEl.closest("#umpireFilterWrap")?.style && (umpEl.closest("#umpireFilterWrap").style.display = "none"); }
+    else {
+      umpEl.closest("#umpireFilterWrap").style.display = "";
+      const seen = {};
+      games.forEach(g => getSlots(g).forEach(s => {
+        if (s.assignedUid && s.assignedName) seen[s.assignedUid] = s.assignedName;
+      }));
+      const prev = umpEl.value;
+      const sorted = Object.entries(seen).sort((a, b) => a[1].localeCompare(b[1]));
+      umpEl.innerHTML = `<option value="">All Umpires</option>` +
+        sorted.map(([uid, name]) =>
+          `<option value="${esc(uid)}"${uid === prev ? " selected" : ""}>${esc(name)}</option>`
+        ).join("");
+    }
+  }
 }
 
 function renderGameRows() {
   const container = document.getElementById("gameSchedule");
   if (!container) return;
+
+  populateSecondaryFilters();
 
   // Exclude games with no umpire slots configured — they have nothing for umpires to sign up for
   const visible = games.filter(g => getSlots(g).length > 0).filter(gameMatchesFilter);
@@ -780,7 +982,6 @@ async function loadGames() {
     const [snap] = await Promise.all([
       getDocs(query(
         collection(db, "games"),
-        where("needsUmpires", "==", true),
         orderBy("date"),
         orderBy("time")
       )),
@@ -1127,10 +1328,22 @@ document.addEventListener("click", e => {
 
   const filterBtn = e.target.closest(".filter-btn");
   if (filterBtn) {
-    activeFilter = filterBtn.dataset.filter;
+    statusFilter = filterBtn.dataset.filter;
     document.querySelectorAll(".filter-btn").forEach(b =>
-      b.classList.toggle("filter-active", b.dataset.filter === activeFilter)
+      b.classList.toggle("filter-active", b.dataset.filter === statusFilter)
     );
+    renderGameRows();
+    return;
+  }
+
+  const dateBtn = e.target.closest(".date-filter-btn");
+  if (dateBtn) {
+    dateFilter = dateBtn.dataset.date;
+    document.querySelectorAll(".date-filter-btn").forEach(b =>
+      b.classList.toggle("active", b.dataset.date === dateFilter)
+    );
+    const customRow = document.getElementById("customDateRow");
+    if (customRow) customRow.style.display = dateFilter === "custom" ? "flex" : "none";
     renderGameRows();
     return;
   }
@@ -1180,6 +1393,44 @@ document.addEventListener("click", e => {
 
 document.getElementById("confirmSignupBtn").addEventListener("click", () => {
   if (pendingGameId && pendingSlotType) claimSlot(pendingGameId, pendingSlotType);
+});
+
+// ── Secondary filter change listeners ────────────────────────────────────────
+
+document.getElementById("cityFilter")?.addEventListener("change", function () {
+  cityFilter = this.value;
+  renderGameRows();
+});
+
+document.getElementById("umpireFilterSel")?.addEventListener("change", function () {
+  umpireFilter = this.value;
+  renderGameRows();
+});
+
+document.getElementById("dateFrom")?.addEventListener("change", function () {
+  dateFrom = this.value;
+  if (dateFilter !== "custom") {
+    dateFilter = "custom";
+    document.querySelectorAll(".date-filter-btn").forEach(b =>
+      b.classList.toggle("active", b.dataset.date === "custom")
+    );
+    const customRow = document.getElementById("customDateRow");
+    if (customRow) customRow.style.display = "flex";
+  }
+  renderGameRows();
+});
+
+document.getElementById("dateTo")?.addEventListener("change", function () {
+  dateTo = this.value;
+  if (dateFilter !== "custom") {
+    dateFilter = "custom";
+    document.querySelectorAll(".date-filter-btn").forEach(b =>
+      b.classList.toggle("active", b.dataset.date === "custom")
+    );
+    const customRow = document.getElementById("customDateRow");
+    if (customRow) customRow.style.display = "flex";
+  }
+  renderGameRows();
 });
 
 document.getElementById("cancelSignupBtn").addEventListener("click", closeModal);

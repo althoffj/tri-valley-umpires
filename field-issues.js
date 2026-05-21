@@ -1,7 +1,7 @@
 // field-issues.js — Submit field issue reports; view own submissions
 import { db } from "./firebase.js";
 import { authReadyPromise, isApproved, isAdmin, getCurrentUser } from "./auth.js";
-import { esc, setMsg } from "./utils.js";
+import { esc, setMsg, fmtDate } from "./utils.js";
 
 import {
   collection,

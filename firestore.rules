@@ -35,8 +35,8 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
       allow update: if isAdmin() ||
         (isApproved() &&
-         resource.data.cancelled == false &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['umpireSlots']));
+         resource.data.get('cancelled', false) != true &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['umpireSlots', 'needsUmpires']));
     }
 
     // Umpires: own profile read/create; admin can read/update all;
