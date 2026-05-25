@@ -403,7 +403,7 @@ async function loadAdminQuickStats() {
     let outstanding = 0;
     allGamesSnap.docs.forEach(d => {
       const g = d.data();
-      if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") return;
+      if (g.cancelled) return;
       (g.umpireSlots || []).forEach(s => {
         if (s.assignedUid && !s.paid) outstanding += Number(s.payRate ?? g.payRate ?? 0);
       });
@@ -590,7 +590,7 @@ async function resolveCancellation(requestId, decision) {
         if (!snap.exists()) throw new Error("Game not found.");
         const slots = (snap.data().umpireSlots || []).map(s =>
           s.type === req.slotType && s.assignedUid === req.uid
-            ? { type: s.type, payRate: s.payRate ?? null }   // strip assignment
+            ? { type: s.type, payRate: s.payRate ?? null, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false }
             : s
         );
         const needsUmpires = slots.some(s => !s.assignedUid);

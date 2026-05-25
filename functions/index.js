@@ -756,7 +756,9 @@ exports.commitCalendarImport = onCall({ cors: CORS }, async request => {
   const gamesSnap        = await db.collection("games").get();
   const existingExtIdSet = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
 
-  const batch = db.batch();
+  const BATCH_LIMIT = 499;
+  let batch = db.batch();
+  let opsInBatch = 0;
   let added = 0;
   for (const g of games) {
     if (g.externalId && existingExtIdSet.has(g.externalId)) continue; // race-condition guard
@@ -781,8 +783,14 @@ exports.commitCalendarImport = onCall({ cors: CORS }, async request => {
       importedBy:  request.auth.uid,
     });
     added++;
+    opsInBatch++;
+    if (opsInBatch >= BATCH_LIMIT) {
+      await batch.commit();
+      batch = db.batch();
+      opsInBatch = 0;
+    }
   }
-  await batch.commit();
+  if (opsInBatch > 0) await batch.commit();
   return { added };
 });
 
@@ -1943,7 +1951,7 @@ exports.emailPayStub = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PASS] },
   const owed    = rows.reduce((s, r) => s + r.pay, 0);
   const paid    = rows.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
   const balance = owed - paid;
-  const today   = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const today   = new Date().toLocaleDateString("en-US", { timeZone: "America/Chicago", year: "numeric", month: "long", day: "numeric" });
 
   function fmtMoney(n) { return `$${n.toFixed(2)}`; }
   function fmtDt(iso) {
@@ -3042,7 +3050,7 @@ exports.onCoachRegistration = onDocumentWritten("coaches/{uid}", async (event) =
 
 // Notify admin when a coach submits an umpire request
 exports.onUmpireRequest = onDocumentWritten("umpireRequests/{requestId}", async (event) => {
-  if (!event.data.after.exists) return; // deletion
+  if (!event.data.after || !event.data.after.exists) return; // deletion
   const isCreate = !event.data.before.exists;
   if (!isCreate) return; // only notify on creation
   const db = getFirestore();
@@ -3155,7 +3163,7 @@ exports.fetchFacilityIcs = onCall({ cors: CORS }, async request => {
 
 // Notify admin when a coach submits a practice request
 exports.onPracticeRequest = onDocumentWritten("practiceRequests/{requestId}", async (event) => {
-  if (!event.data.after.exists) return;
+  if (!event.data.after || !event.data.after.exists) return;
   const isCreate = !event.data.before.exists;
   if (!isCreate) return;
   const db = getFirestore();

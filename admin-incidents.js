@@ -58,8 +58,6 @@ function renderIncidents() {
   }
 
   listEl.innerHTML = filtered.map(({ id: rid, data: r }) => {
-      const r   = d.data();
-      const rid = d.id;
 
       const submitted = r.submittedAt?.toDate
         ? r.submittedAt.toDate().toLocaleDateString("en-US", {

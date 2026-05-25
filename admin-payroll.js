@@ -5,7 +5,7 @@ import { getOrgSettings, getSeasonRange } from "./org.js";
 import { esc, fmtDate, fmtTime, todayISO, setMsg, thisYearRange, lastYearRange, showToast, showConfirm } from "./utils.js";
 
 import {
-  collection, getDocs, getDoc, addDoc, deleteDoc, doc, updateDoc, writeBatch, query, orderBy, serverTimestamp
+  collection, getDocs, getDoc, addDoc, deleteDoc, doc, updateDoc, writeBatch, query, orderBy, serverTimestamp, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import {
   getFunctions,
@@ -336,15 +336,24 @@ function renderDetailTable() {
 async function togglePaid(gameId, slotType, uid) {
   const ref = doc(db, "games", gameId);
   try {
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return;
-    const slots = (snap.data().umpireSlots ?? []).map(s =>
-      (s.type === slotType && s.assignedUid === uid) ? { ...s, paid: !s.paid } : s
-    );
-    await updateDoc(ref, { umpireSlots: slots });
-    const row = payrollRows.find(r => r.gameId === gameId && r.slotType === slotType && r.uid === uid);
-    if (row) row.paid = !row.paid;
-    renderAll();
+    let newPaid;
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return;
+      const slots = (snap.data().umpireSlots ?? []).map(s => {
+        if (s.type === slotType && s.assignedUid === uid) {
+          newPaid = !s.paid;
+          return { ...s, paid: newPaid };
+        }
+        return s;
+      });
+      tx.update(ref, { umpireSlots: slots });
+    });
+    if (newPaid !== undefined) {
+      const row = payrollRows.find(r => r.gameId === gameId && r.slotType === slotType && r.uid === uid);
+      if (row) row.paid = newPaid;
+      renderAll();
+    }
   } catch (err) {
     console.error(err);
     showToast("Error updating paid status.");
@@ -393,7 +402,7 @@ async function generatePayStub(uid) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pay Stub — ${name}</title>
+  <title>Pay Stub — ${esc(name)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -561,7 +570,7 @@ async function generatePayStub(uid) {
   <div class="stub-info">
     <div>
       <div class="stub-info-label">Umpire</div>
-      <div class="stub-info-value">${name}</div>
+      <div class="stub-info-value">${esc(name)}</div>
     </div>
     <div>
       <div class="stub-info-label">Pay Period</div>
