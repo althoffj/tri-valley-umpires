@@ -6,7 +6,7 @@ import { esc, fmtDate, fmtTime, fmtTime as fmt12, todayISO, showToast, showConfi
 
 import {
   collection, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
-  doc, query, where, orderBy, serverTimestamp
+  doc, query, where, orderBy, serverTimestamp, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const fns       = getFunctions(app);
@@ -1138,12 +1138,15 @@ async function doSchedAssign(uid, name) {
   msgEl.className   = "signup-message info";
   try {
     const gameRef = doc(db, "games", gameId);
-    const snap    = await getDoc(gameRef);
-    if (!snap.exists()) throw new Error("Game not found.");
-    const slots = (snap.data().umpireSlots || []).map(s =>
-      s.type === slotType ? { ...s, assignedUid: uid, assignedName: name } : s
-    );
-    await updateDoc(gameRef, { umpireSlots: slots });
+    let slots;
+    await runTransaction(db, async txn => {
+      const snap = await txn.get(gameRef);
+      if (!snap.exists()) throw new Error("Game not found.");
+      slots = (snap.data().umpireSlots || []).map(s =>
+        s.type === slotType ? { ...s, assignedUid: uid, assignedName: name } : s
+      );
+      txn.update(gameRef, { umpireSlots: slots });
+    });
     // Update local cache and reopen edit modal with refreshed data
     if (seCurrentGame) seCurrentGame.umpireSlots = slots;
     const idx = calGamesCache.findIndex(g => g.id === gameId);
@@ -1160,16 +1163,21 @@ async function unassignSchedSlot(gameId, slotType) {
   if (!await showConfirm(`Remove the umpire from the ${slotType} slot?`)) return;
   try {
     const gameRef = doc(db, "games", gameId);
-    const snap    = await getDoc(gameRef);
-    if (!snap.exists()) return;
-    const slots = (snap.data().umpireSlots || []).map(s =>
-      s.type === slotType ? { ...s, assignedUid: null, assignedName: null } : s
-    );
-    await updateDoc(gameRef, { umpireSlots: slots, needsUmpires: true });
-    if (seCurrentGame) seCurrentGame.umpireSlots = slots;
-    const idx = calGamesCache.findIndex(g => g.id === gameId);
-    if (idx >= 0) calGamesCache[idx].umpireSlots = slots;
-    renderSeSlots();
+    let slots;
+    await runTransaction(db, async txn => {
+      const snap = await txn.get(gameRef);
+      if (!snap.exists()) return;
+      slots = (snap.data().umpireSlots || []).map(s =>
+        s.type === slotType ? { ...s, assignedUid: null, assignedName: null } : s
+      );
+      txn.update(gameRef, { umpireSlots: slots, needsUmpires: true });
+    });
+    if (slots) {
+      if (seCurrentGame) seCurrentGame.umpireSlots = slots;
+      const idx = calGamesCache.findIndex(g => g.id === gameId);
+      if (idx >= 0) calGamesCache[idx].umpireSlots = slots;
+      renderSeSlots();
+    }
   } catch (err) {
     showToast("Error: " + err.message);
   }

@@ -4,6 +4,7 @@ import {
   getDoc,
   doc,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { esc } from "./utils.js";
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -181,7 +182,7 @@ function _applyToDOM() {
   // ── Division datalists (combo inputs — suggests but allows freeform) ───────
   document.querySelectorAll("datalist[data-org-divisions]").forEach(dl => {
     dl.innerHTML = (s.activeDivisions || [])
-      .map(div => `<option value="${div}"></option>`).join("");
+      .map(div => `<option value="${esc(div)}"></option>`).join("");
   });
 
   // ── Division checkbox groups ───────────────────────────────────────────────
@@ -189,8 +190,8 @@ function _applyToDOM() {
     const checked = [...wrap.querySelectorAll("input[type=checkbox]:checked")].map(cb => cb.value);
     wrap.innerHTML = (s.activeDivisions || []).map(div =>
       `<label style="display:flex;align-items:center;gap:5px;font-weight:normal;cursor:pointer;white-space:nowrap">
-         <input type="checkbox" class="org-div-cb" value="${div}"${checked.includes(div) ? " checked" : ""} />
-         ${div}
+         <input type="checkbox" class="org-div-cb" value="${esc(div)}"${checked.includes(div) ? " checked" : ""} />
+         ${esc(div)}
        </label>`
     ).join("");
   });
@@ -225,7 +226,7 @@ function _applyToDOM() {
   // ── City program datalists ────────────────────────────────────────────────
   document.querySelectorAll("datalist[data-org-city-programs]").forEach(dl => {
     dl.innerHTML = (s.cityPrograms || [])
-      .map(prog => `<option value="${prog}"></option>`).join("");
+      .map(prog => `<option value="${esc(prog)}"></option>`).join("");
   });
 
   // ── Page title ────────────────────────────────────────────────────────────

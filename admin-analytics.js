@@ -446,7 +446,7 @@ function getMondayISO(d) {
   const copy = new Date(d);
   const day  = copy.getDay();
   copy.setDate(copy.getDate() + (day === 0 ? -6 : 1 - day));
-  return copy.toISOString().slice(0, 10);
+  return `${copy.getFullYear()}-${String(copy.getMonth() + 1).padStart(2, "0")}-${String(copy.getDate()).padStart(2, "0")}`;
 }
 
 function fmtWeek(iso) {

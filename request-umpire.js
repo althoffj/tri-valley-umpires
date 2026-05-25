@@ -165,7 +165,7 @@ document.getElementById("requestForm")?.addEventListener("submit", async functio
 
   const btn = document.getElementById("submitRequestBtn");
   btn.disabled = true;
-  setMsg("Submitting request…", "info");
+  setMsg("requestMessage", "Submitting request…", "info");
 
   const positions = [];
   if (needPlate) positions.push({ type: "Plate", pay: payPlate });
@@ -217,7 +217,7 @@ document.getElementById("requestForm")?.addEventListener("submit", async functio
       });
     } catch (_) {}
 
-    setMsg("Request submitted! You'll receive a confirmation email. An administrator will follow up to confirm availability.", "success");
+    setMsg("requestMessage", "Request submitted! You'll receive a confirmation email. An administrator will follow up to confirm availability.", "success");
     document.getElementById("requestForm").reset();
     // Re-init cascade after reset
     document.getElementById("reqFieldSelect").style.display = "none";
@@ -225,7 +225,7 @@ document.getElementById("requestForm")?.addEventListener("submit", async functio
     document.getElementById("reqFieldOther").placeholder = "Field name (optional)";
   } catch (err) {
     console.error(err);
-    setMsg("Error submitting request. Please try again or contact Jeff Althoff at 605-380-0229.", "error");
+    setMsg("requestMessage", "Error submitting request. Please try again or contact Jeff Althoff at 605-380-0229.", "error");
     btn.disabled = false;
   }
 });

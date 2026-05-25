@@ -302,11 +302,12 @@ async function applyDelay(tid, minutes) {
       if (!origTimes[g.id]) origTimes[g.id] = g.time || "";
     });
 
-    const updates = linked.map(g => {
-      const newTime = addMinutesToTime(g.time || "09:00", minutes);
-      g.time = newTime;
-      return updateDoc(doc(db, "games", g.id), { time: newTime });
-    });
+    const planned = linked.map(g => ({
+      game:    g,
+      newTime: addMinutesToTime(g.time || "09:00", minutes),
+      ref:     doc(db, "games", g.id)
+    }));
+    const updates = planned.map(p => updateDoc(p.ref, { time: p.newTime }));
 
     const newDelay = (t.rainDelayMinutes || 0) + minutes;
     await Promise.all([
@@ -317,6 +318,8 @@ async function applyDelay(tid, minutes) {
       })
     ]);
 
+    // Mutate in-memory only after all writes succeed
+    planned.forEach(p => { p.game.time = p.newTime; });
     t.rainDelayMinutes = newDelay;
     t.originalTimes    = origTimes;
 
@@ -397,8 +400,9 @@ async function swapUmpires(tid, gid1, gid2) {
       tournamentName: t.name,
       game1:  { id: gid1, field: g1.field || "", time: label1 },
       game2:  { id: gid2, field: g2.field || "", time: label2 },
-      umpires1: slots1.filter(s => s.assignedUid).map(s => ({ uid: s.assignedUid, name: s.assignedName || "" })),
-      umpires2: slots2.filter(s => s.assignedUid).map(s => ({ uid: s.assignedUid, name: s.assignedName || "" }))
+      // After the swap, game1 has slots2 and game2 has slots1
+      umpires1: slots2.filter(s => s.assignedUid).map(s => ({ uid: s.assignedUid, name: s.assignedName || "" })),
+      umpires2: slots1.filter(s => s.assignedUid).map(s => ({ uid: s.assignedUid, name: s.assignedName || "" }))
     }).catch(err => console.warn("Swap notification failed:", err));
 
     // Uncheck all checkboxes for this tournament
@@ -545,7 +549,7 @@ async function init() {
   } catch (err) {
     console.error(err);
     document.getElementById("tournamentList").innerHTML =
-      `<p style="color:#ffb4b4">Failed to load tournaments: ${err.message}</p>`;
+      `<p style="color:#ffb4b4">Failed to load tournaments: ${esc(err.message)}</p>`;
   }
 }
 

@@ -109,11 +109,11 @@ function renderPitching(field) {
   if (!mounds.length) return row("Pitching", "—");
   if (mounds.length === 1) {
     const m = mounds[0];
-    const parts = [m.distance, m.type, m.label].filter(Boolean);
+    const parts = [esc(m.distance), esc(m.type), esc(m.label)].filter(Boolean);
     return row("Pitching", parts.join(" · "));
   }
   const list = mounds.map(m => {
-    const parts = [m.distance, m.type, m.label].filter(Boolean);
+    const parts = [esc(m.distance), esc(m.type), esc(m.label)].filter(Boolean);
     return parts.join(" · ");
   }).join("<br>");
   return row("Pitching", list);

@@ -1,6 +1,6 @@
 // practice-request.js — public coach practice request form
 import { db } from "./firebase.js";
-import { collection, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { esc } from "./utils.js";
 
 // ── Dynamic facility loading ───────────────────────────────────────────────────
@@ -118,7 +118,7 @@ document.getElementById("practiceReqForm").addEventListener("submit", async e =>
     } : { type: "once" },
     notes:      document.getElementById("reqNotes").value.trim(),
     status:     "pending",
-    submittedAt: new Date().toISOString(),
+    submittedAt: serverTimestamp(),
   };
 
   try {

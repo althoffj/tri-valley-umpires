@@ -296,20 +296,28 @@ document.getElementById("acuCreateSubmitBtn").addEventListener("click", async ()
   msgEl.textContent = "Creating…";
   msgEl.className = "signup-message info";
 
+  // Extract primary coach from the coaches[] array; fall back to legacy flat fields
+  function primaryCoach(team) {
+    const coaches = team.coaches || [];
+    return coaches.find(c => c.role === "head") || coaches[0] || null;
+  }
+
   try {
     const now = serverTimestamp();
+    const reqCoach  = primaryCoach(reqTeam);
+    const homeCoach = primaryCoach(homeTeam);
     const newDoc = await addDoc(collection(db, "callupRequests"), {
       // Requesting side — use the team's assigned coach info
-      requestingCoachId:    reqTeam.coachId    || "",
-      requestingCoachName:  reqTeam.coachName  || "",
-      requestingCoachEmail: reqTeam.coachEmail || "",
+      requestingCoachId:    reqCoach?.uid   || reqTeam.coachId    || "",
+      requestingCoachName:  reqCoach?.name  || reqTeam.coachName  || "",
+      requestingCoachEmail: reqCoach?.email || reqTeam.coachEmail || "",
       requestingTeamId:     reqTeam.id,
       requestingTeamName:   reqTeam.name,
       requestingTeamDiv:    reqTeam.division   || "",
       // Home team (player's team)
-      homeCoachId:          homeTeam.coachId    || "",
-      homeCoachName:        homeTeam.coachName  || "",
-      homeCoachEmail:       homeTeam.coachEmail || "",
+      homeCoachId:          homeCoach?.uid   || homeTeam.coachId    || "",
+      homeCoachName:        homeCoach?.name  || homeTeam.coachName  || "",
+      homeCoachEmail:       homeCoach?.email || homeTeam.coachEmail || "",
       homeTeamId:           homeTeam.id,
       homeTeamName:         homeTeam.name,
       homeTeamDiv:          homeTeam.division   || "",
@@ -333,13 +341,13 @@ document.getElementById("acuCreateSubmitBtn").addEventListener("click", async ()
     // Optimistically prepend to local list
     allRequests.unshift({
       id:                   newDoc.id,
-      requestingCoachId:    reqTeam.coachId    || "",
-      requestingCoachName:  reqTeam.coachName  || "",
+      requestingCoachId:    reqCoach?.uid   || reqTeam.coachId    || "",
+      requestingCoachName:  reqCoach?.name  || reqTeam.coachName  || "",
       requestingTeamId:     reqTeam.id,
       requestingTeamName:   reqTeam.name,
       requestingTeamDiv:    reqTeam.division   || "",
-      homeCoachId:          homeTeam.coachId    || "",
-      homeCoachName:        homeTeam.coachName  || "",
+      homeCoachId:          homeCoach?.uid   || homeTeam.coachId   || "",
+      homeCoachName:        homeCoach?.name  || homeTeam.coachName || "",
       homeTeamId:           homeTeam.id,
       homeTeamName:         homeTeam.name,
       homeTeamDiv:          homeTeam.division   || "",

@@ -32,11 +32,11 @@ let currentAdminDoc = null; // admins/{uid} document data
 let currentCoachDoc = null; // coaches/{uid} document data
 let _skipAuthFetch = false; // set by login()/googleSignIn() to avoid duplicate Firestore reads
 
-// Cache auth-gated element collections — populated once at module init
-let _authEls = null;
+// Return a fresh NodeList of auth-gated elements each call.
+// Memoizing is unsafe: onAuthStateChanged can fire before DOMContentLoaded,
+// so a cached result captured at module init may contain empty NodeLists.
 function getAuthEls() {
-  if (_authEls) return _authEls;
-  _authEls = {
+  return {
     required: document.querySelectorAll("[data-auth-required]"),
     guest:    document.querySelectorAll("[data-auth-guest]"),
     approved: document.querySelectorAll("[data-auth-approved]"),
@@ -44,7 +44,6 @@ function getAuthEls() {
     admin:    document.querySelectorAll("[data-auth-admin]"),
     coach:    document.querySelectorAll("[data-auth-coach]"),
   };
-  return _authEls;
 }
 
 // Resolves once the initial auth state check completes

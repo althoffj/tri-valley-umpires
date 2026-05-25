@@ -794,10 +794,17 @@ async function deleteLeague(id) {
   if (!l || !await showConfirm(`Delete league "${l.name}"?\n\nTeams assigned to this league will be unlinked.`)) return;
   try {
     await deleteDoc(doc(db, "leagues", id));
-    // Unlink teams that referenced this league
-    const anyLinked = teams.some(t => t.leagueId === id);
+    // Unlink teams that referenced this league (both legacy leagueId and newer leagueIds[])
+    const anyLinked = teams.some(t => t.leagueId === id || t.leagueIds?.includes(id));
     if (anyLinked) {
-      teams.forEach(t => { if (t.leagueId === id) { t.leagueId = ""; t.leagueName = ""; } });
+      teams.forEach(t => {
+        if (t.leagueId === id) { t.leagueId = ""; t.leagueName = ""; }
+        if (t.leagueIds?.includes(id)) {
+          const idx = t.leagueIds.indexOf(id);
+          t.leagueIds = t.leagueIds.filter(x => x !== id);
+          if (t.leagueNames && idx >= 0) t.leagueNames = t.leagueNames.filter((_, i) => i !== idx);
+        }
+      });
       await saveTeams(false);
       renderTeamList();
     }
@@ -838,10 +845,19 @@ document.getElementById("leagueForm").addEventListener("submit", async e => {
       await setDoc(doc(db, "leagues", editId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
       const idx = leagues.findIndex(l => l.id === editId);
       if (idx >= 0) leagues[idx] = { id: editId, ...data };
-      // Update denormalized leagueName on affected teams
-      const nameChanged = teams.some(t => t.leagueId === editId && t.leagueName !== data.name);
+      // Update denormalized leagueName on affected teams (legacy leagueId and newer leagueIds[])
+      const nameChanged = teams.some(t =>
+        (t.leagueId === editId && t.leagueName !== data.name) ||
+        (t.leagueIds?.includes(editId) && t.leagueNames?.[t.leagueIds.indexOf(editId)] !== data.name)
+      );
       if (nameChanged) {
-        teams.forEach(t => { if (t.leagueId === editId) t.leagueName = data.name; });
+        teams.forEach(t => {
+          if (t.leagueId === editId) t.leagueName = data.name;
+          if (t.leagueIds?.includes(editId)) {
+            const idx = t.leagueIds.indexOf(editId);
+            if (t.leagueNames) t.leagueNames[idx] = data.name;
+          }
+        });
         await saveTeams(false);
         renderTeamList();
       }
@@ -868,10 +884,15 @@ document.getElementById("leagueForm").addEventListener("submit", async e => {
 // Show a slow-connection warning if auth takes more than 6 s (Firestore WebSocket delay)
 const _slowTimer = setTimeout(() => {
   const el = document.getElementById("teamListLoading");
-  if (el) el.innerHTML =
-    'Taking longer than usual — Firestore connection is slow. ' +
-    '<button onclick="location.reload()" class="btn print-btn" ' +
-    'style="font-size:0.82rem;padding:3px 10px;margin-left:8px">Reload</button>';
+  if (el) {
+    el.textContent = 'Taking longer than usual — Firestore connection is slow. ';
+    const reloadBtn = document.createElement('button');
+    reloadBtn.textContent = 'Reload';
+    reloadBtn.className = 'btn print-btn';
+    reloadBtn.style.cssText = 'font-size:0.82rem;padding:3px 10px;margin-left:8px';
+    reloadBtn.addEventListener('click', () => location.reload());
+    el.appendChild(reloadBtn);
+  }
 }, 6000);
 
 authReadyPromise.then(async () => {

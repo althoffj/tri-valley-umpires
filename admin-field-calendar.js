@@ -370,7 +370,10 @@ async function doImport() {
           awayTeam:     ev.opponent  || ev.awayTeam || "",
           isAway:       false,
           needsUmpires: needsUmp,
-          umpireSlots:  needsUmp ? [{ type: "Plate", payRate: 0 }, { type: "Field", payRate: 0 }] : [],
+          umpireSlots:  needsUmp ? [
+            { type: "Plate", payRate: 0, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false },
+            { type: "Field", payRate: 0, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false }
+          ] : [],
           cancelled:    false,
           type:         type === "other" ? "External" : "League",
           source:       "field-calendar",
