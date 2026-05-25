@@ -117,7 +117,7 @@ async function fetchWeather(city, date, timeStr) {
     const gameMinutes = h * 60 + (m || 0);
     let best = 0, bestDiff = Infinity;
     times.forEach((t, i) => {
-      const tHour = new Date(t).getHours();
+      const tHour = Number(t.slice(11, 13)); // parse Chicago-local hour directly from "YYYY-MM-DDTHH:mm" string
       const diff  = Math.abs(tHour * 60 - gameMinutes);
       if (diff < bestDiff) { bestDiff = diff; best = i; }
     });
@@ -1469,8 +1469,9 @@ authReadyPromise.then(() => {
 let _authReady   = false;
 let _lastAuthKey = null;
 onAuthStateChanged(auth, () => {
+  if (!_authReady) return; // wait for authReadyPromise — roles not reliable yet
   const myGamesBtn = document.getElementById("myGamesBtn");
-  if (myGamesBtn && _authReady) myGamesBtn.style.display = isLoggedIn() ? "" : "none";
+  if (myGamesBtn) myGamesBtn.style.display = isLoggedIn() ? "" : "none";
   const authKey = `${isAdmin()}:${isApproved()}:${isLoggedIn()}`;
   if (games.length > 0 && authKey !== _lastAuthKey) {
     _lastAuthKey = authKey;

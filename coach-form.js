@@ -104,7 +104,7 @@ authReadyPromise.then(() => {
 
     const btn = document.getElementById("cfSubmitBtn");
     btn.disabled = true;
-    setMsg("Submitting registration…", "info");
+    setMsg("cfMessage", "Submitting registration…", "info");
 
     const coachData = {
       name:         `${firstName} ${lastName}`,
@@ -124,7 +124,7 @@ authReadyPromise.then(() => {
       if (isGoogle) {
         // Already authenticated via Google — just write the Firestore doc
         const user = getCurrentUser();
-        if (!user) { setMsg("Session expired. Please sign in again.", "error"); btn.disabled = false; return; }
+        if (!user) { setMsg("cfMessage", "Session expired. Please sign in again.", "error"); btn.disabled = false; return; }
         uid = user.uid;
         await setDoc(doc(db, "coaches", uid), coachData);
       } else {
@@ -134,7 +134,7 @@ authReadyPromise.then(() => {
         await setDoc(doc(db, "coaches", uid), coachData);
       }
 
-      setMsg("Registration submitted! You will be notified once approved.", "success");
+      setMsg("cfMessage", "Registration submitted! You will be notified once approved.", "success");
       document.getElementById("coachForm").reset();
       document.getElementById("cfSubmitBtn").style.display = "none";
     } catch (err) {
@@ -144,7 +144,7 @@ authReadyPromise.then(() => {
       } else if (err.code === "auth/weak-password") {
         msg = "Password is too weak. Please use at least 6 characters.";
       }
-      setMsg(msg, "error");
+      setMsg("cfMessage", msg, "error");
       btn.disabled = false;
     }
   });

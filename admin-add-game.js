@@ -105,23 +105,8 @@ function setTeamField(selectId, customId, teamName) {
   }
 }
 
-// Toggle custom text input when "Enter custom name…" is selected
-[["gameHomeTeamSelect", "gameHomeTeamCustom"], ["gameAwayTeamSelect", "gameAwayTeamCustom"]].forEach(([selId, inpId]) => {
-  document.getElementById(selId)?.addEventListener("change", function () {
-    const inp = document.getElementById(inpId);
-    if (!inp) return;
-    if (this.value === "__custom__") {
-      inp.style.display = "";
-      inp.focus();
-    } else {
-      inp.style.display = "none";
-      inp.value = "";
-    }
-  });
-});
-
-// Re-cascade teams whenever division changes
-document.getElementById("gameDivision")?.addEventListener("change", cascadeTeams);
+// Team/city/division change listeners are wired inside authReadyPromise.then()
+// because the adminContent section starts hidden and elements don't exist until shown.
 
 // ── City dropdown ─────────────────────────────────────────────────────────────
 
@@ -299,7 +284,7 @@ document.getElementById("addGameForm").addEventListener("submit", async function
 
   const umpireSlots = checkedTypes.map(t => {
     const payInput = document.querySelector(`.slot-pay-input[data-slot-type="${t}"]`);
-    return { type: t, assignedUid: null, assignedName: null, payRate: payInput ? (parseFloat(payInput.value) || 0) : 0 };
+    return { type: t, assignedUid: null, assignedName: null, payRate: payInput ? (parseFloat(payInput.value) || 0) : 0, checkedIn: false, checkedInAt: null, paid: false };
   });
 
   try {
@@ -335,6 +320,22 @@ authReadyPromise.then(async () => {
   await Promise.all([loadFacilities(), loadLeagues(), loadPayRates(), loadTeams()]);
   populateCities();
   cascadeTeams();
+
+  // Wire team/city/division listeners here — elements are now in the visible DOM
+  [["gameHomeTeamSelect", "gameHomeTeamCustom"], ["gameAwayTeamSelect", "gameAwayTeamCustom"]].forEach(([selId, inpId]) => {
+    document.getElementById(selId)?.addEventListener("change", function () {
+      const inp = document.getElementById(inpId);
+      if (!inp) return;
+      if (this.value === "__custom__") {
+        inp.style.display = "";
+        inp.focus();
+      } else {
+        inp.style.display = "none";
+        inp.value = "";
+      }
+    });
+  });
+  document.getElementById("gameDivision")?.addEventListener("change", cascadeTeams);
 
   // Pre-fill from makeup param if present
   const makeup = new URLSearchParams(window.location.search).get("makeup");

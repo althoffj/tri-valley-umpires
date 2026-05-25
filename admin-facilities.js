@@ -347,7 +347,7 @@ function fieldDivisionBadges(f) {
   const divs = Array.isArray(f.supportedDivisions) ? f.supportedDivisions : [];
   if (!divs.length) return "";
   const badges = divs.map(d =>
-    `<span style="display:inline-block;background:#1a2a3a;color:#7ec8f7;border:1px solid #2a4a6a;border-radius:10px;padding:1px 8px;font-size:0.75rem;white-space:nowrap">${d}</span>`
+    `<span style="display:inline-block;background:#1a2a3a;color:#7ec8f7;border:1px solid #2a4a6a;border-radius:10px;padding:1px 8px;font-size:0.75rem;white-space:nowrap">${esc(d)}</span>`
   ).join("");
   return `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${badges}</div>`;
 }
@@ -390,7 +390,7 @@ function fieldInfoBlock(f) {
       ];
   if (pitchingMounds.length) {
     const pmStr = pitchingMounds.map(m => {
-      const parts = [m.type, m.distance, m.label].filter(Boolean);
+      const parts = [esc(m.type), esc(m.distance), esc(m.label)].filter(Boolean);
       return parts.join(" ");
     }).join(" · ");
     lines.push(`Pitching: ${pmStr}`);

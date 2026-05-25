@@ -743,7 +743,7 @@ function openEditPermissionsModal(uid) {
     editPermGranted = new Set(editPermIsSA ? [] : roles);
 
     const row  = document.querySelector(`[data-admin-uid="${uid}"]`);
-    const name = row?.querySelector("td:first-child")?.textContent?.trim() || uid;
+    const name = row?.querySelector("td:first-child div:first-child")?.textContent?.trim() || uid;
     const titleEl = document.getElementById("editPermTitle");
     if (titleEl) titleEl.textContent = `Edit Permissions — ${name}`;
 
@@ -903,9 +903,9 @@ function makeEditParentRow(par = {}) {
   row.className = "edit-parent-row";
   row.style.cssText = "display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;margin-bottom:8px;align-items:center";
   row.innerHTML = `
-    <input type="text"  class="epr-name"  placeholder="Name"             value="${(par.name  || "").replace(/"/g,'&quot;')}" style="${S}" />
-    <input type="tel"   class="epr-phone" placeholder="Phone"            value="${(par.phone || "").replace(/"/g,'&quot;')}" style="${S}" />
-    <input type="email" class="epr-email" placeholder="Email (optional)" value="${(par.email || "").replace(/"/g,'&quot;')}" style="${S}" />
+    <input type="text"  class="epr-name"  placeholder="Name"             value="${esc(par.name  || "")}" style="${S}" />
+    <input type="tel"   class="epr-phone" placeholder="Phone"            value="${esc(par.phone || "")}" style="${S}" />
+    <input type="email" class="epr-email" placeholder="Email (optional)" value="${esc(par.email || "")}" style="${S}" />
     <button type="button" class="epr-remove" title="Remove"
       style="padding:4px 8px;background:transparent;color:#ff8a8a;border:1px solid #884444;border-radius:5px;cursor:pointer;font-size:1rem;line-height:1;flex-shrink:0">×</button>`;
   return row;
