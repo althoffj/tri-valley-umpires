@@ -315,8 +315,8 @@ function isPracticeEvent(summary) {
 // ── Core sync logic ───────────────────────────────────────────────────────────
 
 function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // Cloud Functions run in UTC — use America/Chicago to match the league's local date
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
 }
 
 function inferDivision(teamName) {
@@ -1538,7 +1538,7 @@ exports.onCancellationRequest = onDocumentWritten(
     const email   = umpSnap.exists ? umpSnap.data()?.email : null;
     if (email) {
       const orgSnap = await db.doc("config/orgSettings").get();
-      const org     = orgSnap.exists() ? orgSnap.data() : {};
+      const org     = orgSnap.exists ? orgSnap.data() : {};
       const orgName = org.assocName || "Tri-Valley Baseball Umpires";
       const coord   = org.coordinatorName  || "";
       const phone   = org.coordinatorPhone || "";
@@ -1840,7 +1840,7 @@ exports.notifyGameCancellation = onCall({ cors: CORS }, async request => {
   const slackSends = getTargetWebhooks(config2, "gameChanges", div2).map(url => postSlack(url, slackMsg));
   if (slackSends.length) await Promise.allSettled(slackSends);
 
-  return { notified: pushed, slacked: sends.length };
+  return { notified: pushed, slacked: slackSends.length };
 });
 
 // ── Email broadcast to all active approved umpires ───────────────────────────
@@ -1915,10 +1915,10 @@ exports.emailPayStub = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PASS] },
   const ump = umpSnap.data();
   if (!ump.email) throw new HttpsError("failed-precondition", "Umpire has no email address on file.");
 
-  const rates = ratesSnap.exists()
+  const rates = ratesSnap.exists
     ? { plate: Number(ratesSnap.data().plate ?? 0), field: Number(ratesSnap.data().field ?? 0), extra: Number(ratesSnap.data().extra ?? 0) }
     : { plate: 0, field: 0, extra: 0 };
-  const org   = orgSnap.exists() ? orgSnap.data() : {};
+  const org   = orgSnap.exists ? orgSnap.data() : {};
   const brand = org.accentColor || "#601929";
 
   // Build rows for this umpire, filtered by date range
@@ -2588,7 +2588,7 @@ exports.createUmpireAccount = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_P
     const APP_URL = "https://tri-valley-baseball-umpires.web.app";
     const transport = buildTransport();
     await transport.sendMail({
-      from:    `"Tri-Valley Umpires" <${process.env.GMAIL_USER}>`,
+      from:    `"Tri-Valley Umpires" <${GMAIL_USER.value()}>`,
       to:      email.toLowerCase().trim(),
       subject: "Your Tri-Valley Umpire account is ready",
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e8e8f0;padding:32px;border-radius:12px">
@@ -2687,7 +2687,7 @@ exports.createCoachAccount = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PA
     const APP_URL = "https://tri-valley-baseball-umpires.web.app";
     const transport = buildTransport();
     await transport.sendMail({
-      from:    `"Tri-Valley Umpires" <${process.env.GMAIL_USER}>`,
+      from:    `"Tri-Valley Umpires" <${GMAIL_USER.value()}>`,
       to:      email.toLowerCase().trim(),
       subject: "Your Tri-Valley Coach Portal account is ready",
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e8e8f0;padding:32px;border-radius:12px">

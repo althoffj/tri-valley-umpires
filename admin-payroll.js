@@ -547,9 +547,9 @@ async function generatePayStub(uid) {
   <!-- Header -->
   <div class="stub-header">
     <div>
-      <div class="org-name">${org.orgName}</div>
-      <div class="org-sub">${org.assocName}</div>
-      <div class="org-sub">Contact: ${org.coordinatorName} &nbsp;·&nbsp; ${org.coordinatorPhone}</div>
+      <div class="org-name">${esc(org.orgName || "")}</div>
+      <div class="org-sub">${esc(org.assocName || "")}</div>
+      <div class="org-sub">Contact: ${esc(org.coordinatorName || "")} &nbsp;·&nbsp; ${esc(org.coordinatorPhone || "")}</div>
     </div>
     <div class="stub-meta">
       <div><strong>Pay Statement</strong></div>
@@ -613,9 +613,9 @@ async function generatePayStub(uid) {
 
   <!-- Footer -->
   <div class="stub-footer">
-    <p>This document is a payment record for officiating services rendered to ${org.assocName}.
+    <p>This document is a payment record for officiating services rendered to ${esc(org.assocName || "")}.
     It is not a tax document. Please retain for your records.</p>
-    <p style="margin-top:4px">Questions? Contact ${org.coordinatorName} at ${org.coordinatorPhone} or post in the Umpire Slack channel.</p>
+    <p style="margin-top:4px">Questions? Contact ${esc(org.coordinatorName || "")} at ${esc(org.coordinatorPhone || "")} or post in the Umpire Slack channel.</p>
   </div>
 
 </body>

@@ -1,7 +1,6 @@
 // calendar.js — Public umpire calendar: month + list views, filters, practices
-import { db, auth } from "./firebase.js";
-import { isApproved, isAdmin, getCurrentUser } from "./auth.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { db } from "./firebase.js";
+import { authReadyPromise, isApproved, isAdmin, getCurrentUser } from "./auth.js";
 import { esc, fmtTime, todayISO } from "./utils.js";
 
 import {
@@ -625,8 +624,8 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape") closeDetailModal();
 });
 
-onAuthStateChanged(auth, user => {
-  currentUid = user?.uid ?? null;
+authReadyPromise.then(() => {
+  currentUid = getCurrentUser()?.uid ?? null;
   const btn = document.getElementById("calMyGamesBtn");
   if (btn) btn.style.display = currentUid ? "" : "none";
   updateMyGamesBtn();

@@ -67,7 +67,6 @@ async function loadEarnings(fromDate, toDate) {
     if (toEl)   toEl.value   = toDate;
 
     renderEarnings();
-    wireControls();
   } catch (err) {
     console.error(err);
     tbody.innerHTML = '<tr><td colspan="5" style="color:#ffb4b4">Error loading earnings.</td></tr>';
@@ -273,5 +272,6 @@ authReadyPromise.then(() => {
   }
   document.getElementById("earningsContent").style.display = "";
   document.getElementById("earningsGuest").style.display   = "none";
+  wireControls();
   loadEarnings();
 });

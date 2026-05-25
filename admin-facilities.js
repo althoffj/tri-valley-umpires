@@ -259,9 +259,9 @@ function readFieldForm(prefix, fId) {
     label:    row.querySelector(".pm-label")?.value.trim() || "",
   })).filter(m => m.distance || m.type);
 
-  const DIVS = ["T-ball","6U","8U","10U","12U","14U","HS JV","HS Varsity"];
-  const divMap = { "T-ball": `${p}DivTball_${id}`, "6U": `${p}Div6U_${id}`,
-                   "8U": `${p}Div8U_${id}`, "10U": `${p}Div10U_${id}`, "12U": `${p}Div12U_${id}`,
+  // Only the divisions rendered in fieldFormRows — T-ball/6U/8U have no checkboxes in the form
+  const DIVS = ["10U","12U","14U","HS JV","HS Varsity"];
+  const divMap = { "10U": `${p}Div10U_${id}`, "12U": `${p}Div12U_${id}`,
                    "14U": `${p}Div14U_${id}`, "HS JV": `${p}DivHSJV_${id}`,
                    "HS Varsity": `${p}DivHSVar_${id}` };
   const supportedDivisions = DIVS.filter(d => c(divMap[d]));

@@ -100,10 +100,9 @@ async function loadMyGames() {
     );
 
     const myGames = [];
-    const today = new Date();
-    const cutoff = new Date(today);
+    const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 90);
-    const cutoffISO = cutoff.toISOString().slice(0, 10);
+    const cutoffISO = `${cutoff.getFullYear()}-${String(cutoff.getMonth()+1).padStart(2,"0")}-${String(cutoff.getDate()).padStart(2,"0")}`;
 
     snap.forEach(d => {
       const g = { id: d.id, ...d.data() };
@@ -189,18 +188,18 @@ async function handleSubmit(e) {
   // Upload photos first (if any)
   let photoUrls = [];
   if (files.length > 0) {
-    setMsg(`Uploading ${files.length} photo${files.length > 1 ? "s" : ""}…`, "info");
+    setMsg("incidentMessage", `Uploading ${files.length} photo${files.length > 1 ? "s" : ""}…`, "info");
     try {
       photoUrls = await uploadPhotos(files, user.uid);
     } catch (err) {
       console.error("Photo upload failed:", err);
-      setMsg("Photo upload failed. Please try again or remove the photos.", "error");
+      setMsg("incidentMessage", "Photo upload failed. Please try again or remove the photos.", "error");
       btn.disabled = false;
       return;
     }
   }
 
-  setMsg("Submitting report…", "info");
+  setMsg("incidentMessage", "Submitting report…", "info");
 
   // Build base report
   const report = {
@@ -247,7 +246,7 @@ async function handleSubmit(e) {
 
   try {
     await addDoc(collection(db, "incidentReports"), report);
-    setMsg("Report submitted. An administrator will review it.", "success");
+    setMsg("incidentMessage", "Report submitted. An administrator will review it.", "success");
     document.getElementById("incidentForm").reset();
     document.getElementById("photoPreview").innerHTML = "";
     updateTypeFields("");
@@ -255,7 +254,7 @@ async function handleSubmit(e) {
     loadMyReports();
   } catch (err) {
     console.error(err);
-    setMsg("Error submitting report. Please try again.", "error");
+    setMsg("incidentMessage", "Error submitting report. Please try again.", "error");
     btn.disabled = false;
   }
 }

@@ -513,10 +513,7 @@ function renderConflicts() {
           </div>
           <div class="form-group">
             <label>City / League</label>
-            <select class="edit-city" data-idx="${i}">
-              <option value="City of Crooks" ${game.city === "City of Crooks" ? "selected" : ""}>City of Crooks</option>
-              <option value="City of Colton" ${game.city === "City of Colton" ? "selected" : ""}>City of Colton</option>
-            </select>
+            <input type="text" class="edit-city" data-idx="${i}" value="${esc(game.city || "")}" placeholder="City or league" style="width:100%" />
           </div>
         </div>
         <div style="display:flex;gap:8px;margin-top:8px">
@@ -1168,7 +1165,7 @@ async function unassignSchedSlot(gameId, slotType) {
     const slots = (snap.data().umpireSlots || []).map(s =>
       s.type === slotType ? { ...s, assignedUid: null, assignedName: null } : s
     );
-    await updateDoc(gameRef, { umpireSlots: slots });
+    await updateDoc(gameRef, { umpireSlots: slots, needsUmpires: true });
     if (seCurrentGame) seCurrentGame.umpireSlots = slots;
     const idx = calGamesCache.findIndex(g => g.id === gameId);
     if (idx >= 0) calGamesCache[idx].umpireSlots = slots;

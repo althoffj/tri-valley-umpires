@@ -81,7 +81,7 @@ service cloud.firestore {
     // Incident reports: approved umpires, admins, or any signed-in user (coaches) can create;
     // admins have full access; reporters can read their own.
     match /incidentReports/{reportId} {
-      allow create: if isApproved() || isAdmin() || isSignedIn();
+      allow create: if isApproved() || isAdmin() || isApprovedCoach();
       allow read:   if isAdmin() ||
                        (isSignedIn() && resource.data.reportedBy == request.auth.uid);
       allow update, delete: if isAdmin();

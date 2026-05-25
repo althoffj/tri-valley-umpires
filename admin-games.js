@@ -141,7 +141,7 @@ function applyGameFilters() {
   // "Upcoming" shows active games from the past 14 days forward so recent games
   // can be retroactively marked as rain-outs or edited after the fact.
   const d14 = new Date(); d14.setDate(d14.getDate() - 14);
-  const twoWeeksAgo = d14.toISOString().slice(0, 10);
+  const twoWeeksAgo = `${d14.getFullYear()}-${String(d14.getMonth()+1).padStart(2,"0")}-${String(d14.getDate()).padStart(2,"0")}`;
   return allGames.filter(g => {
     // Status filter
     if (gameFilter === "today"    && g.date !== today) return false;
@@ -422,7 +422,9 @@ async function unassignSlot(gameId, slotType) {
       const snap = await tx.get(gameRef);
       if (!snap.exists()) throw new Error("Game not found.");
       updatedSlots = (snap.data().umpireSlots || []).map(s =>
-        s.type === slotType ? { type: s.type, payRate: s.payRate ?? 0 } : s
+        s.type === slotType
+          ? { type: s.type, payRate: s.payRate ?? 0, checkedIn: false, checkedInAt: null }
+          : s
       );
       tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires: true });
     });
@@ -609,11 +611,13 @@ async function saveGameEdit() {
       const payRate  = parseFloat(payInput?.value) || 0;
       const prev     = slotMap[cb.value];
       newSlots.push({
-        type:        cb.value,
+        type:         cb.value,
         payRate,
         assignedUid:  prev?.assignedUid  ?? null,
         assignedName: prev?.assignedName ?? null,
-        paid:         prev?.paid         ?? false
+        paid:         prev?.paid         ?? false,
+        checkedIn:    prev?.checkedIn    ?? false,
+        checkedInAt:  prev?.checkedInAt  ?? null,
       });
     });
     updates.umpireSlots = newSlots;
@@ -930,7 +934,7 @@ async function approveCancellation(requestId, gameId, slotType, uid) {
       if (!snap.exists()) throw new Error("Game not found.");
       updatedSlots = (snap.data().umpireSlots || []).map(s =>
         s.type === slotType && s.assignedUid === uid
-          ? { type: s.type, payRate: s.payRate }   // strip all assignment fields
+          ? { type: s.type, payRate: s.payRate, checkedIn: false, checkedInAt: null }
           : s
       );
       tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires: true });

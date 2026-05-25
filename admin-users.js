@@ -672,10 +672,10 @@ async function loadAdminUsers() {
       const ump  = umpireMap[uid] || {};
 
       // Name: prefer umpire profile, fallback to value stored on admin doc (createAdminUser stores it there)
-      const name  = ump.name  || (ump.firstName ? `${ump.firstName} ${ump.lastName||""}`.trim() : "")
-                    || data.name  || `<em style="color:var(--light-text)">Unknown</em>`;
-      // Email: same fallback chain
-      const email = ump.email || data.email || `<em style="color:var(--light-text)">—</em>`;
+      const rawName  = ump.name  || (ump.firstName ? `${ump.firstName} ${ump.lastName||""}`.trim() : "") || data.name || "";
+      const name  = rawName ? esc(rawName) : `<em style="color:var(--light-text)">Unknown</em>`;
+      const rawEmail = ump.email || data.email || "";
+      const email = rawEmail ? esc(rawEmail) : `<em style="color:var(--light-text)">—</em>`;
 
       const isSA = data.superAdmin === true || (data.superAdmin == null && (data.roles || []).length === 0);
       const roles = data.roles || [];

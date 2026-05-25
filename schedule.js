@@ -1450,6 +1450,7 @@ function checkProfileCompleteness() {
 }
 
 authReadyPromise.then(() => {
+  _authReady = true;
   const myGamesBtn = document.getElementById("myGamesBtn");
   if (myGamesBtn) myGamesBtn.style.display = isLoggedIn() ? "" : "none";
   initCalendarBar();
@@ -1464,10 +1465,12 @@ authReadyPromise.then(() => {
 
 // Re-render buttons whenever auth role changes (sign in / sign out).
 // Skip re-renders on silent token refreshes that don't affect role or approval.
+// _authReady gates the raw listener so it doesn't fire before authReadyPromise resolves.
+let _authReady   = false;
 let _lastAuthKey = null;
 onAuthStateChanged(auth, () => {
   const myGamesBtn = document.getElementById("myGamesBtn");
-  if (myGamesBtn) myGamesBtn.style.display = isLoggedIn() ? "" : "none";
+  if (myGamesBtn && _authReady) myGamesBtn.style.display = isLoggedIn() ? "" : "none";
   const authKey = `${isAdmin()}:${isApproved()}:${isLoggedIn()}`;
   if (games.length > 0 && authKey !== _lastAuthKey) {
     _lastAuthKey = authKey;

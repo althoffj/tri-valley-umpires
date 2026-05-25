@@ -497,7 +497,7 @@ authReadyPromise.then(() => {
 
   // Check coaches collection
   getDoc(doc(db, "coaches", user.uid)).then(snap => {
-    if (!snap.exists() || snap.data().approved !== true) {
+    if (!snap.exists() || snap.data().approved !== true || snap.data().active === false) {
       document.getElementById("cuContent").style.display = "none";
       document.getElementById("cuNoAccess").style.display = "";
       return;

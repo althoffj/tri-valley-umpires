@@ -578,7 +578,7 @@ async function saveRosterPlayer() {
       updatedPlayers = [...rosterPlayers, newPlayer];
     }
 
-    await setDoc(doc(db, "rosters", myTeamId), { players: updatedPlayers }, { merge: false });
+    await updateDoc(doc(db, "rosters", myTeamId), { players: updatedPlayers });
     rosterPlayers = updatedPlayers;
     renderRoster(rosterPlayers);
     document.getElementById("rosterPlayerForm").style.display = "none";
@@ -597,7 +597,7 @@ async function deleteRosterPlayer(playerId) {
 
   const updatedPlayers = rosterPlayers.filter(p => p.id !== playerId);
   try {
-    await setDoc(doc(db, "rosters", myTeamId), { players: updatedPlayers }, { merge: false });
+    await updateDoc(doc(db, "rosters", myTeamId), { players: updatedPlayers });
     rosterPlayers = updatedPlayers;
     renderRoster(rosterPlayers);
   } catch (err) {
