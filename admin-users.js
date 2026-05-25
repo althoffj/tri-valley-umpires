@@ -536,10 +536,13 @@ document.getElementById("saveCreateCoachBtn")?.addEventListener("click", async (
     setMsg("createCoachMsg", "Creating account…", "info");
     try {
       const result = await createCoachAccountFn({ firstName, lastName, email, phone, teamName, division, city });
-      const { isNew } = result.data;
+      const { isNew, emailSent } = result.data;
       setMsg("createCoachMsg",
-        isNew ? `✓ Account created. A password-setup email has been sent to ${email}.`
-              : `✓ Existing user linked as coach.`,
+        isNew
+          ? (emailSent
+              ? `✓ Account created. A password-setup email has been sent to ${email}.`
+              : `✓ Account created, but the welcome email failed to send. Share the portal link manually: ${email}`)
+          : `✓ Existing user linked as coach.`,
         "success");
       await loadCoachRoster();
       setTimeout(closeCreateCoachModal, 2000);
@@ -1307,8 +1310,8 @@ function closeEditCoachModal() {
 document.getElementById("editCoachAllowSignIn")?.addEventListener("change", updateEditCoachSignInUI);
 
 async function saveCoachEdits() {
-  const uid  = editingCoachUid;
-  if (!uid) return;
+  let docUid = editingCoachUid;
+  if (!docUid) return;
   const btn  = document.getElementById("saveCoachBtn");
   const msg  = document.getElementById("editCoachMsg");
   btn.disabled = true;
@@ -1350,7 +1353,7 @@ async function saveCoachEdits() {
     if (!_editCoachOriginalAllowSignIn && allowSignIn) {
       msg.textContent = "Creating sign-in account…"; msg.className = "signup-message info";
       const fns = getFunctions(app, "us-central1");
-      await httpsCallable(fns, "createCoachAccount")({
+      const fnResult = await httpsCallable(fns, "createCoachAccount")({
         firstName: first,
         lastName:  last,
         email:     updates.email,
@@ -1358,12 +1361,13 @@ async function saveCoachEdits() {
         teamName:  updates.teamName,
         division:  updates.division,
         city:      updates.city,
-        existingDocId: uid,
+        existingDocId: docUid,
       });
-      // Cloud function creates the auth account; update remaining fields in Firestore directly
+      // Function migrated coaches/{existingDocId} → coaches/{authUid}; target the new doc for updateDoc
+      docUid = fnResult.data.uid;
     }
 
-    await updateDoc(doc(db, "coaches", uid), updates);
+    await updateDoc(doc(db, "coaches", docUid), updates);
     msg.textContent = "Saved!"; msg.className = "signup-message success";
     await loadCoachRoster();
     setTimeout(closeEditCoachModal, 1000);

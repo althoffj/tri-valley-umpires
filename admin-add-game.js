@@ -18,6 +18,7 @@ import {
 
 let currentRates = { plate: 0, field: 0, extra: 0 };
 let facilitiesData = [];
+let teamsData = [];
 
 // ── Facilities + field cascade ────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ function cascadeFields() {
 
   if (fields.length > 0) {
     fieldSel.innerHTML = `<option value="">-- Select field --</option>` +
-      fields.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join("");
+      fields.map(f => `<option value="${esc(f.name)}">${esc(f.name)}</option>`).join("");
     fieldSel.style.display = "";
     fieldInput.style.display = "none";
   } else {
@@ -54,6 +55,113 @@ function cascadeFields() {
     fieldInput.style.display = "";
   }
 }
+
+// ── Teams + cascade ───────────────────────────────────────────────────────────
+
+async function loadTeams() {
+  try {
+    const snap = await getDoc(doc(db, "config/teamCalendars"));
+    teamsData = snap.exists() ? (snap.data().teams || []) : [];
+  } catch (_) {}
+}
+
+function cascadeTeams() {
+  const division = document.getElementById("gameDivision")?.value || "";
+  const filtered = division
+    ? teamsData.filter(t => t.division === division).sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+    : teamsData.slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  const teamOpts = filtered.map(t => `<option value="${esc(t.name)}">${esc(t.name)}${t.city ? ` (${esc(t.city)})` : ""}</option>`).join("");
+  const base = `<option value="">-- None --</option><option value="TBD">TBD</option>${teamOpts}<option value="__custom__">Enter custom name…</option>`;
+
+  ["gameHomeTeamSelect", "gameAwayTeamSelect"].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = base;
+    // Restore previous selection if it still exists
+    if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  });
+}
+
+function getTeamValue(selectId, customId) {
+  const sel = document.getElementById(selectId);
+  if (sel?.value === "__custom__") return document.getElementById(customId)?.value.trim() || "";
+  return sel?.value || "";
+}
+
+function setTeamField(selectId, customId, teamName) {
+  const sel = document.getElementById(selectId);
+  const inp = document.getElementById(customId);
+  if (!sel || !inp) return;
+  if (!teamName) { sel.value = ""; inp.style.display = "none"; return; }
+  if ([...sel.options].some(o => o.value === teamName)) {
+    sel.value = teamName;
+    inp.style.display = "none";
+  } else {
+    sel.value = "__custom__";
+    inp.value = teamName;
+    inp.style.display = "";
+  }
+}
+
+// Toggle custom text input when "Enter custom name…" is selected
+[["gameHomeTeamSelect", "gameHomeTeamCustom"], ["gameAwayTeamSelect", "gameAwayTeamCustom"]].forEach(([selId, inpId]) => {
+  document.getElementById(selId)?.addEventListener("change", function () {
+    const inp = document.getElementById(inpId);
+    if (!inp) return;
+    if (this.value === "__custom__") {
+      inp.style.display = "";
+      inp.focus();
+    } else {
+      inp.style.display = "none";
+      inp.value = "";
+    }
+  });
+});
+
+// Re-cascade teams whenever division changes
+document.getElementById("gameDivision")?.addEventListener("change", cascadeTeams);
+
+// ── City dropdown ─────────────────────────────────────────────────────────────
+
+function populateCities() {
+  const cities = [...new Set(teamsData.map(t => t.city).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const sel = document.getElementById("gameCitySelect");
+  if (!sel) return;
+  sel.innerHTML =
+    `<option value="">-- Select city --</option>` +
+    cities.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("") +
+    `<option value="__custom__">Enter custom city…</option>`;
+}
+
+function getCityValue() {
+  const sel = document.getElementById("gameCitySelect");
+  if (sel?.value === "__custom__") return document.getElementById("gameCityCustom")?.value.trim() || "";
+  return sel?.value || "";
+}
+
+function setCityField(cityName) {
+  const sel = document.getElementById("gameCitySelect");
+  const inp = document.getElementById("gameCityCustom");
+  if (!sel || !inp) return;
+  if (!cityName) { sel.value = ""; inp.style.display = "none"; return; }
+  if ([...sel.options].some(o => o.value === cityName)) {
+    sel.value = cityName;
+    inp.style.display = "none";
+  } else {
+    sel.value = "__custom__";
+    inp.value = cityName;
+    inp.style.display = "";
+  }
+}
+
+document.getElementById("gameCitySelect")?.addEventListener("change", function () {
+  const inp = document.getElementById("gameCityCustom");
+  if (!inp) return;
+  if (this.value === "__custom__") { inp.style.display = ""; inp.focus(); }
+  else                             { inp.style.display = "none"; inp.value = ""; }
+});
 
 // ── Leagues ───────────────────────────────────────────────────────────────────
 
@@ -114,13 +222,16 @@ async function applyMakeupPrefill(gameId) {
       if (el && val != null) el.value = val;
     };
     set("gameLeague",   g.league   || "");
-    set("gameCity",     g.city     || "");
     set("gameDivision", g.division || "");
+    setCityField(g.city || "");
     set("gameTime",     g.time     || "");
     set("gameType",     g.type     || "");
-    set("gameHomeTeam", g.homeTeam || "");
-    set("gameAwayTeam", g.awayTeam || "");
     set("gameDate",     ""); // admin must pick new date
+
+    // Cascade teams for the pre-filled division, then restore team values
+    cascadeTeams();
+    setTeamField("gameHomeTeamSelect", "gameHomeTeamCustom", g.homeTeam || "");
+    setTeamField("gameAwayTeamSelect", "gameAwayTeamCustom", g.awayTeam || "");
 
     const fieldInp = document.getElementById("gameField");
     const fieldSel = document.getElementById("gameFieldSelect");
@@ -164,7 +275,7 @@ document.getElementById("addGameForm").addEventListener("submit", async function
   document.getElementById("umpireTypesError").textContent = "";
 
   const league   = document.getElementById("gameLeague").value.trim();
-  const city     = document.getElementById("gameCity").value.trim();
+  const city     = getCityValue();
   const division = document.getElementById("gameDivision").value;
   const date     = document.getElementById("gameDate").value;
 
@@ -182,8 +293,8 @@ document.getElementById("addGameForm").addEventListener("submit", async function
   const fieldInp   = document.getElementById("gameField");
   const field      = (fieldSel?.style.display !== "none" && fieldSel?.value)
     ? fieldSel.value : (fieldInp?.value.trim() || "");
-  const homeTeam   = document.getElementById("gameHomeTeam")?.value.trim() || "";
-  const awayTeam   = document.getElementById("gameAwayTeam")?.value.trim() || "";
+  const homeTeam   = getTeamValue("gameHomeTeamSelect", "gameHomeTeamCustom");
+  const awayTeam   = getTeamValue("gameAwayTeamSelect", "gameAwayTeamCustom");
   const notes      = document.getElementById("gameNotes")?.value.trim() || "";
 
   const umpireSlots = checkedTypes.map(t => {
@@ -221,7 +332,9 @@ authReadyPromise.then(async () => {
   document.getElementById("adminContent").style.display = "";
   document.getElementById("noAccess").style.display     = "none";
 
-  await Promise.all([loadFacilities(), loadLeagues(), loadPayRates()]);
+  await Promise.all([loadFacilities(), loadLeagues(), loadPayRates(), loadTeams()]);
+  populateCities();
+  cascadeTeams();
 
   // Pre-fill from makeup param if present
   const makeup = new URLSearchParams(window.location.search).get("makeup");

@@ -98,7 +98,7 @@ service cloud.firestore {
     // Coaches: own profile read/create; admin can read/update/delete all
     match /coaches/{uid} {
       allow read:   if request.auth.uid == uid || isAdmin();
-      allow create: if request.auth.uid == uid;
+      allow create: if request.auth.uid == uid || isAdmin();
       allow update: if isAdmin()
                  || (isSignedIn() && request.auth.uid == uid
                      && request.resource.data.approved  == resource.data.approved

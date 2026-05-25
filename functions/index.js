@@ -2616,7 +2616,7 @@ exports.createCoachAccount = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PA
   const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
   if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
 
-  const { firstName, lastName, email, phone, teamName, division, city } = request.data;
+  const { firstName, lastName, email, phone, teamName, division, city, existingDocId } = request.data;
   if (!email || !firstName || !lastName)
     throw new HttpsError("invalid-argument", "firstName, lastName, and email are required.");
 
@@ -2636,22 +2636,42 @@ exports.createCoachAccount = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PA
   }
 
   const coachRef = db.doc(`coaches/${uid}`);
-  const existing = await coachRef.get();
-  if (existing.exists) throw new HttpsError("already-exists", "A coach profile already exists for this email.");
 
-  await coachRef.set({
-    name:     `${firstName} ${lastName}`,
-    email:    email.toLowerCase().trim(),
-    phone:    phone    || "",
-    teamName: teamName || "",
-    division: division || "",
-    city:     city     || "",
-    approved: true,
-    active:   true,
-    role:     "coach",
-    createdAt: new Date().toISOString(),
-    createdBy: request.auth.uid,
-  });
+  if (existingDocId && existingDocId !== uid) {
+    // Upgrading a no-sign-in coach record: migrate to the auth-UID-keyed path and delete the old doc.
+    const oldRef  = db.doc(`coaches/${existingDocId}`);
+    const oldSnap = await oldRef.get();
+    const oldData = oldSnap.exists ? oldSnap.data() : {};
+    await coachRef.set({
+      ...oldData,
+      name:        `${firstName} ${lastName}`,
+      email:       email.toLowerCase().trim(),
+      phone:       phone    || oldData.phone    || "",
+      teamName:    teamName || oldData.teamName || "",
+      division:    division || oldData.division || "",
+      city:        city     || oldData.city     || "",
+      allowSignIn: true,
+      role:        "coach",
+      upgradedAt:  new Date().toISOString(),
+    });
+    if (oldSnap.exists) await oldRef.delete();
+  } else {
+    const existing = await coachRef.get();
+    if (existing.exists) throw new HttpsError("already-exists", "A coach profile already exists for this email.");
+    await coachRef.set({
+      name:     `${firstName} ${lastName}`,
+      email:    email.toLowerCase().trim(),
+      phone:    phone    || "",
+      teamName: teamName || "",
+      division: division || "",
+      city:     city     || "",
+      approved: true,
+      active:   true,
+      role:     "coach",
+      createdAt: new Date().toISOString(),
+      createdBy: request.auth.uid,
+    });
+  }
 
   if (isNew) {
     try {
@@ -2662,6 +2682,7 @@ exports.createCoachAccount = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PA
     } catch (_) {}
   }
 
+  let emailSent = false;
   try {
     const APP_URL = "https://tri-valley-baseball-umpires.web.app";
     const transport = buildTransport();
@@ -2679,9 +2700,10 @@ exports.createCoachAccount = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PA
           : `<p>Sign in at <a href="${APP_URL}/coach-portal.html" style="color:#7ec8f7">the Coach Portal</a> using your email address.</p>`}
       </div>`,
     });
+    emailSent = true;
   } catch (mailErr) { console.error("Coach welcome email failed:", mailErr.message); }
 
-  return { uid, isNew, resetLink };
+  return { uid, isNew, resetLink, emailSent };
 });
 
 // ── Delete umpire account (super admin only) ──────────────────────────────────

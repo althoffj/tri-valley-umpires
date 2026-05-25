@@ -52,8 +52,12 @@
           </select>
         </div>
         <div class="form-group">
-          <label for="gameCity">City / Town *</label>
-          <input type="text" id="gameCity" required placeholder="e.g. Crooks" />
+          <label for="gameCitySelect">City / Town *</label>
+          <select id="gameCitySelect">
+            <option value="">-- Select city --</option>
+            <option value="__custom__">Enter custom city…</option>
+          </select>
+          <input type="text" id="gameCityCustom" placeholder="e.g. Crooks" style="display:none;margin-top:6px" />
         </div>
       </div>
 
@@ -106,12 +110,20 @@
 
       <div class="form-row">
         <div class="form-group">
-          <label for="gameHomeTeam">Home Team <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
-          <input type="text" id="gameHomeTeam" placeholder="e.g. Crooks Red" />
+          <label for="gameHomeTeamSelect">Home Team <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+          <select id="gameHomeTeamSelect">
+            <option value="">-- None --</option>
+            <option value="__custom__">Enter custom name…</option>
+          </select>
+          <input type="text" id="gameHomeTeamCustom" placeholder="e.g. Crooks Red" style="display:none;margin-top:6px" />
         </div>
         <div class="form-group">
-          <label for="gameAwayTeam">Away Team <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
-          <input type="text" id="gameAwayTeam" placeholder="e.g. Colton Blue" />
+          <label for="gameAwayTeamSelect">Away Team <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+          <select id="gameAwayTeamSelect">
+            <option value="">-- None --</option>
+            <option value="__custom__">Enter custom name…</option>
+          </select>
+          <input type="text" id="gameAwayTeamCustom" placeholder="e.g. Colton Blue" style="display:none;margin-top:6px" />
         </div>
       </div>
 
@@ -166,7 +178,7 @@
   </div>
 
   <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="admin-add-game.js?v=1"></script>
+  <script type="module" src="admin-add-game.js?v=5"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=5"></script>
   <script type="module" src="nav.js?v=8"></script>
