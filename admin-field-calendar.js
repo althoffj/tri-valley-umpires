@@ -371,8 +371,8 @@ async function doImport() {
           isAway:       false,
           needsUmpires: needsUmp,
           umpireSlots:  needsUmp ? [
-            { type: "Plate", payRate: 0, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false },
-            { type: "Field", payRate: 0, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false }
+            { type: "Plate", payRate: 0, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false, noShow: false },
+            { type: "Field", payRate: 0, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false, noShow: false }
           ] : [],
           cancelled:    false,
           type:         type === "other" ? "External" : "League",

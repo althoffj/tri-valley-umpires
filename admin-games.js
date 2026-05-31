@@ -424,7 +424,7 @@ async function unassignSlot(gameId, slotType) {
       if (!snap.exists()) throw new Error("Game not found.");
       updatedSlots = (snap.data().umpireSlots || []).map(s =>
         s.type === slotType
-          ? { type: s.type, payRate: s.payRate ?? 0, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false }
+          ? { type: s.type, payRate: s.payRate ?? 0, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false, noShow: false }
           : s
       );
       tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires: true });
@@ -938,7 +938,7 @@ async function approveCancellation(requestId, gameId, slotType, uid) {
       if (!snap.exists()) throw new Error("Game not found.");
       updatedSlots = (snap.data().umpireSlots || []).map(s =>
         s.type === slotType && s.assignedUid === uid
-          ? { type: s.type, payRate: s.payRate, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false }
+          ? { type: s.type, payRate: s.payRate, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false, noShow: false }
           : s
       );
       tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires: true });

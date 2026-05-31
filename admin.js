@@ -592,7 +592,7 @@ async function resolveCancellation(requestId, decision) {
         if (!snap.exists()) throw new Error("Game not found.");
         const slots = (snap.data().umpireSlots || []).map(s =>
           s.type === req.slotType && s.assignedUid === req.uid
-            ? { type: s.type, payRate: s.payRate ?? null, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false }
+            ? { type: s.type, payRate: s.payRate ?? null, assignedUid: null, assignedName: null, checkedIn: false, checkedInAt: null, paid: false, noShow: false }
             : s
         );
         const needsUmpires = slots.some(s => !s.assignedUid);
