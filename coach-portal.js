@@ -1,7 +1,7 @@
 // coach-portal.js — Coach dashboard
 import { db } from "./firebase.js";
 import { authReadyPromise, isCoach, isAdmin, getCurrentUser, getCurrentCoachProfile } from "./auth.js";
-import { esc, fmtDate, fmtTime, todayISO, setMsg } from "./utils.js";
+import { esc, fmtDate, fmtTime, todayISO, setMsg, showToast, showConfirm } from "./utils.js";
 import { getOrgSettings } from "./org.js";
 
 import {
@@ -592,7 +592,7 @@ async function saveRosterPlayer() {
 }
 
 async function deleteRosterPlayer(playerId) {
-  if (!confirm("Remove this player from your roster?")) return;
+  if (!await showConfirm("Remove this player from your roster?")) return;
   if (!myTeamId) return;
 
   const updatedPlayers = rosterPlayers.filter(p => p.id !== playerId);
@@ -602,7 +602,7 @@ async function deleteRosterPlayer(playerId) {
     renderRoster(rosterPlayers);
   } catch (err) {
     console.error("deleteRosterPlayer:", err);
-    alert("Error deleting player: " + (err.message || String(err)));
+    showToast("Error deleting player: " + (err.message || String(err)));
   }
 }
 

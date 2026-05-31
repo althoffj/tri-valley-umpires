@@ -1,7 +1,7 @@
 // coach-callup.js — Player call-up portal for coaches
 import { db }                           from "./firebase.js";
 import { authReadyPromise, getCurrentUser } from "./auth.js";
-import { esc }                          from "./utils.js";
+import { esc, showToast, showConfirm }  from "./utils.js";
 
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc,
@@ -376,7 +376,7 @@ function renderOutgoing() {
 }
 
 async function withdrawRequest(id) {
-  if (!confirm("Withdraw this call-up request?")) return;
+  if (!await showConfirm("Withdraw this call-up request?")) return;
   try {
     await updateDoc(doc(db, "callupRequests", id), {
       status: "withdrawn",
@@ -387,7 +387,7 @@ async function withdrawRequest(id) {
     renderOutgoing();
     renderPlayerBrowse(); // refresh "Requested" dim state
   } catch (err) {
-    alert("Error: " + err.message);
+    showToast("Error: " + err.message);
   }
 }
 

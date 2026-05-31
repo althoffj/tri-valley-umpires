@@ -1049,7 +1049,7 @@ authReadyPromise.then(() => {
   const repairBtn = document.getElementById("repairImportsBtn");
   if (repairBtn) {
     repairBtn.addEventListener("click", async () => {
-      if (!confirm("This will promote all incorrectly-imported calendar games to proper schedule entries with umpire slots, and delete any duplicates. Proceed?")) return;
+      if (!await showConfirm("This will promote all incorrectly-imported calendar games to proper schedule entries with umpire slots, and delete any duplicates. Proceed?")) return;
       repairBtn.disabled = true;
       if (syncMsg) { syncMsg.textContent = "Repairing…"; syncMsg.style.color = "var(--light-text)"; }
       try {
