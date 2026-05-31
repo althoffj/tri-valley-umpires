@@ -378,7 +378,7 @@ function getSlotTypesForDivision(division, rates) {
 function makeUmpireSlots(slotTypes, rateMap) {
   return slotTypes.map(t => ({
     type: t, assignedUid: null, assignedName: null,
-    payRate: rateMap[t] || 0, checkedIn: false, checkedInAt: null, paid: false,
+    payRate: rateMap[t] || 0, checkedIn: false, checkedInAt: null, paid: false, noShow: false,
   }));
 }
 
