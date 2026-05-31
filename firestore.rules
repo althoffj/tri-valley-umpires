@@ -138,9 +138,10 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Announcements: approved umpires can read; only admins can write
+    // Announcements: publicly readable (shown on the public home page banner);
+    // only admins can write
     match /announcements/{announcementId} {
-      allow read: if isApproved() || isAdmin();
+      allow read: if true;
       allow write: if isAdmin();
     }
 
