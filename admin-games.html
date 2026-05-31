@@ -51,6 +51,7 @@
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button type="button" id="syncNowBtn" class="btn print-btn">🔄 Sync Calendars</button>
         <button type="button" id="repairImportsBtn" class="btn print-btn">🔧 Repair Imports</button>
+        <button type="button" id="mergeDuplicatesBtn" class="btn print-btn" style="display:none">🔀 Merge Duplicates</button>
         <span id="syncNowMsg" style="font-size:0.82rem;color:var(--light-text)"></span>
         <a href="admin-add-game.html" class="btn">+ Add Game</a>
       </div>
@@ -286,8 +287,47 @@
     </div>
   </div>
 
+  <!-- ── Merge Duplicates List Modal ─────────────────────────────────────── -->
+  <div id="mergeListModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1200;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto">
+      <h2 style="margin-top:0">🔀 Merge Duplicate Games</h2>
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0;font-size:0.88rem">These games share the same date, field, and a start time within 30 minutes of each other. Review each pair and choose which record to keep.</p>
+      </div>
+      <div id="mergeListItems"></div>
+      <div class="page-actions" style="margin-top:16px">
+        <button type="button" class="btn print-btn" id="closeMergeListBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Merge Review Modal ─────────────────────────────────────────────── -->
+  <div id="mergeReviewModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1300;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:660px;max-height:90vh;overflow-y:auto">
+      <h2 style="margin-top:0">Review Merge</h2>
+      <p style="color:var(--light-text);font-size:0.88rem;margin-bottom:14px">The kept game will receive all ICS links from the deleted game so future calendar syncs won't re-import it. Umpire assignments on the kept game are preserved.</p>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <div id="mergeGameA" style="flex:1;min-width:220px"></div>
+        <div id="mergeGameB" style="flex:1;min-width:220px"></div>
+      </div>
+
+      <div style="background:var(--field);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:0.88rem">
+        <div id="mergeKeepLabel" style="color:#b8f2c4"></div>
+        <div id="mergeDropLabel" style="color:#ffb4b4;margin-top:2px"></div>
+      </div>
+
+      <div class="page-actions">
+        <button type="button" class="btn" id="confirmMergeBtn" style="background:#5a1a1a">Confirm Merge</button>
+        <button type="button" class="btn print-btn" id="mergeSwapBtn" data-idx="0">⇄ Swap Keep/Delete</button>
+        <button type="button" class="btn print-btn" id="closeMergeReviewBtn">← Back</button>
+      </div>
+      <p id="mergeMsg" class="signup-message" aria-live="polite"></p>
+    </div>
+  </div>
+
   <script type="module" src="auth.js?v=27"></script>
-  <script type="module" src="admin-games.js?v=40"></script>
+  <script type="module" src="admin-games.js?v=41"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=6"></script>
   <script type="module" src="nav.js?v=9"></script>

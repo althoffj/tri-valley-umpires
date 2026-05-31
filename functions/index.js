@@ -436,9 +436,11 @@ async function runSync() {
   const cityGames         = [];
   for (const d of gamesSnap.docs) {
     const g = d.data();
+    // Collect all icsLinks UIDs for dedup — not just city-schedule games.
+    // This ensures merged games (which carry icsLinks from both originals) don't get re-imported.
+    (g.icsLinks || []).forEach(l => linkedUids.add(l.uid));
     if (g.source === "city-schedule") {
       cityGames.push({ ref: d.ref, ...g });
-      (g.icsLinks || []).forEach(l => linkedUids.add(l.uid));
     }
   }
 
@@ -876,9 +878,11 @@ exports.previewCalendarImport = onCall({ cors: CORS }, async request => {
   const durMap   = schedCfg.gameDurationMinutes || { "10U": 90, "12U": 90, "14U": 120, "HS JV": 120, "HS Varsity": 150, default: 90 };
   const lateStartCutoff = timeToMinutes(schedCfg.lateStartCutoff || "19:30");
 
-  // Index existing games
+  // Index existing games — include icsLinks UIDs so merged games don't get re-imported
   const existingGames    = gamesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  const existingExtIdSet = new Set(existingGames.map(g => g.externalId).filter(Boolean));
+  const existingExtIdSet = new Set(existingGames.flatMap(g =>
+    [g.externalId, ...(g.icsLinks || []).map(l => l.uid)].filter(Boolean)
+  ));
   const today            = todayISO();
 
   const ready = [], conflicts = [], duplicates = [], warnings = [];
@@ -1031,9 +1035,12 @@ exports.commitCalendarImport = onCall({ cors: CORS }, async request => {
   const defaultRateMap = { Plate: payData.plate || 0, Field: payData.field || 0, Extra: payData.extra || 0 };
   const defaultSlots = makeUmpireSlots(payData.defaultSlotTypes || [], defaultRateMap);
 
-  // Dedup against already-existing externalIds
+  // Dedup against already-existing externalIds and icsLinks UIDs (covers merged games)
   const gamesSnap        = await db.collection("games").get();
-  const existingExtIdSet = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
+  const existingExtIdSet = new Set(gamesSnap.docs.flatMap(d => {
+    const g = d.data();
+    return [g.externalId, ...(g.icsLinks || []).map(l => l.uid)].filter(Boolean);
+  }));
 
   const BATCH_LIMIT = 499;
   let batch = db.batch();
@@ -1202,6 +1209,81 @@ exports.repairCalendarGames = onCall({ cors: CORS }, async request => {
   return { promoted, deleted, skipped };
 });
 
+// ── Merge duplicate games ─────────────────────────────────────────────────────
+
+exports.mergeGames = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+
+  const db        = getFirestore();
+  const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  // Require games role or super-admin
+  const callerData  = callerDoc.data();
+  const isSuperAdmin = callerData.superAdmin === true || (callerData.roles || []).length === 0;
+  const hasGamesRole = (callerData.roles || []).includes("games");
+  if (!isSuperAdmin && !hasGamesRole) throw new HttpsError("permission-denied", "Game management permission required.");
+
+  const { keepId, dropId } = request.data;
+  if (!keepId || !dropId) throw new HttpsError("invalid-argument", "keepId and dropId are required.");
+  if (keepId === dropId)  throw new HttpsError("invalid-argument", "keepId and dropId must be different games.");
+
+  const [keepSnap, dropSnap] = await Promise.all([
+    db.doc(`games/${keepId}`).get(),
+    db.doc(`games/${dropId}`).get(),
+  ]);
+  if (!keepSnap.exists) throw new HttpsError("not-found", `Game ${keepId} not found.`);
+  if (!dropSnap.exists) throw new HttpsError("not-found", `Game ${dropId} not found.`);
+
+  const keepData = keepSnap.data();
+  const dropData = dropSnap.data();
+
+  // Collect all ICS UIDs from the game being dropped so future syncs skip them
+  const dropUids = [
+    dropData.externalId,
+    ...(dropData.icsLinks || []).map(l => l.uid),
+    ...(dropData.mergedFrom || []),
+  ].filter(Boolean);
+
+  // Merge into the kept game:
+  //   - Union icsLinks (deduped by uid)
+  //   - Collect all historical externalIds in mergedFrom audit trail
+  //   - Preserve umpire slots from kept game (don't overwrite assignments)
+  const existingIcsUids = new Set((keepData.icsLinks || []).map(l => l.uid));
+  const newIcsLinks = [...(keepData.icsLinks || [])];
+  for (const uid of dropUids) {
+    if (!existingIcsUids.has(uid)) {
+      // Try to find a teamName for this uid from dropData.icsLinks
+      const match = (dropData.icsLinks || []).find(l => l.uid === uid);
+      newIcsLinks.push({ uid, teamName: match ? match.teamName : (dropData.teamName || "") });
+      existingIcsUids.add(uid);
+    }
+  }
+
+  const mergedFrom = [
+    ...(keepData.mergedFrom || []),
+    dropId,
+    ...(dropData.mergedFrom || []),
+  ].filter((v, i, a) => a.indexOf(v) === i); // unique
+
+  const batch = db.batch();
+
+  // Update the game to keep
+  batch.update(keepSnap.ref, {
+    icsLinks:   newIcsLinks,
+    mergedFrom,
+    mergedAt:   new Date().toISOString(),
+    mergedBy:   request.auth.uid,
+  });
+
+  // Delete the duplicate
+  batch.delete(dropSnap.ref);
+
+  await batch.commit();
+
+  return { merged: true, keepId, dropId, icsLinksAdded: newIcsLinks.length - (keepData.icsLinks || []).length };
+});
+
 // ── Callable: admin panel "Sync" button ───────────────────────────────────────
 
 exports.syncGamesNow = onCall(
@@ -1321,9 +1403,10 @@ async function runSyncForTeam(team) {
   const cityGames      = [];
   for (const d of gamesSnap.docs) {
     const g = d.data();
+    // Collect all icsLinks UIDs for dedup — not just city-schedule games.
+    (g.icsLinks || []).forEach(l => linkedUids.add(l.uid));
     if (g.source === "city-schedule") {
       cityGames.push({ ref: d.ref, ...g });
-      (g.icsLinks || []).forEach(l => linkedUids.add(l.uid));
     }
   }
 

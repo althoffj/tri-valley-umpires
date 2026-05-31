@@ -1,6 +1,6 @@
 // admin-games.js — Game management: sync, add, list, edit modal, team calendars
 import { db, app } from "./firebase.js";
-import { authReadyPromise, isAdmin, isSuperAdmin } from "./auth.js";
+import { authReadyPromise, isAdmin, isSuperAdmin, getCurrentUser } from "./auth.js";
 import { downloadIcs } from "./cal.js";
 import { esc, fmtDate, fmtTime, todayISO, setMsg, showToast, showConfirm } from "./utils.js";
 
@@ -36,6 +36,21 @@ let gfTeam     = "";
 let gfFacility = "";
 let gfField    = "";
 let gfUmpire   = "";
+
+// ── Admin role ────────────────────────────────────────────────────────────────
+
+let _adminDoc = null;
+
+async function loadAdminDoc() {
+  const user = getCurrentUser();
+  if (!user) return;
+  const snap = await getDoc(doc(db, "admins", user.uid)).catch(() => null);
+  _adminDoc = snap?.exists() ? snap.data() : {};
+}
+
+function canManageGames() {
+  return isSuperAdmin() || (_adminDoc?.roles || []).includes("games");
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1011,6 +1026,184 @@ function wireGameFilters() {
   });
 }
 
+// ── Merge duplicate games ─────────────────────────────────────────────────────
+
+function timeToMins(t) {
+  if (!t) return 0;
+  const [h, m] = t.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function findDuplicateGames(games) {
+  // Group non-cancelled future games by date + normalised field
+  const buckets = {};
+  const today   = todayISO();
+  for (const g of games) {
+    if (g.cancelled) continue;
+    if (g.date < today) continue;
+    const key = `${g.date}|${(g.field || "").toLowerCase().trim()}`;
+    if (!buckets[key]) buckets[key] = [];
+    buckets[key].push(g);
+  }
+
+  const pairs = [];
+  for (const bucket of Object.values(buckets)) {
+    if (bucket.length < 2) continue;
+    // Compare every pair within the bucket; flag if times are within 30 min
+    for (let i = 0; i < bucket.length; i++) {
+      for (let j = i + 1; j < bucket.length; j++) {
+        const a = bucket[i], b = bucket[j];
+        const diff = Math.abs(timeToMins(a.time) - timeToMins(b.time));
+        if (diff <= 30) pairs.push([a, b]);
+      }
+    }
+  }
+  return pairs;
+}
+
+// State for merge modals
+let _mergePairs     = []; // [[gameA, gameB], ...]
+let _mergeKeepId    = null;
+let _mergeDropId    = null;
+
+function openMergeListModal() {
+  _mergePairs = findDuplicateGames(allGames);
+  const modal = document.getElementById("mergeListModal");
+  const list  = document.getElementById("mergeListItems");
+
+  if (!_mergePairs.length) {
+    list.innerHTML = `<p style="color:var(--light-text);padding:12px 0">No duplicate games detected.</p>`;
+  } else {
+    list.innerHTML = _mergePairs.map((pair, idx) => {
+      const [a, b] = pair;
+      return `<div class="merge-pair-row" style="border:1px solid #444;border-radius:8px;padding:12px;margin-bottom:10px">
+        <div style="font-size:0.82rem;color:var(--light-text);margin-bottom:6px">
+          ${esc(fmtDate(a.date))} · ${esc(a.field || "No field")} · ${esc(a.division || "")}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <div style="flex:1;min-width:160px;background:var(--field);border-radius:6px;padding:8px;font-size:0.85rem">
+            <strong>${esc(a.homeTeam || a.awayTeam || "Game A")}</strong><br/>
+            <span style="color:var(--light-text)">${a.time ? fmtTime(a.time) : "No time"} · ${esc(a.source || "")}</span><br/>
+            <span style="color:#8ab4f8;font-size:0.75rem">${esc(a.id)}</span>
+          </div>
+          <div style="color:var(--light-text)">↔</div>
+          <div style="flex:1;min-width:160px;background:var(--field);border-radius:6px;padding:8px;font-size:0.85rem">
+            <strong>${esc(b.homeTeam || b.awayTeam || "Game B")}</strong><br/>
+            <span style="color:var(--light-text)">${b.time ? fmtTime(b.time) : "No time"} · ${esc(b.source || "")}</span><br/>
+            <span style="color:#8ab4f8;font-size:0.75rem">${esc(b.id)}</span>
+          </div>
+          <button type="button" class="btn print-btn merge-review-btn"
+            data-idx="${idx}" style="font-size:0.8rem;white-space:nowrap">Review →</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  modal.style.display = "flex";
+}
+
+function closeMergeListModal() {
+  document.getElementById("mergeListModal").style.display = "none";
+}
+
+function openMergeReviewModal(idx) {
+  const pair = _mergePairs[idx];
+  if (!pair) return;
+  const [a, b] = pair;
+
+  _mergeKeepId = a.id;
+  _mergeDropId = b.id;
+
+  const modal = document.getElementById("mergeReviewModal");
+
+  function gameCard(g, side) {
+    const slots = (g.umpireSlots || []).map(s =>
+      `<div style="font-size:0.78rem;color:${s.assignedUid ? "#b8f2c4" : "var(--light-text)"}">
+        ${esc(s.type)}: ${s.assignedName ? esc(s.assignedName) : "Open"} · $${s.payRate || 0}
+      </div>`).join("") || `<div style="font-size:0.78rem;color:var(--light-text)">No slots</div>`;
+    const links = (g.icsLinks || []).map(l => `<div style="font-size:0.72rem;color:#8ab4f8">${esc(l.uid)}</div>`).join("") || "";
+    return `<div style="background:var(--field);border-radius:8px;padding:14px;flex:1;min-width:200px">
+      <div style="font-weight:bold;margin-bottom:4px">${side}</div>
+      <div>${esc(g.date)} ${g.time ? fmtTime(g.time) : ""}</div>
+      <div>${esc(g.homeTeam || "")} vs ${esc(g.awayTeam || "")}</div>
+      <div style="color:var(--light-text);font-size:0.82rem">${esc(g.field || "")} · ${esc(g.division || "")} · ${esc(g.source || "")}</div>
+      <div style="margin-top:6px">${slots}</div>
+      ${links ? `<div style="margin-top:4px">${links}</div>` : ""}
+      <div style="font-size:0.72rem;color:#666;margin-top:4px">${esc(g.id)}</div>
+    </div>`;
+  }
+
+  document.getElementById("mergeGameA").innerHTML = gameCard(a, "Game A (will be kept)");
+  document.getElementById("mergeGameB").innerHTML = gameCard(b, "Game B (will be deleted)");
+  document.getElementById("mergeSwapBtn").dataset.idx = idx;
+  document.getElementById("mergeMsg").textContent = "";
+
+  // Show which game will be kept/dropped
+  document.getElementById("mergeKeepLabel").textContent = `Keep: ${a.homeTeam || a.awayTeam || a.id}`;
+  document.getElementById("mergeDropLabel").textContent = `Delete: ${b.homeTeam || b.awayTeam || b.id}`;
+
+  closeMergeListModal();
+  modal.style.display = "flex";
+}
+
+function closeMergeReviewModal() {
+  document.getElementById("mergeReviewModal").style.display = "none";
+}
+
+function swapMergeGames(idx) {
+  const pair = _mergePairs[idx];
+  if (!pair) return;
+  _mergePairs[idx] = [pair[1], pair[0]];
+  openMergeReviewModal(idx);
+}
+
+async function confirmMerge() {
+  if (!_mergeKeepId || !_mergeDropId) return;
+  const confirmBtn = document.getElementById("confirmMergeBtn");
+  const msgEl      = document.getElementById("mergeMsg");
+  confirmBtn.disabled = true;
+  setMsg(msgEl, "Merging…", "");
+
+  try {
+    const mergeFn = httpsCallable(getFunctions(app, "us-central1"), "mergeGames");
+    await mergeFn({ keepId: _mergeKeepId, dropId: _mergeDropId });
+    setMsg(msgEl, "✓ Games merged successfully.", "ok");
+    await loadGames();
+    // Refresh pairs after merge
+    _mergePairs = findDuplicateGames(allGames);
+    setTimeout(() => {
+      closeMergeReviewModal();
+    }, 1200);
+  } catch (err) {
+    setMsg(msgEl, "Error: " + err.message, "error");
+  } finally {
+    confirmBtn.disabled = false;
+  }
+}
+
+function wireMergeModals() {
+  const mergeBtn = document.getElementById("mergeDuplicatesBtn");
+  if (mergeBtn) {
+    mergeBtn.addEventListener("click", openMergeListModal);
+  }
+
+  document.getElementById("closeMergeListBtn")?.addEventListener("click", closeMergeListModal);
+  document.getElementById("closeMergeReviewBtn")?.addEventListener("click", () => {
+    closeMergeReviewModal();
+    openMergeListModal();
+  });
+  document.getElementById("confirmMergeBtn")?.addEventListener("click", confirmMerge);
+
+  document.getElementById("mergeListItems")?.addEventListener("click", e => {
+    const btn = e.target.closest(".merge-review-btn");
+    if (btn) openMergeReviewModal(Number(btn.dataset.idx));
+  });
+
+  document.getElementById("mergeSwapBtn")?.addEventListener("click", e => {
+    swapMergeGames(Number(e.currentTarget.dataset.idx));
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 authReadyPromise.then(() => {
@@ -1027,6 +1220,13 @@ authReadyPromise.then(() => {
   loadFacilitiesIntoSelects();
   loadPendingCancellations();
   wireGameFilters();
+  wireMergeModals();
+
+  // Load admin doc to determine game-management permission, then show/hide merge button
+  loadAdminDoc().then(() => {
+    const mergeBtn = document.getElementById("mergeDuplicatesBtn");
+    if (mergeBtn) mergeBtn.style.display = canManageGames() ? "" : "none";
+  });
 
   const syncBtn = document.getElementById("syncNowBtn");
   const syncMsg = document.getElementById("syncNowMsg");
