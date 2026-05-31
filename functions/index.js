@@ -260,6 +260,14 @@ function parseDTStart(dtstart) {
 }
 
 /**
+ * Strip "City of " / "City Of " prefix from a city string so that
+ * "City of Crooks" matches "Crooks" in an ICS LOCATION string.
+ */
+function cityBaseName(city) {
+  return (city || "").replace(/^city\s+of\s+/i, "").trim();
+}
+
+/**
  * Correct the isAway flag from the perspective of a specific subscribed team.
  * GameChanger SUMMARY format: "Away Team @ Home Team"
  * parseVEvents always sets isAway=true for the @ format, but that is only right
@@ -483,8 +491,10 @@ async function runSync() {
       ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway);
       // Location-based override: if the game is at the team's home city it is always a home game,
       // regardless of how the summary was formatted or whether name-matching was ambiguous.
-      if (team.city && ev.location && ev.location.toLowerCase().includes(team.city.toLowerCase())) {
-        ev.isAway = false;
+      // Use cityBaseName() to strip "City of " so "City of Crooks" matches "Crooks" in ICS LOCATION.
+      {
+        const cityBase = cityBaseName(team.city).toLowerCase();
+        if (cityBase && ev.location && ev.location.toLowerCase().includes(cityBase)) ev.isAway = false;
       }
 
       // ── Route practice events to `practices` collection ─────────────────────
@@ -644,14 +654,24 @@ async function runSync() {
     const matches = eventsByDivDate[key] || [];
     const gameUpdate = {};
 
+    // City-schedule games are always home games — ensure isAway is never true
+    if (game.isAway === true) gameUpdate.isAway = false;
+
     if (!game.icsLinks || game.icsLinks.length === 0) {
       if (matches.length > 0) {
         gameUpdate.icsLinks = matches.map(e => ({ uid: e.uid, teamName: e.teamName }));
-        // Copy team names and away flag from first matching ICS event if not already set
+        // Copy team names from first matching ICS event if not already set
         const first = matches[0];
         if (!game.homeTeam && first.homeTeam) gameUpdate.homeTeam = first.homeTeam;
         if (!game.awayTeam && first.awayTeam) gameUpdate.awayTeam = first.awayTeam;
-        if (first.isAway !== undefined && (game.isAway || false) !== first.isAway) gameUpdate.isAway = first.isAway;
+        // Never copy isAway=true from ICS onto a city-schedule game
+        if (first.isAway === false && game.isAway !== false) gameUpdate.isAway = false;
+        // Fill field from ICS location if empty
+        const firstLoc = matches.find(e => !!e.location);
+        if (firstLoc) {
+          const fieldName = firstLoc.location.split(",")[0].trim();
+          if (fieldName && (!game.field || game.field.includes(","))) gameUpdate.field = fieldName;
+        }
         linked++;
       }
     } else {
@@ -662,25 +682,23 @@ async function runSync() {
       } else if (missing.length === 0 && game.possibleChange) {
         gameUpdate.possibleChange = false;
       }
-      // Pick up team names, location, and away flag if GameChanger fills them in later
-      const locatedMatch = matches.find(e => !!facilityIdFromLocation(e.location, facilityByCity));
-      // Only fill in field if not already set; take just the first segment of the ICS
-      // location string ("West Field, Colton, SD" → "West Field"), not the full address.
+      // Pick up field from ICS location — prefer facility-matched, fall back to any non-empty location.
+      // Take only the first comma-segment ("West Field, Colton, SD" → "West Field").
       // Also self-heal games where the full address was previously written as the field.
+      const locatedMatch = matches.find(e => e.location && facilityIdFromLocation(e.location, facilityByCity))
+                        || matches.find(e => !!e.location);
       if (locatedMatch) {
         const fieldName = locatedMatch.location.split(",")[0].trim();
-        if (!game.field || game.field.includes(",")) {
-          gameUpdate.field = fieldName;
-        }
+        if (fieldName && (!game.field || game.field.includes(","))) gameUpdate.field = fieldName;
       }
       const namedMatch = matches.find(e => e.homeTeam);
       if (namedMatch && !game.homeTeam) {
         gameUpdate.homeTeam = namedMatch.homeTeam;
         gameUpdate.awayTeam = namedMatch.awayTeam;
       }
-      // Always sync isAway from the ICS match (away status can change if schedule changes)
-      const awayMatch = matches.find(e => e.isAway !== undefined);
-      if (awayMatch && (game.isAway || false) !== awayMatch.isAway) gameUpdate.isAway = awayMatch.isAway;
+      // Only correct isAway to false from ICS — never force a city-schedule game to away via sync
+      const awayMatch = matches.find(e => e.isAway === false);
+      if (awayMatch && game.isAway !== false) gameUpdate.isAway = false;
     }
 
     // ── Fill in missing metadata from team config + ICS location ──────────────
@@ -739,10 +757,11 @@ async function runSync() {
       if (!team || !team.needsUmpireForHome) continue;
 
       // Location-based home detection: if we find a known facility in the location OR
-      // the location text contains the team's home city, it's a home game.
-      const loc = (g.location || "").toLowerCase();
+      // the location text contains the team's home city (stripped of "City of " prefix), it's a home game.
+      const loc      = (g.location || "").toLowerCase();
+      const cityBase = cityBaseName(team.city).toLowerCase();
       const isAtHome = !!facilityIdFromLocation(g.location, facilityByCity) ||
-                       (team.city && loc.includes(team.city.toLowerCase())) ||
+                       (cityBase && loc.includes(cityBase)) ||
                        (team.city && g.isAway !== true && !g.location); // no location — fall back to stored value
       if (!isAtHome) continue;
 
@@ -757,8 +776,8 @@ async function runSync() {
         const league     = g.league || team.leagueNames?.[0] || team.leagueName || "";
         const division   = g.division || inferDivision(team.name);
         const slotTypes  = getSlotTypesForDivision(division, rates);
-        // Re-derive isAway: location at home city always wins
-        const correctedIsAway = (team.city && loc.includes(team.city.toLowerCase()))
+        // Re-derive isAway: city-schedule games are always home; location at home city confirms false
+        const correctedIsAway = (cityBase && loc.includes(cityBase))
           ? false
           : resolveIsAway(team.name, g.homeTeam || "", g.awayTeam || "", g.isAway || false);
         repairOps.push(d.ref.update({
@@ -907,6 +926,11 @@ exports.previewCalendarImport = onCall({ cors: CORS }, async request => {
       if (!ev.date || ev.date < today) continue; // skip past events
       // Correct isAway from the subscribed team's perspective
       ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway);
+      // Location-based override: strip "City of " prefix so "City of Crooks" matches "Crooks"
+      {
+        const cityBase = cityBaseName(team.city).toLowerCase();
+        if (cityBase && ev.location && ev.location.toLowerCase().includes(cityBase)) ev.isAway = false;
+      }
 
       // Skip practice/workout events — they go to the practices collection, not games
       if (isPracticeEvent(ev.summary)) { skippedPractices++; continue; }
@@ -1151,9 +1175,11 @@ exports.repairCalendarGames = onCall({ cors: CORS }, async request => {
 
     // Only repair home games for teams that have needsUmpireForHome configured.
     // Use the location as primary signal; fall back to team city + isAway flag.
-    const loc = (game.location || "").toLowerCase();
+    // Strip "City of " prefix so "City of Crooks" matches "Crooks" in ICS LOCATION strings.
+    const loc      = (game.location || "").toLowerCase();
+    const cityBase = cityBaseName(team.city).toLowerCase();
     const isAtHome = !!facilityIdFromLocation(game.location, facilityByCity) ||
-                     (team.city && loc.includes(team.city.toLowerCase())) ||
+                     (cityBase && loc.includes(cityBase)) ||
                      (team.city && game.isAway !== true && !game.location);
 
     if (!isAtHome || !team.needsUmpireForHome) { skipped++; continue; }
@@ -1177,8 +1203,8 @@ exports.repairCalendarGames = onCall({ cors: CORS }, async request => {
       const division   = game.division || inferDivision(team.name);
       const slotTypes  = getSlotTypesForDivision(division, rates);
 
-      // Re-compute isAway: location at team's home city always wins
-      const correctedIsAway = (team.city && loc.includes(team.city.toLowerCase()))
+      // Re-compute isAway: city-schedule games are always home; cityBase match confirms false
+      const correctedIsAway = (cityBase && loc.includes(cityBase))
         ? false
         : resolveIsAway(team.name, game.homeTeam || "", game.awayTeam || "", game.isAway || false);
 
@@ -1432,6 +1458,11 @@ async function runSyncForTeam(team) {
     if (!ev.date || ev.date < today) continue; // never add or modify past events
     // Correct isAway from the subscribed team's perspective
     ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway);
+    // Location-based override: strip "City of " so "City of Crooks" matches "Crooks" in ICS LOCATION
+    {
+      const cityBase = cityBaseName(team.city).toLowerCase();
+      if (cityBase && ev.location && ev.location.toLowerCase().includes(cityBase)) ev.isAway = false;
+    }
 
     // ── Route practice events to `practices` collection ─────────────────────
     if (isPracticeEvent(ev.summary)) {
@@ -1530,13 +1561,23 @@ async function runSyncForTeam(team) {
     const matches = eventsByDivDate[key] || [];
     const gameUpdate = {};
 
+    // City-schedule games are always home games — ensure isAway is never true
+    if (game.isAway === true) gameUpdate.isAway = false;
+
     if (!game.icsLinks || game.icsLinks.length === 0) {
       if (matches.length > 0) {
         gameUpdate.icsLinks = matches.map(e => ({ uid: e.uid, teamName: e.teamName }));
         const first = matches[0];
         if (!game.homeTeam && first.homeTeam) gameUpdate.homeTeam = first.homeTeam;
         if (!game.awayTeam && first.awayTeam) gameUpdate.awayTeam = first.awayTeam;
-        if (first.isAway !== undefined && (game.isAway || false) !== first.isAway) gameUpdate.isAway = first.isAway;
+        // Never copy isAway=true from ICS onto a city-schedule game
+        if (first.isAway === false && game.isAway !== false) gameUpdate.isAway = false;
+        // Fill field from ICS location if empty
+        const firstLoc = matches.find(e => !!e.location);
+        if (firstLoc) {
+          const fieldName = firstLoc.location.split(",")[0].trim();
+          if (fieldName && (!game.field || game.field.includes(","))) gameUpdate.field = fieldName;
+        }
         linked++;
       }
     } else {
@@ -1544,9 +1585,16 @@ async function runSyncForTeam(team) {
       const missing  = game.icsLinks.filter(l => !liveUids.has(l.uid));
       if (missing.length > 0 && !game.possibleChange) { gameUpdate.possibleChange = true; flagged++; }
       else if (missing.length === 0 && game.possibleChange) { gameUpdate.possibleChange = false; }
-      // Always sync isAway from the ICS match (merged into single update)
-      const awayMatch = matches.find(e => e.isAway !== undefined);
-      if (awayMatch && (game.isAway || false) !== awayMatch.isAway) gameUpdate.isAway = awayMatch.isAway;
+      // Fill field from ICS location — prefer facility-matched, fall back to any non-empty location
+      const locatedMatch = matches.find(e => e.location && facilityIdFromLocation(e.location, facilityByCity))
+                        || matches.find(e => !!e.location);
+      if (locatedMatch) {
+        const fieldName = locatedMatch.location.split(",")[0].trim();
+        if (fieldName && (!game.field || game.field.includes(","))) gameUpdate.field = fieldName;
+      }
+      // Only correct isAway to false from ICS — never force a city-schedule game to away via sync
+      const awayMatch = matches.find(e => e.isAway === false);
+      if (awayMatch && game.isAway !== false) gameUpdate.isAway = false;
     }
 
     if (Object.keys(gameUpdate).length) cityUpdates.push({ ref: game.ref, update: gameUpdate });
@@ -1570,8 +1618,9 @@ async function runSyncForTeam(team) {
       if ((g.umpireSlots || []).some(s => s.assignedUid)) continue;
       if (!team.needsUmpireForHome) continue;
       const loc      = (g.location || "").toLowerCase();
+      const cityBase = cityBaseName(team.city).toLowerCase();
       const isAtHome = !!facilityIdFromLocation(g.location, facilityByCity) ||
-                       (team.city && loc.includes(team.city.toLowerCase())) ||
+                       (cityBase && loc.includes(cityBase)) ||
                        (team.city && g.isAway !== true && !g.location);
       if (!isAtHome) continue;
       const key = `${g.division}|${g.date}`;
@@ -1583,7 +1632,7 @@ async function runSyncForTeam(team) {
         const city       = g.city || team.city || "";
         const league     = g.league || team.leagueNames?.[0] || team.leagueName || "";
         const slotTypes  = getSlotTypesForDivision(g.division || division, rates);
-        const correctedIsAway = (team.city && loc.includes(team.city.toLowerCase()))
+        const correctedIsAway = (cityBase && loc.includes(cityBase))
           ? false
           : resolveIsAway(team.name, g.homeTeam || "", g.awayTeam || "", g.isAway || false);
         repairOps.push(d.ref.update({
