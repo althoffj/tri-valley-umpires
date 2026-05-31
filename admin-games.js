@@ -1026,6 +1026,61 @@ function wireGameFilters() {
   });
 }
 
+// ── Notification pause toggle ─────────────────────────────────────────────────
+
+let _notifPaused = null; // null = not yet loaded
+
+function applyNotifPauseUI(paused) {
+  _notifPaused = paused;
+  const btn = document.getElementById("notifPauseBtn");
+  if (!btn) return;
+  if (paused) {
+    btn.textContent = "🔕 Notifications Paused";
+    btn.style.background = "#5a1a1a";
+    btn.style.color = "#ffb4b4";
+    btn.style.borderColor = "#8a2a2a";
+    btn.title = "Notifications are currently paused — Slack, email, and push are suppressed. Click to re-enable.";
+  } else {
+    btn.textContent = "🔔 Notifications";
+    btn.style.background = "";
+    btn.style.color = "";
+    btn.style.borderColor = "";
+    btn.title = "Pause all outbound notifications (Slack, email, push) before running bulk syncs";
+  }
+}
+
+async function wireNotifPause() {
+  const fns    = getFunctions(app, "us-central1");
+  const getPausedFn = httpsCallable(fns, "getNotificationsPaused");
+  const setPausedFn = httpsCallable(fns, "setNotificationsPaused");
+  const btn         = document.getElementById("notifPauseBtn");
+  if (!btn) return;
+
+  // Load current state
+  try {
+    const result = await getPausedFn();
+    applyNotifPauseUI(result.data.paused);
+  } catch {
+    btn.title = "Could not load notification state";
+  }
+
+  btn.addEventListener("click", async () => {
+    const newPaused = !_notifPaused;
+    btn.disabled = true;
+    try {
+      await setPausedFn({ paused: newPaused });
+      applyNotifPauseUI(newPaused);
+      showToast(newPaused
+        ? "🔕 Notifications paused — Slack, email, and push are suppressed until you re-enable."
+        : "🔔 Notifications re-enabled.");
+    } catch (err) {
+      showToast("Error: " + err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 // ── Merge duplicate games ─────────────────────────────────────────────────────
 
 function timeToMins(t) {
@@ -1221,6 +1276,7 @@ authReadyPromise.then(() => {
   loadPendingCancellations();
   wireGameFilters();
   wireMergeModals();
+  wireNotifPause();
 
   // Load admin doc to determine game-management permission, then show/hide merge button
   loadAdminDoc().then(() => {

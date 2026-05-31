@@ -1323,6 +1323,26 @@ exports.syncGamesNow = onCall(
   }
 );
 
+// ── Notification pause toggle ─────────────────────────────────────────────────
+
+exports.setNotificationsPaused = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db       = getFirestore();
+  const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+  const { paused } = request.data;
+  if (typeof paused !== "boolean") throw new HttpsError("invalid-argument", "paused must be boolean.");
+  await db.doc("config/slackWebhooks").set({ notificationsPaused: paused }, { merge: true });
+  return { paused };
+});
+
+exports.getNotificationsPaused = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db   = getFirestore();
+  const snap = await db.doc("config/slackWebhooks").get();
+  return { paused: snap.exists ? (snap.data().notificationsPaused === true) : false };
+});
+
 // ── One-time city schedule import ─────────────────────────────────────────────
 
 const CITY_SCHEDULE = [
@@ -1938,6 +1958,9 @@ exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
   const db     = getFirestore();
   const div    = after?.division ?? before?.division ?? "";
   const config = await loadWebhookConfig(db);
+
+  // Respect global notification pause (set by admin before bulk sync runs)
+  if (config.notificationsPaused) return;
 
   // ── 1. Structural game changes → gameChanges / rainout webhooks ─────────────
   let broadcastMsg = null;
@@ -2630,6 +2653,7 @@ exports.sendBroadcast = onCall({ cors: CORS }, async request => {
 
 async function dayOfRemindersCore(db) {
   const config = await loadWebhookConfig(db);
+  if (config.notificationsPaused) return { sent: false, reason: "Notifications paused." };
   // early-exit guard: check if any webhook handles dayOfReminders
   const anyDayOf = Array.isArray(config.webhooks)
     ? config.webhooks.some(w => w.active !== false && w.url && (w.events||[]).includes("dayOfReminders"))
@@ -2751,6 +2775,7 @@ exports.triggerDayOfReminders = onCall({ cors: CORS }, async request => {
 
 async function dailyGameSummaryCore(db) {
   const config  = await loadWebhookConfig(db);
+  if (config.notificationsPaused) return { sent: false, reason: "Notifications paused." };
   const targets = getTargetWebhooks(config, "dailySummary");
   if (!targets.length) return { sent: false, reason: "No webhook configured." };
 
@@ -4153,6 +4178,10 @@ exports.onGameSlotChanged = onDocumentWritten(
 
     const APP_URL = "https://tri-valley-baseball-umpires.web.app";
     const db      = getFirestore();
+
+    // Respect global notification pause before doing any email/push work
+    const notifConfig = await loadWebhookConfig(db);
+    if (notifConfig.notificationsPaused) return;
 
     const gameDate = after.date  || "";
     const gameTime = after.time  || "";
