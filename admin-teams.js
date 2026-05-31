@@ -1,5 +1,5 @@
 // admin-teams.js — Teams & Leagues management
-import { db }                             from "./firebase.js";
+import { db, app }                        from "./firebase.js";
 import { authReadyPromise, isAdmin }      from "./auth.js";
 import { esc, showToast, showConfirm } from "./utils.js";
 
@@ -7,6 +7,11 @@ import {
   collection, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
   doc, query, where, orderBy, arrayUnion, arrayRemove, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+import {
+  getFunctions,
+  httpsCallable,
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -118,8 +123,12 @@ function teamLeagueMeta(t) {
 }
 
 function teamBadges(t) {
+  const aliasBadge = (t.aliases || []).length
+    ? `<span style="font-size:0.75rem;color:#c4b0ff;background:rgba(140,100,255,0.12);border:1px solid rgba(140,100,255,0.3);border-radius:4px;padding:1px 6px" title="${esc((t.aliases || []).join(", "))}">🔀 ${t.aliases.length} alias${t.aliases.length !== 1 ? "es" : ""}</span>`
+    : "";
   return (t.needsUmpireForHome ? '<span class="team-needs-ump">⚾ Needs umpire</span>' : "")
     + teamLeagueMeta(t)
+    + aliasBadge
     + (t.icsUrl ? '<span style="color:var(--light-text);font-size:0.78rem">📅 iCal linked</span>' : "");
 }
 
@@ -878,6 +887,173 @@ document.getElementById("leagueForm").addEventListener("submit", async e => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  MERGE TEAM NAMES
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _mergeAliases = []; // string[] — alias names queued for this merge
+
+function openMergeTeamsModal() {
+  _mergeAliases = [];
+  // Populate canonical dropdown from loaded teams
+  const sel = document.getElementById("mergeCanonicalSelect");
+  if (sel) {
+    const sorted = [...teams].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    sel.innerHTML = `<option value="">— Select team —</option>` +
+      sorted.map(t => `<option value="${esc(t.name)}">${esc(t.name)}${t.division ? ` (${esc(t.division)})` : ""}</option>`).join("");
+    sel.value = "";
+  }
+  renderMergeAliasCandidates("");
+  renderMergeAliasChips();
+  const msg = document.getElementById("mergeTeamNamesMsg");
+  if (msg) { msg.textContent = ""; msg.className = "signup-message"; }
+  const btn = document.getElementById("confirmMergeTeamNamesBtn");
+  if (btn) btn.disabled = false;
+  document.getElementById("mergeTeamNamesModal").style.display = "";
+}
+
+function closeMergeTeamsModal() {
+  document.getElementById("mergeTeamNamesModal").style.display = "none";
+}
+
+// Populate the alias-candidate checklist based on the selected canonical team
+function renderMergeAliasCandidates(canonicalName) {
+  const wrap = document.getElementById("mergeAliasCheckboxes");
+  if (!wrap) return;
+  const others = teams
+    .filter(t => t.name !== canonicalName)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (!canonicalName || !others.length) {
+    wrap.innerHTML = `<span style="color:var(--light-text);font-size:0.85rem">${canonicalName ? "No other teams in config" : "Select a canonical team first"}</span>`;
+    return;
+  }
+  wrap.innerHTML = others.map(t => {
+    const isQueued = _mergeAliases.includes(t.name);
+    return `<label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;font-size:0.88rem">
+      <input type="checkbox" class="merge-alias-cb" value="${esc(t.name)}"${isQueued ? " checked" : ""} />
+      ${esc(t.name)}${t.division ? `<span style="color:var(--light-text);font-size:0.78rem">(${esc(t.division)})</span>` : ""}
+      ${(t.aliases || []).length ? `<span style="color:#8ab4f8;font-size:0.75rem">${t.aliases.length} alias${t.aliases.length !== 1 ? "es" : ""}</span>` : ""}
+    </label>`;
+  }).join("");
+
+  wrap.querySelectorAll(".merge-alias-cb").forEach(cb => {
+    cb.addEventListener("change", () => {
+      if (cb.checked) {
+        if (!_mergeAliases.includes(cb.value)) _mergeAliases.push(cb.value);
+      } else {
+        _mergeAliases = _mergeAliases.filter(a => a !== cb.value);
+      }
+      renderMergeAliasChips();
+    });
+  });
+}
+
+function renderMergeAliasChips() {
+  const wrap = document.getElementById("mergeAliasList");
+  if (!wrap) return;
+  if (!_mergeAliases.length) {
+    wrap.innerHTML = `<span style="color:var(--light-text);font-size:0.82rem">No aliases selected yet</span>`;
+    return;
+  }
+  wrap.innerHTML = _mergeAliases.map((a, i) =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;background:#1e2a3a;border:1px solid #2a3a4a;border-radius:16px;padding:3px 10px;font-size:0.82rem">
+      ${esc(a)}
+      <button type="button" class="merge-alias-remove" data-idx="${i}"
+        style="background:none;border:none;color:#ff8a8a;cursor:pointer;padding:0;font-size:0.9rem;line-height:1">×</button>
+    </span>`
+  ).join("");
+  wrap.querySelectorAll(".merge-alias-remove").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const removed = _mergeAliases.splice(parseInt(btn.dataset.idx), 1)[0];
+      // Uncheck the corresponding checkbox if it exists
+      const cb = document.querySelector(`.merge-alias-cb[value="${CSS.escape(removed)}"]`);
+      if (cb) cb.checked = false;
+      renderMergeAliasChips();
+    });
+  });
+}
+
+async function confirmMergeTeams() {
+  const canonicalName = document.getElementById("mergeCanonicalSelect")?.value;
+  const msg = document.getElementById("mergeTeamNamesMsg");
+  const btn = document.getElementById("confirmMergeTeamNamesBtn");
+
+  if (!canonicalName) {
+    msg.textContent = "Select a canonical team name.";
+    msg.className = "signup-message error";
+    return;
+  }
+  if (!_mergeAliases.length) {
+    msg.textContent = "Add at least one alias to merge.";
+    msg.className = "signup-message error";
+    return;
+  }
+
+  const removeAliasTeams = document.getElementById("mergeRemoveAliasTeams")?.checked ?? true;
+  const aliasList = _mergeAliases.map(a => `"${a}"`).join(", ");
+  const confirmed = await showConfirm(
+    `Rename all games where homeTeam or awayTeam is ${aliasList} to "${canonicalName}"?\n\nThis cannot be undone.`
+  );
+  if (!confirmed) return;
+
+  btn.disabled = true;
+  msg.textContent = "Merging…";
+  msg.className = "signup-message info";
+
+  try {
+    const fn = httpsCallable(getFunctions(app, "us-central1"), "mergeTeamNames");
+    const result = await fn({ canonicalName, aliases: _mergeAliases, removeAliasTeams });
+    const { updatedGames } = result.data;
+    msg.textContent = `✓ Updated ${updatedGames} game${updatedGames !== 1 ? "s" : ""}.`;
+    msg.className = "signup-message success";
+    // Reload teams to reflect alias storage / removed entries
+    await loadTeams();
+  } catch (err) {
+    msg.textContent = "Error: " + (err.message || String(err));
+    msg.className = "signup-message error";
+    btn.disabled = false;
+  }
+}
+
+function wireMergeTeamsModal() {
+  document.getElementById("mergeTeamNamesBtn")?.addEventListener("click", openMergeTeamsModal);
+  document.getElementById("closeMergeTeamNamesBtn")?.addEventListener("click", closeMergeTeamsModal);
+  document.getElementById("confirmMergeTeamNamesBtn")?.addEventListener("click", confirmMergeTeams);
+
+  // Canonical select → refresh alias candidate list
+  document.getElementById("mergeCanonicalSelect")?.addEventListener("change", function () {
+    // Reset aliases from config-team checkboxes (keep custom ones that aren't in config)
+    const configNames = new Set(teams.map(t => t.name));
+    _mergeAliases = _mergeAliases.filter(a => !configNames.has(a));
+    renderMergeAliasCandidates(this.value);
+    renderMergeAliasChips();
+  });
+
+  // Custom alias input
+  document.getElementById("mergeAliasAddBtn")?.addEventListener("click", () => {
+    const inp = document.getElementById("mergeAliasCustomInput");
+    const val = inp?.value.trim();
+    const canonicalName = document.getElementById("mergeCanonicalSelect")?.value;
+    if (!val) return;
+    if (val === canonicalName) { inp.value = ""; return; }
+    if (!_mergeAliases.includes(val)) {
+      _mergeAliases.push(val);
+      renderMergeAliasChips();
+    }
+    inp.value = "";
+    inp.focus();
+  });
+
+  document.getElementById("mergeAliasCustomInput")?.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); document.getElementById("mergeAliasAddBtn").click(); }
+  });
+
+  // Close on backdrop click
+  document.getElementById("mergeTeamNamesModal")?.addEventListener("click", e => {
+    if (e.target === e.currentTarget) closeMergeTeamsModal();
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -904,6 +1080,8 @@ authReadyPromise.then(async () => {
   }
   document.getElementById("adminContent").style.display = "";
   document.getElementById("noAccess").style.display     = "none";
+
+  wireMergeTeamsModal();
 
   try {
     await loadTeams();

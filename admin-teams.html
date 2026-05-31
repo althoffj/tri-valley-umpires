@@ -52,6 +52,12 @@
         <p style="margin:0">Manage teams, their iCal feeds, display colors, and whether home games automatically need umpires. These settings drive conflict detection, calendar color-coding, and import defaults.</p>
       </div>
 
+      <!-- Team list toolbar -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <span style="font-size:0.85rem;color:var(--light-text)">All teams</span>
+        <button type="button" id="mergeTeamNamesBtn" class="btn print-btn" style="font-size:0.82rem;padding:5px 12px">🔀 Merge Names</button>
+      </div>
+
       <!-- Team list -->
       <div id="teamList" style="margin-bottom:16px">
         <p id="teamListLoading" style="color:var(--light-text);padding:20px 0">Loading teams…</p>
@@ -319,8 +325,54 @@
     </p>
   </div>
 
+  <!-- ── Merge Team Names Modal ─────────────────────────────────────────────── -->
+  <div id="mergeTeamNamesModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);overflow-y:auto">
+    <div style="background:var(--container);border-radius:10px;padding:24px;max-width:560px;margin:40px auto;position:relative">
+      <h3 style="margin:0 0 8px">🔀 Merge Team Names</h3>
+      <p style="color:var(--light-text);font-size:0.85rem;margin:0 0 18px">
+        Rename all games that reference alias names to one canonical team name.
+        Aliases are stored on the team for reference.
+      </p>
+
+      <div class="form-group" style="margin-bottom:14px">
+        <label for="mergeCanonicalSelect">Canonical name <span style="font-weight:normal;color:var(--light-text)">(keep this name)</span></label>
+        <select id="mergeCanonicalSelect" style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.95rem">
+          <option value="">— Select team —</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:8px">
+        <label>Aliases <span style="font-weight:normal;color:var(--light-text)">(these names will be renamed to canonical)</span></label>
+        <div id="mergeAliasCheckboxes" style="max-height:140px;overflow-y:auto;padding:8px 10px;background:var(--container);border:1px solid #444;border-radius:6px;display:flex;flex-direction:column;gap:4px;margin-top:4px">
+          <span style="color:var(--light-text);font-size:0.85rem">Select a canonical team first</span>
+        </div>
+      </div>
+
+      <!-- Custom alias entry -->
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        <input type="text" id="mergeAliasCustomInput" placeholder="Add custom alias name…"
+          style="flex:1;padding:7px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem" />
+        <button type="button" id="mergeAliasAddBtn" class="btn print-btn" style="padding:7px 14px;font-size:0.85rem">+ Add</button>
+      </div>
+
+      <!-- Active alias chips -->
+      <div id="mergeAliasList" style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px;margin-bottom:14px"></div>
+
+      <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer;margin-bottom:18px;font-size:0.9rem">
+        <input type="checkbox" id="mergeRemoveAliasTeams" checked />
+        Remove alias entries from team config after merge
+      </label>
+
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button type="button" id="confirmMergeTeamNamesBtn" class="btn" style="padding:9px 20px">Merge All Games</button>
+        <button type="button" id="closeMergeTeamNamesBtn" class="btn print-btn" style="padding:9px 16px">Cancel</button>
+        <p id="mergeTeamNamesMsg" class="signup-message" style="margin:0;flex:1"></p>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="auth.js?v=27"></script>
-  <script type="module" src="admin-teams.js?v=12"></script>
+  <script type="module" src="admin-teams.js?v=13"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=6"></script>
   <script type="module" src="nav.js?v=9"></script>

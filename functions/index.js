@@ -4326,3 +4326,81 @@ exports.onGameSlotChanged = onDocumentWritten(
     }));
   }
 );
+
+// ── mergeTeamNames ─────────────────────────────────────────────────────────────
+// Renames all games that reference alias team names to a single canonical name,
+// stores the aliases on the team record for future reference, and optionally
+// removes the alias team entries from config/teamCalendars.
+exports.mergeTeamNames = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+
+  const db        = getFirestore();
+  const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const callerData   = callerDoc.data();
+  const isSuperAdmin = callerData.superAdmin === true || (callerData.roles || []).length === 0;
+  const hasGamesRole = (callerData.roles || []).includes("games");
+  const hasTeamsRole = (callerData.roles || []).includes("teams");
+  if (!isSuperAdmin && !hasGamesRole && !hasTeamsRole) {
+    throw new HttpsError("permission-denied", "Game or team management permission required.");
+  }
+
+  const { canonicalName, aliases, removeAliasTeams = false } = request.data;
+  if (!canonicalName || !Array.isArray(aliases) || !aliases.length) {
+    throw new HttpsError("invalid-argument", "canonicalName and aliases[] required.");
+  }
+
+  const aliasSet = new Set(
+    aliases.map(a => String(a).trim()).filter(a => a && a !== canonicalName)
+  );
+  if (!aliasSet.size) throw new HttpsError("invalid-argument", "No valid aliases after filtering.");
+
+  const aliasArr = [...aliasSet];
+  let updatedGames = 0;
+
+  // Firestore 'in' supports up to 30 values — chunk the alias list
+  const CHUNK = 30;
+  for (let i = 0; i < aliasArr.length; i += CHUNK) {
+    const chunk = aliasArr.slice(i, i + CHUNK);
+    const [homeSnap, awaySnap] = await Promise.all([
+      db.collection("games").where("homeTeam", "in", chunk).get(),
+      db.collection("games").where("awayTeam", "in", chunk).get(),
+    ]);
+
+    // Build per-game update map (handles the rare case where both teams are aliases)
+    const updateMap = {};
+    for (const d of homeSnap.docs) updateMap[d.id] = { ...updateMap[d.id], homeTeam: canonicalName };
+    for (const d of awaySnap.docs) updateMap[d.id] = { ...updateMap[d.id], awayTeam: canonicalName };
+
+    const entries = Object.entries(updateMap);
+    updatedGames += entries.length;
+
+    // Commit in batches of 500 (Firestore batch limit)
+    for (let j = 0; j < entries.length; j += 500) {
+      const b = db.batch();
+      entries.slice(j, j + 500).forEach(([id, fields]) => {
+        b.update(db.collection("games").doc(id), fields);
+      });
+      await b.commit();
+    }
+  }
+
+  // Update config/teamCalendars: add aliases to canonical team, optionally remove alias entries
+  const configRef  = db.collection("config").doc("teamCalendars");
+  const configSnap = await configRef.get();
+  let teams = configSnap.exists ? (configSnap.data().teams || []) : [];
+
+  const canonicalIdx = teams.findIndex(t => t.name === canonicalName);
+  if (canonicalIdx >= 0) {
+    const existing = new Set(teams[canonicalIdx].aliases || []);
+    aliasArr.forEach(a => existing.add(a));
+    teams[canonicalIdx] = { ...teams[canonicalIdx], aliases: [...existing] };
+  }
+
+  if (removeAliasTeams) teams = teams.filter(t => !aliasSet.has(t.name));
+
+  await configRef.set({ teams }, { merge: true });
+
+  return { updatedGames, aliases: aliasArr, removeAliasTeams };
+});
