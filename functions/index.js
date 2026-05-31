@@ -257,6 +257,27 @@ function parseDTStart(dtstart) {
   };
 }
 
+/**
+ * Correct the isAway flag from the perspective of a specific subscribed team.
+ * GameChanger SUMMARY format: "Away Team @ Home Team"
+ * parseVEvents always sets isAway=true for the @ format, but that is only right
+ * when the subscribed team is the away team.  This function re-resolves the flag
+ * by fuzzy-matching team names.
+ *
+ * Returns true  — subscribed team is the away team
+ *         false — subscribed team is the home team
+ *         parsedValue — neither name matches (fall back to parsed value)
+ */
+function resolveIsAway(teamName, homeTeam, awayTeam, parsedValue) {
+  if (!teamName || (!homeTeam && !awayTeam)) return parsedValue;
+  const t = teamName.toLowerCase().trim();
+  const matchAway = awayTeam && (awayTeam.toLowerCase().trim().includes(t) || t.includes(awayTeam.toLowerCase().trim()));
+  const matchHome = homeTeam && (homeTeam.toLowerCase().trim().includes(t) || t.includes(homeTeam.toLowerCase().trim()));
+  if (matchAway && !matchHome) return true;
+  if (matchHome && !matchAway) return false;
+  return parsedValue; // ambiguous — keep whatever parseVEvents decided
+}
+
 function parseVEvents(icsText) {
   // Unfold continuation lines (RFC 5545: line starting with space/tab continues previous)
   const unfolded = icsText.replace(/\r?\n[ \t]/g, "");
@@ -386,6 +407,8 @@ async function runSync() {
 
     for (const ev of parseVEvents(icsText)) {
       if (!ev.uid) continue;
+      // Correct isAway from the subscribed team's perspective
+      ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway);
 
       // ── Route practice events to `practices` collection ─────────────────────
       if (isPracticeEvent(ev.summary)) {
@@ -623,6 +646,8 @@ exports.previewCalendarImport = onCall({ cors: CORS }, async request => {
     let skippedPractices = 0;
     for (const ev of events) {
       if (!ev.date || ev.date < today) continue; // skip past events
+      // Correct isAway from the subscribed team's perspective
+      ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway);
 
       // Skip practice/workout events — they go to the practices collection, not games
       if (isPracticeEvent(ev.summary)) { skippedPractices++; continue; }
@@ -922,6 +947,8 @@ async function runSyncForTeam(team, teamIndex) {
 
   for (const ev of events) {
     if (!ev.uid) continue;
+    // Correct isAway from the subscribed team's perspective
+    ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway);
 
     // ── Route practice events to `practices` collection ─────────────────────
     if (isPracticeEvent(ev.summary)) {
