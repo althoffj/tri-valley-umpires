@@ -1145,43 +1145,101 @@ function findDuplicateGames(games) {
 }
 
 // State for merge modals
-let _mergePairs     = []; // [[gameA, gameB], ...]
+let _allMergePairs  = []; // [[gameA, gameB], ...] — unfiltered master list
+let _mergePairs     = []; // filtered view used for "Review →" indexing
+let _mergeTeamFilter = new Set(); // team names currently checked
 let _mergeKeepId    = null;
 let _mergeDropId    = null;
 
-function openMergeListModal() {
-  _mergePairs = findDuplicateGames(allGames);
-  const modal = document.getElementById("mergeListModal");
-  const list  = document.getElementById("mergeListItems");
+/** Collect every unique team name that appears in any pair. */
+function teamsFromPairs(pairs) {
+  const names = new Set();
+  for (const [a, b] of pairs) {
+    [a.homeTeam, a.awayTeam, a.teamName, b.homeTeam, b.awayTeam, b.teamName]
+      .forEach(n => { if (n) names.add(n); });
+  }
+  return [...names].sort((x, y) => x.localeCompare(y));
+}
 
-  if (!_mergePairs.length) {
-    list.innerHTML = `<p style="color:var(--light-text);padding:12px 0">No duplicate games detected.</p>`;
-  } else {
-    list.innerHTML = _mergePairs.map((pair, idx) => {
-      const [a, b] = pair;
-      return `<div class="merge-pair-row" style="border:1px solid #444;border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="font-size:0.82rem;color:var(--light-text);margin-bottom:6px">
-          ${esc(fmtDate(a.date))} · ${esc(a.field || "No field")} · ${esc(a.division || "")}
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <div style="flex:1;min-width:160px;background:var(--field);border-radius:6px;padding:8px;font-size:0.85rem">
-            <strong>${esc(a.homeTeam || a.awayTeam || "Game A")}</strong><br/>
-            <span style="color:var(--light-text)">${a.time ? fmtTime(a.time) : "No time"} · ${esc(a.source || "")}</span><br/>
-            <span style="color:#8ab4f8;font-size:0.75rem">${esc(a.id)}</span>
-          </div>
-          <div style="color:var(--light-text)">↔</div>
-          <div style="flex:1;min-width:160px;background:var(--field);border-radius:6px;padding:8px;font-size:0.85rem">
-            <strong>${esc(b.homeTeam || b.awayTeam || "Game B")}</strong><br/>
-            <span style="color:var(--light-text)">${b.time ? fmtTime(b.time) : "No time"} · ${esc(b.source || "")}</span><br/>
-            <span style="color:#8ab4f8;font-size:0.75rem">${esc(b.id)}</span>
-          </div>
-          <button type="button" class="btn print-btn merge-review-btn"
-            data-idx="${idx}" style="font-size:0.8rem;white-space:nowrap">Review →</button>
-        </div>
-      </div>`;
-    }).join("");
+/** Return true if a game involves any of the selected team names. */
+function gameMatchesTeamFilter(g) {
+  if (!_mergeTeamFilter.size) return true;
+  return [g.homeTeam, g.awayTeam, g.teamName].some(n => n && _mergeTeamFilter.has(n));
+}
+
+/** Re-render the pair list and count label using the current filter. */
+function renderMergePairList() {
+  const list = document.getElementById("mergeListItems");
+  if (!list) return;
+
+  _mergePairs = _allMergePairs.filter(([a, b]) =>
+    gameMatchesTeamFilter(a) || gameMatchesTeamFilter(b)
+  );
+
+  // Update count label
+  const countEl = document.getElementById("mergePairCount");
+  if (countEl) {
+    countEl.textContent = _mergeTeamFilter.size
+      ? `Showing ${_mergePairs.length} of ${_allMergePairs.length} pair${_allMergePairs.length !== 1 ? "s" : ""}`
+      : `${_allMergePairs.length} pair${_allMergePairs.length !== 1 ? "s" : ""} detected`;
   }
 
+  if (!_mergePairs.length) {
+    list.innerHTML = `<p style="color:var(--light-text);padding:12px 0">${
+      _allMergePairs.length
+        ? "No pairs match the selected teams."
+        : "No duplicate games detected."
+    }</p>`;
+    return;
+  }
+
+  list.innerHTML = _mergePairs.map((pair, idx) => {
+    const [a, b] = pair;
+    return `<div class="merge-pair-row" style="border:1px solid #444;border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="font-size:0.82rem;color:var(--light-text);margin-bottom:6px">
+        ${esc(fmtDate(a.date))} · ${esc(a.field || "No field")} · ${esc(a.division || "")}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <div style="flex:1;min-width:160px;background:var(--field);border-radius:6px;padding:8px;font-size:0.85rem">
+          <strong>${esc(a.homeTeam || a.awayTeam || "Game A")}</strong><br/>
+          <span style="color:var(--light-text)">${a.time ? fmtTime(a.time) : "No time"} · ${esc(a.source || "")}</span><br/>
+          <span style="color:#8ab4f8;font-size:0.75rem">${esc(a.id)}</span>
+        </div>
+        <div style="color:var(--light-text)">↔</div>
+        <div style="flex:1;min-width:160px;background:var(--field);border-radius:6px;padding:8px;font-size:0.85rem">
+          <strong>${esc(b.homeTeam || b.awayTeam || "Game B")}</strong><br/>
+          <span style="color:var(--light-text)">${b.time ? fmtTime(b.time) : "No time"} · ${esc(b.source || "")}</span><br/>
+          <span style="color:#8ab4f8;font-size:0.75rem">${esc(b.id)}</span>
+        </div>
+        <button type="button" class="btn print-btn merge-review-btn"
+          data-idx="${idx}" style="font-size:0.8rem;white-space:nowrap">Review →</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function openMergeListModal() {
+  _allMergePairs  = findDuplicateGames(allGames);
+  _mergeTeamFilter.clear();
+  const modal = document.getElementById("mergeListModal");
+
+  // Build team filter checkboxes
+  const teams     = teamsFromPairs(_allMergePairs);
+  const filterEl  = document.getElementById("mergeTeamFilter");
+  if (filterEl) {
+    if (!teams.length) {
+      filterEl.style.display = "none";
+    } else {
+      filterEl.style.display = "";
+      document.getElementById("mergeTeamCheckboxes").innerHTML =
+        teams.map(t => `<label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" class="merge-team-cb" value="${esc(t)}" />
+          ${esc(t)}
+        </label>`).join("");
+    }
+  }
+
+  renderMergePairList();
   modal.style.display = "flex";
 }
 
@@ -1252,10 +1310,11 @@ async function confirmMerge() {
     await mergeFn({ keepId: _mergeKeepId, dropId: _mergeDropId });
     setMsg(msgEl, "✓ Games merged successfully.", "ok");
     await loadGames();
-    // Refresh pairs after merge
-    _mergePairs = findDuplicateGames(allGames);
+    // Refresh pairs after merge; keep team filter active
+    _allMergePairs = findDuplicateGames(allGames);
     setTimeout(() => {
       closeMergeReviewModal();
+      renderMergePairList(); // re-render list with updated pairs
     }, 1200);
   } catch (err) {
     setMsg(msgEl, "Error: " + err.message, "error");
@@ -1280,6 +1339,21 @@ function wireMergeModals() {
   document.getElementById("mergeListItems")?.addEventListener("click", e => {
     const btn = e.target.closest(".merge-review-btn");
     if (btn) openMergeReviewModal(Number(btn.dataset.idx));
+  });
+
+  // Team filter — checkbox toggles
+  document.getElementById("mergeTeamCheckboxes")?.addEventListener("change", e => {
+    if (!e.target.classList.contains("merge-team-cb")) return;
+    if (e.target.checked) _mergeTeamFilter.add(e.target.value);
+    else                  _mergeTeamFilter.delete(e.target.value);
+    renderMergePairList();
+  });
+
+  // Clear team filter
+  document.getElementById("mergeClearTeamFilterBtn")?.addEventListener("click", () => {
+    _mergeTeamFilter.clear();
+    document.querySelectorAll(".merge-team-cb").forEach(cb => { cb.checked = false; });
+    renderMergePairList();
   });
 
   document.getElementById("mergeSwapBtn")?.addEventListener("click", e => {
