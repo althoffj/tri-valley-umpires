@@ -184,8 +184,27 @@
     </p>
   </div>
 
+  <!-- ── Mark Paid / Check Number Modal ────────────────────────────────────── -->
+  <div id="markPaidModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);overflow-y:auto">
+    <div style="background:var(--container);border-radius:10px;padding:24px;max-width:400px;margin:120px auto;position:relative">
+      <h3 style="margin:0 0 6px">Mark as Paid</h3>
+      <p id="markPaidContextLabel" style="color:var(--light-text);font-size:0.85rem;margin:0 0 16px"></p>
+
+      <div class="form-group" style="margin-bottom:18px">
+        <label for="markPaidCheckNumber">Check Number <span style="font-weight:normal;color:var(--light-text)">(optional)</span></label>
+        <input type="text" id="markPaidCheckNumber" placeholder="e.g. 1042"
+          style="width:100%;padding:9px 12px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:1rem;box-sizing:border-box" />
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center">
+        <button type="button" id="markPaidConfirmBtn" class="btn" style="padding:9px 20px">Mark Paid</button>
+        <button type="button" id="markPaidCancelBtn" class="btn print-btn" style="padding:9px 16px">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="auth.js?v=27"></script>
-  <script type="module" src="admin-payroll.js?v=24"></script>
+  <script type="module" src="admin-payroll.js?v=25"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=6"></script>
   <script type="module" src="nav.js?v=9"></script>

@@ -59,18 +59,19 @@ async function loadPayroll() {
         const configRate = payRates[slot.type?.toLowerCase()] ?? 0;
         const pay = Number(slot.payRate ?? configRate);
         payrollRows.push({
-          gameId:     g.id,
-          slotType:   slot.type ?? "—",
-          uid:        slot.assignedUid,
-          umpireName: slot.assignedName ?? slot.assignedUid,
-          date:       g.date ?? "",
-          city:       g.city ?? "",
-          division:   g.division ?? "",
-          field:      g.field ?? "",
+          gameId:      g.id,
+          slotType:    slot.type ?? "—",
+          uid:         slot.assignedUid,
+          umpireName:  slot.assignedName ?? slot.assignedUid,
+          date:        g.date ?? "",
+          city:        g.city ?? "",
+          division:    g.division ?? "",
+          field:       g.field ?? "",
           pay,
-          paid:       slot.paid      === true,
-          checkedIn:  slot.checkedIn === true,
-          noShow:     slot.noShow    === true,
+          paid:        slot.paid      === true,
+          checkedIn:   slot.checkedIn === true,
+          noShow:      slot.noShow    === true,
+          checkNumber: slot.checkNumber || "",
         });
       });
     });
@@ -182,7 +183,7 @@ function renderSummary() {
     });
   });
   el.querySelectorAll(".mark-all-paid-btn").forEach(btn => {
-    btn.addEventListener("click", () => markAllPaid(btn.dataset.uid));
+    btn.addEventListener("click", () => openPayAllModal(btn.dataset.uid));
   });
   el.querySelectorAll(".pay-stub-btn").forEach(btn => {
     btn.addEventListener("click", () => generatePayStub(btn.dataset.uid));
@@ -192,7 +193,73 @@ function renderSummary() {
   });
 }
 
-async function markAllPaid(uid) {
+// ── Mark-Paid modal (check number entry) ──────────────────────────────────────
+
+let _payModal = { gameId: null, slotType: null, uid: null, allForUid: null };
+
+function openPayModal(gameId, slotType, uid) {
+  _payModal = { gameId, slotType, uid, allForUid: null };
+  _showPayModal();
+}
+
+function openPayAllModal(uid) {
+  _payModal = { gameId: null, slotType: null, uid, allForUid: uid };
+  _showPayModal();
+}
+
+function _showPayModal() {
+  const modal = document.getElementById("markPaidModal");
+  const input = document.getElementById("markPaidCheckNumber");
+  const label = document.getElementById("markPaidContextLabel");
+  if (!modal || !input || !label) return;
+
+  input.value = "";
+
+  if (_payModal.allForUid) {
+    const rows = filteredRows().filter(r => r.uid === _payModal.allForUid && !r.paid && !r.noShow);
+    const name = rows[0]?.umpireName || _payModal.allForUid;
+    label.textContent = `Mark all ${rows.length} unpaid slot${rows.length !== 1 ? "s" : ""} paid for ${name}`;
+  } else {
+    const row = payrollRows.find(r =>
+      r.gameId === _payModal.gameId && r.slotType === _payModal.slotType && r.uid === _payModal.uid
+    );
+    label.textContent = row
+      ? `${row.umpireName} — ${fmtDate(row.date)} (${row.slotType})`
+      : "Mark as paid";
+  }
+
+  modal.style.display = "";
+  input.focus();
+}
+
+function closePayModal() {
+  document.getElementById("markPaidModal").style.display = "none";
+  _payModal = { gameId: null, slotType: null, uid: null, allForUid: null };
+}
+
+async function commitPayModal() {
+  const checkNumber = document.getElementById("markPaidCheckNumber")?.value.trim() || "";
+  closePayModal();
+  if (_payModal.allForUid !== null) {
+    await markAllPaid(_payModal.allForUid, checkNumber);
+  } else {
+    await togglePaid(_payModal.gameId, _payModal.slotType, _payModal.uid, checkNumber);
+  }
+}
+
+function wirePayModal() {
+  document.getElementById("markPaidConfirmBtn")?.addEventListener("click", commitPayModal);
+  document.getElementById("markPaidCancelBtn")?.addEventListener("click", closePayModal);
+  document.getElementById("markPaidCheckNumber")?.addEventListener("keydown", e => {
+    if (e.key === "Enter")  { e.preventDefault(); commitPayModal(); }
+    if (e.key === "Escape") { e.preventDefault(); closePayModal(); }
+  });
+  document.getElementById("markPaidModal")?.addEventListener("click", e => {
+    if (e.target === e.currentTarget) closePayModal();
+  });
+}
+
+async function markAllPaid(uid, checkNumber = "") {
   const rows = filteredRows().filter(r => r.uid === uid && !r.paid && !r.noShow);
   if (!rows.length) return;
 
@@ -215,14 +282,17 @@ async function markAllPaid(uid) {
       const gameRows = byGame[gameIds[i]];
       const slots = (snap.data().umpireSlots ?? []).map(s => {
         const match = gameRows.find(r => r.slotType === s.type && r.uid === s.assignedUid);
-        return match ? { ...s, paid: true } : s;
+        if (!match) return s;
+        const updated = { ...s, paid: true };
+        if (checkNumber) updated.checkNumber = checkNumber; else delete updated.checkNumber;
+        return updated;
       });
       batch.update(refs[i], { umpireSlots: slots });
     });
     await batch.commit();
 
     // Update local state
-    rows.forEach(r => { r.paid = true; });
+    rows.forEach(r => { r.paid = true; r.checkNumber = checkNumber; });
     renderAll();
   } catch (err) {
     console.error(err);
@@ -307,8 +377,11 @@ function renderDetailTable() {
     const checkedInCell = r.checkedIn
       ? `<span style="color:#6fcf97;font-size:0.88rem">✅</span>`
       : `<span style="color:var(--light-text);font-size:0.88rem">—</span>`;
+    const checkNumLabel = r.paid && r.checkNumber
+      ? `<div style="font-size:0.73rem;color:var(--light-text);margin-top:2px">Check #${esc(r.checkNumber)}</div>`
+      : "";
     const paidBadge = r.paid
-      ? `<span class="badge" style="background:#17351f;color:#b8f2c4">Paid</span>`
+      ? `<span class="badge" style="background:#17351f;color:#b8f2c4">Paid</span>${checkNumLabel}`
       : `<span class="badge" style="background:#4a2c00;color:#ffcc80">Unpaid</span>`;
     const toggleBtn = `<button class="btn ${r.paid ? "print-btn" : ""} payroll-toggle-btn"
         data-game-id="${esc(r.gameId)}" data-slot-type="${esc(r.slotType)}" data-uid="${esc(r.uid)}"
@@ -328,12 +401,21 @@ function renderDetailTable() {
   }).join("");
 
   tbody.querySelectorAll(".payroll-toggle-btn").forEach(btn => {
-    btn.addEventListener("click", () =>
-      togglePaid(btn.dataset.gameId, btn.dataset.slotType, btn.dataset.uid));
+    btn.addEventListener("click", () => {
+      const row = payrollRows.find(r =>
+        r.gameId === btn.dataset.gameId && r.slotType === btn.dataset.slotType && r.uid === btn.dataset.uid
+      );
+      // Unmarking goes direct; marking paid opens the check number modal
+      if (row?.paid) {
+        togglePaid(btn.dataset.gameId, btn.dataset.slotType, btn.dataset.uid);
+      } else {
+        openPayModal(btn.dataset.gameId, btn.dataset.slotType, btn.dataset.uid);
+      }
+    });
   });
 }
 
-async function togglePaid(gameId, slotType, uid) {
+async function togglePaid(gameId, slotType, uid, checkNumber = "") {
   const ref = doc(db, "games", gameId);
   try {
     let newPaid;
@@ -343,7 +425,13 @@ async function togglePaid(gameId, slotType, uid) {
       const slots = (snap.data().umpireSlots ?? []).map(s => {
         if (s.type === slotType && s.assignedUid === uid) {
           newPaid = !s.paid;
-          return { ...s, paid: newPaid };
+          const updated = { ...s, paid: newPaid };
+          if (newPaid) {
+            if (checkNumber) updated.checkNumber = checkNumber; else delete updated.checkNumber;
+          } else {
+            delete updated.checkNumber; // clear check number on unmark
+          }
+          return updated;
         }
         return s;
       });
@@ -351,7 +439,7 @@ async function togglePaid(gameId, slotType, uid) {
     });
     if (newPaid !== undefined) {
       const row = payrollRows.find(r => r.gameId === gameId && r.slotType === slotType && r.uid === uid);
-      if (row) row.paid = newPaid;
+      if (row) { row.paid = newPaid; row.checkNumber = newPaid ? checkNumber : ""; }
       renderAll();
     }
   } catch (err) {
@@ -392,7 +480,7 @@ async function generatePayStub(uid) {
         <td>${esc(r.field) || "—"}</td>
         <td>${esc(r.slotType)}</td>
         <td class="money">$${r.pay.toFixed(2)}</td>
-        <td class="${r.paid ? "paid" : "unpaid"}">${r.paid ? "Paid" : "Unpaid"}</td>
+        <td class="${r.paid ? "paid" : "unpaid"}">${r.paid ? "Paid" : "Unpaid"}${r.paid && r.checkNumber ? `<br><span style="font-size:0.75em;font-weight:normal">#${esc(r.checkNumber)}</span>` : ""}</td>
       </tr>`).join("");
 
   const brand = org.accentColor || "#601929";
@@ -670,7 +758,7 @@ function csvCell(v) { return `"${String(v || "").replace(/"/g, '""')}"`; }
 
 function exportCSV() {
   const rows    = filteredRows();
-  const headers = ["Umpire", "Date", "City", "Division", "Field", "Slot", "Pay", "Paid", "No Show"];
+  const headers = ["Umpire", "Date", "City", "Division", "Field", "Slot", "Pay", "Paid", "Check #", "No Show"];
   const lines   = [
     headers.join(","),
     ...rows.map(r => [
@@ -682,6 +770,7 @@ function exportCSV() {
       r.slotType,
       r.noShow ? "0.00" : r.pay.toFixed(2),
       r.noShow ? "N/A" : (r.paid ? "Yes" : "No"),
+      r.noShow ? "" : csvCell(r.checkNumber || ""),
       r.noShow ? "Yes" : "No",
     ].join(","))
   ];
@@ -893,6 +982,7 @@ authReadyPromise.then(() => {
   document.getElementById("adminContent").style.display = "";
   document.getElementById("noAccess").style.display = "none";
 
+  wirePayModal();
   wireFilters();
   loadPayroll();
 });
