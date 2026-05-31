@@ -75,7 +75,7 @@
         <div class="document-note" style="margin-bottom:16px">
           <p style="margin-bottom:8px"><strong>Expected columns</strong> (header row required, order flexible):</p>
           <code style="font-size:0.82rem;color:#aaa">Date, Time, Division, City, Field, Home Team, Away Team, Game Type</code>
-          <p style="margin-top:8px;margin-bottom:0;color:var(--light-text);font-size:0.85rem">Date format: YYYY-MM-DD or M/D/YYYY · Time: HH:MM (24h) or H:MM AM/PM · Game Type: Regular / Playoff / Tournament</p>
+          <p style="margin-top:8px;margin-bottom:0;color:var(--light-text);font-size:0.85rem">Date format: YYYY-MM-DD or M/D/YYYY · Time: HH:MM (24h) or H:MM AM/PM · Game Type: Regular / Playoff / Tournament / Scrimmage</p>
         </div>
         <div class="csv-dropzone" id="csvDropzone">
           <input type="file" id="csvFileInput" accept=".csv,text/csv" />
@@ -478,6 +478,7 @@
             <option value="Regular">Regular</option>
             <option value="Playoff">Playoff</option>
             <option value="Tournament">Tournament</option>
+            <option value="Scrimmage">Scrimmage</option>
           </select>
         </div>
       </div>
