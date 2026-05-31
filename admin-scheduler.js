@@ -1,15 +1,16 @@
 // admin-scheduler.js — Scheduling Assistant: teams, calendar/CSV import, calendar view, practices
 import { db, app }                       from "./firebase.js";
 import { authReadyPromise, isAdmin }      from "./auth.js";
+import { getOrgSettings }                from "./org.js";
 import { getFunctions, httpsCallable }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
-import { esc, fmtDate, fmtTime, fmtTime as fmt12, todayISO, showToast, showConfirm } from "./utils.js";
+import { esc, fmtDate, fmtTime, todayISO, showToast, showConfirm } from "./utils.js";
 
 import {
   collection, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
   doc, query, where, orderBy, serverTimestamp, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-const fns       = getFunctions(app);
+const fns       = getFunctions(app, "us-central1");
 const previewFn = httpsCallable(fns, "previewCalendarImport");
 const commitFn  = httpsCallable(fns, "commitCalendarImport");
 
@@ -107,7 +108,7 @@ function sourceLabel(game) {
 function gameRowCells(game) {
   return `
     <td>${esc(fmtDate(game.date))}</td>
-    <td>${esc(fmt12(game.time))}</td>
+    <td>${esc(fmtTime(game.time))}</td>
     <td>${esc(game.field || "—")}</td>
     <td>${esc(game.division || "—")}</td>
     <td>${esc(game.city || "—")}</td>
@@ -211,6 +212,8 @@ async function loadSettings() {
       // Per-division rates
       const divRates = r.divisionRates || {};
       buildDivRatesGrid(divRates);
+      // Per-division slot types
+      buildDivSlotTypesGrid(r.divisionSlotTypes || {});
     } else {
       buildDivRatesGrid({});
     }
@@ -235,8 +238,8 @@ async function buildDivRatesGrid(divRates = {}) {
   const grid = document.getElementById("sDivRatesGrid");
   if (!grid) return;
   try {
-    const snap = await getDoc(doc(db, "config", "orgSettings"));
-    const divs = snap.exists() ? (snap.data().activeDivisions || []) : [];
+    const org  = await getOrgSettings();
+    const divs = org.activeDivisions || [];
     if (!divs.length) {
       grid.innerHTML = '<p style="color:var(--light-text);font-size:0.85rem">No divisions configured. Add divisions in <a href="admin-config.html" style="color:#8ab4f8">Config</a>.</p>';
       return;
@@ -252,6 +255,66 @@ async function buildDivRatesGrid(divRates = {}) {
     grid.innerHTML = '<p style="color:#ff8a8a;font-size:0.85rem">Failed to load divisions.</p>';
   }
 }
+
+async function buildDivSlotTypesGrid(divSlotTypes = {}) {
+  const grid = document.getElementById("sDivSlotTypesGrid");
+  if (!grid) return;
+  try {
+    const org  = await getOrgSettings();
+    const divs = org.activeDivisions || [];
+    if (!divs.length) {
+      grid.innerHTML = '<p style="color:var(--light-text);font-size:0.85rem">No divisions configured. Add divisions in <a href="admin-config.html" style="color:#8ab4f8">Config</a>.</p>';
+      return;
+    }
+    grid.innerHTML = divs.map(div => {
+      const types  = Array.isArray(divSlotTypes[div]) ? divSlotTypes[div] : null; // null = use default
+      const isSet  = types !== null;
+      const chkd   = t => isSet && types.includes(t);
+      return `<div style="display:flex;align-items:center;gap:14px;padding:8px 0;border-bottom:1px solid #333">
+        <span style="min-width:60px;font-weight:600">${esc(div)}</span>
+        <label style="display:flex;align-items:center;gap:5px;font-size:0.88rem;cursor:pointer">
+          <input type="checkbox" class="div-slot-cb" data-div="${esc(div)}" data-type="Plate"${chkd("Plate") ? " checked" : ""}${!isSet ? " data-default" : ""} /> Plate
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:0.88rem;cursor:pointer">
+          <input type="checkbox" class="div-slot-cb" data-div="${esc(div)}" data-type="Field"${chkd("Field") ? " checked" : ""}${!isSet ? " data-default" : ""} /> Field
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:0.88rem;cursor:pointer">
+          <input type="checkbox" class="div-slot-cb" data-div="${esc(div)}" data-type="Extra"${chkd("Extra") ? " checked" : ""}${!isSet ? " data-default" : ""} /> Extra
+        </label>
+        ${!isSet ? '<span style="font-size:0.78rem;color:var(--light-text)">(using default)</span>' : ""}
+      </div>`;
+    }).join("");
+  } catch (err) {
+    grid.innerHTML = '<p style="color:#ff8a8a;font-size:0.85rem">Failed to load divisions.</p>';
+  }
+}
+
+document.getElementById("sDivSlotTypesForm")?.addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn = this.querySelector("button[type='submit']");
+  btn.disabled = true;
+  setSettingsMsg("sDivSlotTypesMsg", "Saving…", "info");
+  try {
+    const divisionSlotTypes = {};
+    // Collect all unique divisions from the checkboxes
+    const divs = [...new Set([...document.querySelectorAll(".div-slot-cb")].map(cb => cb.dataset.div))];
+    divs.forEach(div => {
+      const types = ["Plate", "Field", "Extra"].filter(t => {
+        const cb = document.querySelector(`.div-slot-cb[data-div="${div}"][data-type="${t}"]`);
+        return cb && cb.checked;
+      });
+      divisionSlotTypes[div] = types;
+    });
+    const snap = await getDoc(doc(db, "config", "payRates"));
+    const existing = snap.exists() ? snap.data() : {};
+    await setDoc(doc(db, "config", "payRates"), { ...existing, divisionSlotTypes });
+    setSettingsMsg("sDivSlotTypesMsg", "Division slot types saved.", "success");
+  } catch (err) {
+    setSettingsMsg("sDivSlotTypesMsg", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 document.getElementById("sDivRatesForm")?.addEventListener("submit", async function(e) {
   e.preventDefault();
@@ -463,7 +526,7 @@ function renderConflicts() {
       <div class="sched-conflict-header">
         <div>
           <strong>${esc(fmtDate(game.date))}</strong>
-          <span style="color:var(--light-text);margin-left:8px">${esc(fmt12(game.time))}</span>
+          <span style="color:var(--light-text);margin-left:8px">${esc(fmtTime(game.time))}</span>
           <span style="margin-left:8px">${esc(game.field || "—")}</span>
           <span style="color:var(--light-text);margin-left:8px">${esc(game.division || "")} · ${esc(game.city || "")}</span>
           ${item.edited ? '<span class="sched-edited-badge">edited</span>' : ""}
@@ -485,7 +548,7 @@ function renderConflicts() {
           <div class="sched-issue-row">
             ${issueBadge(issue)}
             ${issue.with ? `<span style="color:var(--light-text);font-size:0.82rem">
-              Existing: ${esc(fmtDate(issue.with.date))} ${esc(fmt12(issue.with.time))} — ${esc(issue.with.field || "")} ${esc(issue.with.division || "")} ${esc(issue.with.city || "")}
+              Existing: ${esc(fmtDate(issue.with.date))} ${esc(fmtTime(issue.with.time))} — ${esc(issue.with.field || "")} ${esc(issue.with.division || "")} ${esc(issue.with.city || "")}
             </span>` : ""}
           </div>`).join("")}
       </div>
@@ -1120,7 +1183,7 @@ async function openSchedAssignModal(gameId, slotType) {
     gameTime: seCurrentGame?.time || "",
   };
   document.getElementById("schedAssignLabel").textContent =
-    `${slotType} slot — ${seCurrentGame?.city || ""} ${fmtDate(seCurrentGame?.date)} ${fmt12(seCurrentGame?.time)}`;
+    `${slotType} slot — ${seCurrentGame?.city || ""} ${fmtDate(seCurrentGame?.date)} ${fmtTime(seCurrentGame?.time)}`;
   document.getElementById("schedAssignSearch").value = "";
   document.getElementById("schedAssignMsg").textContent = "";
 
@@ -1145,7 +1208,8 @@ async function doSchedAssign(uid, name) {
       slots = (snap.data().umpireSlots || []).map(s =>
         s.type === slotType ? { ...s, assignedUid: uid, assignedName: name } : s
       );
-      txn.update(gameRef, { umpireSlots: slots });
+      const allFilled = slots.every(s => s.assignedUid);
+      txn.update(gameRef, { umpireSlots: slots, needsUmpires: !allFilled });
     });
     // Update local cache and reopen edit modal with refreshed data
     if (seCurrentGame) seCurrentGame.umpireSlots = slots;
@@ -1397,7 +1461,7 @@ function renderMonthView() {
           style="border-left-color:${color};cursor:pointer${isMuted ? ";opacity:0.5;border-style:dashed" : ""}${hasPendingCancel ? ";outline:1px solid #f57c00" : ""}"
           title="${isMuted ? (g.cancellationType === "rainout" ? "Rain Out" : "Rescheduled") + " · " : "Click to edit · "}${esc(g.homeTeam||"")} vs ${esc(g.awayTeam||"")} · ${g.city||""} · ${g.field||""}">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <div style="font-size:0.7rem;color:var(--light-text)">${isMuted ? mutedIcon : ""} ${g.time ? fmt12(g.time).replace(":00","") : ""} ${esc(g.division || "")}</div>
+            <div style="font-size:0.7rem;color:var(--light-text)">${isMuted ? mutedIcon : ""} ${g.time ? fmtTime(g.time).replace(":00","") : ""} ${esc(g.division || "")}</div>
             ${hasPendingCancel ? `<span title="Pending cancellation request" style="font-size:0.65rem;color:#f57c00">⚠</span>` : ""}
           </div>
           <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(label)}</div>
@@ -1412,7 +1476,7 @@ function renderMonthView() {
     practicesToShow.forEach(p => {
       html += `<div class="cal-card cal-practice-clickable" data-practice-id="${esc(p.id)}" style="border-left-color:#5b8dd9;cursor:pointer"
           title="Practice: ${esc(p.teamName||"")} · ${p.field||""} — click to edit">
-          <div style="font-size:0.7rem;color:#8ab4f8">${p.startTime ? fmt12(p.startTime).replace(":00","") : "Practice"}</div>
+          <div style="font-size:0.7rem;color:#8ab4f8">${p.startTime ? fmtTime(p.startTime).replace(":00","") : "Practice"}</div>
           <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:0.78rem">${esc(p.teamName||"Practice")}</div>
         </div>`;
     });
@@ -1508,7 +1572,7 @@ function renderListView() {
                 : pendingCancelRow ? 'style="background:rgba(245,124,0,0.06)"' : "";
               return `<tr ${rowStyle}>
                 <td>${esc(fmtDate(item.date))}</td>
-                <td>${esc(fmt12(item.time))}</td>
+                <td>${esc(fmtTime(item.time))}</td>
                 <td><span style="width:10px;height:10px;background:${color};border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle"></span>${cancelIcon ? `<span style="margin-right:4px">${cancelIcon}</span>` : ""}${esc(item.gameType || "Regular")}</td>
                 <td>${esc(item.division || "—")}</td>
                 <td>${esc(teams_)}</td>
@@ -1523,7 +1587,7 @@ function renderListView() {
             } else {
               return `<tr style="opacity:0.8">
                 <td>${esc(fmtDate(item.date))}</td>
-                <td>${esc(item.startTime ? fmt12(item.startTime) : "—")} – ${esc(item.endTime ? fmt12(item.endTime) : "—")}</td>
+                <td>${esc(item.startTime ? fmtTime(item.startTime) : "—")} – ${esc(item.endTime ? fmtTime(item.endTime) : "—")}</td>
                 <td><span style="font-size:0.75rem;background:#1a2a4a;color:#8ab4f8;border:1px solid #2a4a8a;border-radius:3px;padding:1px 5px">Practice</span></td>
                 <td>${esc(item.division || "—")}</td>
                 <td>${esc(item.teamName || "—")}</td>
@@ -1779,7 +1843,7 @@ document.getElementById("seGameDeleteBtn").addEventListener("click", async () =>
 document.getElementById("seConvertToPracticeBtn").addEventListener("click", async () => {
   const game = seCurrentGame;
   if (!game) return;
-  const info = [fmtDate(game.date), game.time ? fmt12(game.time) : "", game.city, game.division]
+  const info = [fmtDate(game.date), game.time ? fmtTime(game.time) : "", game.city, game.division]
     .filter(Boolean).join(" · ");
   if (!await showConfirm(`Convert "${info}" to a practice?\n\nIt will be removed from the game list and shown on the calendar as a practice.`)) return;
 
@@ -1869,7 +1933,7 @@ document.getElementById("peSaveBtn").addEventListener("click", async () => {
 document.getElementById("peConvertToGameBtn").addEventListener("click", async () => {
   const p = peCurrentPractice;
   if (!p) return;
-  const info = [fmtDate(p.date), p.startTime ? fmt12(p.startTime) : "", p.teamName, p.division]
+  const info = [fmtDate(p.date), p.startTime ? fmtTime(p.startTime) : "", p.teamName, p.division]
     .filter(Boolean).join(" · ");
   if (!await showConfirm(`Convert "${info}" to a game?\n\nIt will be removed from practices and added to the game list.`)) return;
 
@@ -1977,7 +2041,7 @@ function renderPendingList(requests) {
       </div>
       <div style="font-size:0.88rem;color:var(--light-text)">
         <span>📅 ${esc(fmtDate(req.date))}</span>
-        <span style="margin-left:12px">⏰ ${esc(req.startTime ? fmt12(req.startTime) : "—")} – ${esc(req.endTime ? fmt12(req.endTime) : "—")}</span>
+        <span style="margin-left:12px">⏰ ${esc(req.startTime ? fmtTime(req.startTime) : "—")} – ${esc(req.endTime ? fmtTime(req.endTime) : "—")}</span>
         <span style="margin-left:12px">🏟 ${esc(req.field || "—")}</span>
       </div>
       <div style="font-size:0.85rem;margin-top:4px;color:var(--light-text)">
@@ -2015,7 +2079,7 @@ function renderApprovedList(practices) {
           ${practices.map(p => `
           <tr>
             <td>${esc(fmtDate(p.date))}</td>
-            <td>${esc(p.startTime ? fmt12(p.startTime) : "—")} – ${esc(p.endTime ? fmt12(p.endTime) : "—")}</td>
+            <td>${esc(p.startTime ? fmtTime(p.startTime) : "—")} – ${esc(p.endTime ? fmtTime(p.endTime) : "—")}</td>
             <td>${esc(p.teamName || "—")}</td>
             <td>${esc(p.field || "—")}</td>
             <td>${esc(p.coachName || "—")}</td>
@@ -2234,7 +2298,7 @@ function renderUrList(containerId, requests, showActions) {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:8px">
           <div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <strong>${esc(fmtDate(r.date))}${r.time ? " · " + esc(fmt12(r.time)) : ""}</strong>
+              <strong>${esc(fmtDate(r.date))}${r.time ? " · " + esc(fmtTime(r.time)) : ""}</strong>
               <span style="font-size:0.78rem;background:rgba(96,25,41,0.3);border:1px solid #601929;border-radius:4px;padding:1px 6px;color:#ffb0b0">${esc(r.division || "")}</span>
               <span style="font-size:0.78rem;padding:1px 8px;border-radius:12px;background:${statusColor}22;border:1px solid ${statusColor}55;color:${statusColor}">${statusLabel}</span>
             </div>

@@ -1,6 +1,6 @@
 // admin-facilities.js — Facilities CRUD with per-facility fields management
 import { db } from "./firebase.js";
-import { authReadyPromise, isAdmin } from "./auth.js";
+import { authReadyPromise, isAdmin, getCurrentUser } from "./auth.js";
 import { esc, setMsg, showToast, showConfirm } from "./utils.js";
 
 import {
@@ -679,7 +679,10 @@ async function saveFacilityEdit(facilityId) {
 async function deleteFacility(facilityId) {
   if (!await showConfirm("Permanently delete this facility and all its fields?")) return;
   try {
-    await deleteDoc(doc(db, "facilities", facilityId));
+    await Promise.all([
+      deleteDoc(doc(db, "facilities", facilityId)),
+      deleteDoc(doc(db, "facilityCodes", facilityId)),
+    ]);
     await loadFacilities();
   } catch (err) {
     showToast(err.message);
@@ -1057,8 +1060,10 @@ async function saveIssueUpdate(issueId) {
     const issue = allIssues.find(r => r.id === issueId);
     if (issue?.status !== "Resolved") {
       // Only set resolvedAt/resolvedBy the first time it's resolved
-      // We don't have getCurrentUser here, but we can import via auth
-      updates.resolvedAt = serverTimestamp();
+      const me = getCurrentUser();
+      updates.resolvedAt     = serverTimestamp();
+      updates.resolvedBy     = me?.uid || "";
+      updates.resolvedByName = me?.displayName || me?.email || "";
     }
   } else {
     updates.resolvedAt    = null;

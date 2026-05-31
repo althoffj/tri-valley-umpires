@@ -387,10 +387,10 @@ async function generatePayStub(uid) {
     .map(r => `
       <tr>
         <td>${fmtDate(r.date)}</td>
-        <td>${r.division || "—"}</td>
-        <td>${r.city || "—"}</td>
-        <td>${r.field || "—"}</td>
-        <td>${r.slotType}</td>
+        <td>${esc(r.division) || "—"}</td>
+        <td>${esc(r.city) || "—"}</td>
+        <td>${esc(r.field) || "—"}</td>
+        <td>${esc(r.slotType)}</td>
         <td class="money">$${r.pay.toFixed(2)}</td>
         <td class="${r.paid ? "paid" : "unpaid"}">${r.paid ? "Paid" : "Unpaid"}</td>
       </tr>`).join("");
@@ -665,17 +665,20 @@ async function emailPayStub(btn) {
 
 // ── CSV export ────────────────────────────────────────────────────────────────
 
+// Wrap a value in double-quotes and escape any embedded double-quotes (RFC 4180).
+function csvCell(v) { return `"${String(v || "").replace(/"/g, '""')}"`; }
+
 function exportCSV() {
   const rows    = filteredRows();
   const headers = ["Umpire", "Date", "City", "Division", "Field", "Slot", "Pay", "Paid", "No Show"];
   const lines   = [
     headers.join(","),
     ...rows.map(r => [
-      `"${(r.umpireName || "").replace(/"/g, '""')}"`,
+      csvCell(r.umpireName),
       fmtDate(r.date),
-      `"${(r.city || "").replace(/"/g, '""')}"`,
-      `"${(r.division || "").replace(/"/g, '""')}"`,
-      `"${(r.field || "").replace(/"/g, '""')}"`,
+      csvCell(r.city),
+      csvCell(r.division),
+      csvCell(r.field),
       r.slotType,
       r.noShow ? "0.00" : r.pay.toFixed(2),
       r.noShow ? "N/A" : (r.paid ? "Yes" : "No"),

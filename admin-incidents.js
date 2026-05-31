@@ -10,6 +10,8 @@ import {
   updateDoc,
   query,
   orderBy,
+  where,
+  Timestamp,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -179,8 +181,13 @@ async function loadIncidents() {
   listEl.innerHTML = '<p style="color:var(--light-text)">Loading reports…</p>';
 
   try {
+    const cutoff = Timestamp.fromDate(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000));
     const snap = await getDocs(
-      query(collection(db, "incidentReports"), orderBy("submittedAt", "desc"))
+      query(
+        collection(db, "incidentReports"),
+        where("submittedAt", ">=", cutoff),
+        orderBy("submittedAt", "desc"),
+      )
     );
     allIncidents = snap.docs.map(d => ({ id: d.id, data: d.data() }));
     renderIncidents();

@@ -161,7 +161,7 @@ document.getElementById("orgLogoUrl").addEventListener("input", function() {
 
 // ── Push Notifications ────────────────────────────────────────────────────────
 
-const sendBroadcastFn = httpsCallable(getFunctions(app), "sendBroadcast");
+const sendBroadcastFn = httpsCallable(getFunctions(app, "us-central1"), "sendBroadcast");
 
 document.getElementById("notifForm").addEventListener("submit", async function(e) {
   e.preventDefault();
@@ -191,7 +191,7 @@ document.getElementById("notifForm").addEventListener("submit", async function(e
 
 // ── Email All Umpires ─────────────────────────────────────────────────────────
 
-const sendBroadcastEmailFn = httpsCallable(getFunctions(app), "sendBroadcastEmail");
+const sendBroadcastEmailFn = httpsCallable(getFunctions(app, "us-central1"), "sendBroadcastEmail");
 
 document.getElementById("emailAllForm").addEventListener("submit", async function(e) {
   e.preventDefault();

@@ -1,14 +1,14 @@
 // admin-tournament.js — Tournament management (create, rain delay, field swap)
-import { db } from "./firebase.js";
+import { db, app } from "./firebase.js";
 import { authReadyPromise, isAdmin } from "./auth.js";
 import {
-  collection, getDocs, addDoc, doc, updateDoc, deleteDoc,
+  collection, getDocs, addDoc, doc, updateDoc, deleteDoc, writeBatch,
   query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 import { esc, fmtDate, fmtTime, setMsg, showToast, showConfirm } from "./utils.js";
 
-const fns         = getFunctions();
+const fns         = getFunctions(app, "us-central1");
 const notifySwap  = httpsCallable(fns, "notifyTournamentSwap");
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -307,16 +307,15 @@ async function applyDelay(tid, minutes) {
       newTime: addMinutesToTime(g.time || "09:00", minutes),
       ref:     doc(db, "games", g.id)
     }));
-    const updates = planned.map(p => updateDoc(p.ref, { time: p.newTime }));
 
-    const newDelay = (t.rainDelayMinutes || 0) + minutes;
-    await Promise.all([
-      ...updates,
-      updateDoc(doc(db, "tournaments", tid), {
-        rainDelayMinutes: newDelay,
-        originalTimes: origTimes
-      })
-    ]);
+    const newDelay  = (t.rainDelayMinutes || 0) + minutes;
+    const rainBatch = writeBatch(db);
+    planned.forEach(p => rainBatch.update(p.ref, { time: p.newTime }));
+    rainBatch.update(doc(db, "tournaments", tid), {
+      rainDelayMinutes: newDelay,
+      originalTimes: origTimes,
+    });
+    await rainBatch.commit();
 
     // Mutate in-memory only after all writes succeed
     planned.forEach(p => { p.game.time = p.newTime; });
@@ -344,18 +343,19 @@ async function resetDelay(tid) {
   setMsg(`delayMsg_${tid}`, "Resetting…", "info");
 
   try {
-    const updates = linked.map(g => {
+    const resetBatch  = writeBatch(db);
+    const restorations = [];
+    linked.forEach(g => {
       const orig = t.originalTimes[g.id];
-      if (!orig) return Promise.resolve();
-      g.time = orig;
-      return updateDoc(doc(db, "games", g.id), { time: orig });
+      if (!orig) return;
+      restorations.push({ g, orig });
+      resetBatch.update(doc(db, "games", g.id), { time: orig });
     });
+    resetBatch.update(doc(db, "tournaments", tid), { rainDelayMinutes: 0, originalTimes: {} });
+    await resetBatch.commit();
 
-    await Promise.all([
-      ...updates,
-      updateDoc(doc(db, "tournaments", tid), { rainDelayMinutes: 0, originalTimes: {} })
-    ]);
-
+    // Mutate in-memory only after the batch succeeds
+    restorations.forEach(({ g, orig }) => { g.time = orig; });
     t.rainDelayMinutes = 0;
     t.originalTimes    = {};
     setMsg(`delayMsg_${tid}`, "All times restored to original.", "success");
@@ -385,10 +385,10 @@ async function swapUmpires(tid, gid1, gid2) {
   setMsg(`swapMsg_${tid}`, "Swapping…", "info");
 
   try {
-    await Promise.all([
-      updateDoc(doc(db, "games", gid1), { umpireSlots: slots2 }),
-      updateDoc(doc(db, "games", gid2), { umpireSlots: slots1 })
-    ]);
+    const swapBatch = writeBatch(db);
+    swapBatch.update(doc(db, "games", gid1), { umpireSlots: slots2 });
+    swapBatch.update(doc(db, "games", gid2), { umpireSlots: slots1 });
+    await swapBatch.commit();
 
     // Update in-memory
     g1.umpireSlots = slots2;

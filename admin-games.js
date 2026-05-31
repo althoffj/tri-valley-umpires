@@ -155,8 +155,9 @@ function applyGameFilters() {
     if (gfDivision && (g.division || "") !== gfDivision) return false;
     // Team — match teamName, homeTeam, or awayTeam
     if (gfTeam) {
+      const needle   = gfTeam.toLowerCase();
       const haystack = [g.teamName, g.homeTeam, g.awayTeam].map(v => (v||"").toLowerCase());
-      if (!haystack.includes(gfTeam.toLowerCase())) return false;
+      if (!haystack.some(v => v.includes(needle))) return false;
     }
     // Facility
     if (gfFacility && (g.facilityId || "") !== gfFacility) return false;
@@ -594,35 +595,38 @@ async function saveGameEdit() {
       awayTeam:   document.getElementById("editAwayTeam").value.trim(),
       isAway:     document.getElementById("editIsAway").checked,
       facilityId: facilityId,
-      needsUmpires: true,
       notes:      document.getElementById("editGameNotes").value.trim(),
     };
 
-    // Rebuild umpire slots from checkboxes + pay inputs
-    const gameRef   = doc(db, "games", gameId);
-    const snap      = await getDoc(gameRef);
-    const existing  = snap.exists() ? (snap.data().umpireSlots || []) : [];
-    const slotMap   = Object.fromEntries(existing.map(s => [s.type, s]));
-    const slotsDiv  = document.getElementById("editSlotPays");
-    const newSlots  = [];
-    slotsDiv.querySelectorAll(".edit-slot-check").forEach(cb => {
-      if (!cb.checked) return;
-      const payInput = slotsDiv.querySelector(`.edit-slot-pay[data-slot-type="${cb.value}"]`);
-      const payRate  = parseFloat(payInput?.value) || 0;
-      const prev     = slotMap[cb.value];
-      newSlots.push({
-        type:         cb.value,
-        payRate,
-        assignedUid:  prev?.assignedUid  ?? null,
-        assignedName: prev?.assignedName ?? null,
-        paid:         prev?.paid         ?? false,
-        checkedIn:    prev?.checkedIn    ?? false,
-        checkedInAt:  prev?.checkedInAt  ?? null,
+    // Rebuild umpire slots from checkboxes + pay inputs, preserving existing assignments.
+    // Wrapped in a transaction so the slot read and write are atomic.
+    const gameRef  = doc(db, "games", gameId);
+    const slotsDiv = document.getElementById("editSlotPays");
+    await runTransaction(db, async tx => {
+      const snap     = await tx.get(gameRef);
+      const existing = snap.exists() ? (snap.data().umpireSlots || []) : [];
+      const slotMap  = Object.fromEntries(existing.map(s => [s.type, s]));
+      const newSlots = [];
+      slotsDiv.querySelectorAll(".edit-slot-check").forEach(cb => {
+        if (!cb.checked) return;
+        const payInput = slotsDiv.querySelector(`.edit-slot-pay[data-slot-type="${cb.value}"]`);
+        const payRate  = parseFloat(payInput?.value) || 0;
+        const prev     = slotMap[cb.value];
+        newSlots.push({
+          type:         cb.value,
+          payRate,
+          assignedUid:  prev?.assignedUid  ?? null,
+          assignedName: prev?.assignedName ?? null,
+          paid:         prev?.paid         ?? false,
+          checkedIn:    prev?.checkedIn    ?? false,
+          checkedInAt:  prev?.checkedInAt  ?? null,
+          noShow:       prev?.noShow       ?? false,
+        });
       });
+      updates.umpireSlots  = newSlots;
+      updates.needsUmpires = newSlots.some(s => !s.assignedUid);
+      tx.update(gameRef, updates);
     });
-    updates.umpireSlots = newSlots;
-
-    await updateDoc(gameRef, updates);
     const g = allGames.find(g => g.id === gameId);
     if (g) Object.assign(g, updates);
     setMsg("editGameMessage", "Saved!", "success");
@@ -1018,4 +1022,50 @@ authReadyPromise.then(() => {
   loadFacilitiesIntoSelects();
   loadPendingCancellations();
   wireGameFilters();
+
+  const syncBtn = document.getElementById("syncNowBtn");
+  const syncMsg = document.getElementById("syncNowMsg");
+  if (syncBtn) {
+    syncBtn.addEventListener("click", async () => {
+      syncBtn.disabled = true;
+      syncMsg.textContent = "Syncing…";
+      syncMsg.style.color = "var(--light-text)";
+      try {
+        const syncFn = httpsCallable(getFunctions(app, "us-central1"), "syncGamesNow");
+        const result = await syncFn();
+        const d = result.data || {};
+        syncMsg.textContent = `Done — ${d.added ?? 0} added, ${d.linked ?? 0} linked, ${d.flagged ?? 0} flagged`;
+        syncMsg.style.color = "#b8f2c4";
+        await loadGames();
+      } catch (err) {
+        syncMsg.textContent = `Error: ${err.message}`;
+        syncMsg.style.color = "#ffb4b4";
+      } finally {
+        syncBtn.disabled = false;
+      }
+    });
+  }
+
+  const repairBtn = document.getElementById("repairImportsBtn");
+  if (repairBtn) {
+    repairBtn.addEventListener("click", async () => {
+      if (!confirm("This will promote all incorrectly-imported calendar games to proper schedule entries with umpire slots, and delete any duplicates. Proceed?")) return;
+      repairBtn.disabled = true;
+      if (syncMsg) { syncMsg.textContent = "Repairing…"; syncMsg.style.color = "var(--light-text)"; }
+      try {
+        const repairFn = httpsCallable(getFunctions(app, "us-central1"), "repairCalendarGames");
+        const result = await repairFn();
+        const d = result.data || {};
+        if (syncMsg) {
+          syncMsg.textContent = `Repair done — ${d.promoted ?? 0} promoted, ${d.deleted ?? 0} duplicates removed, ${d.skipped ?? 0} skipped`;
+          syncMsg.style.color = "#b8f2c4";
+        }
+        await loadGames();
+      } catch (err) {
+        if (syncMsg) { syncMsg.textContent = `Error: ${err.message}`; syncMsg.style.color = "#ffb4b4"; }
+      } finally {
+        repairBtn.disabled = false;
+      }
+    });
+  }
 });

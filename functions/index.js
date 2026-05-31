@@ -11,6 +11,8 @@ const nodemailer = require("nodemailer");
 
 initializeApp();
 
+const APP_URL = "https://tri-valley-baseball-umpires.web.app";
+
 // ── Email secrets (set via: firebase functions:secrets:set GMAIL_USER / GMAIL_PASS) ──
 const GMAIL_USER = defineSecret("GMAIL_USER");
 const GMAIL_PASS = defineSecret("GMAIL_PASS");
@@ -278,6 +280,20 @@ function resolveIsAway(teamName, homeTeam, awayTeam, parsedValue) {
   return parsedValue; // ambiguous — keep whatever parseVEvents decided
 }
 
+/**
+ * Look up a facilityId from an ICS LOCATION string by checking each known city
+ * keyword against the location text.  Returns the facilityId or "".
+ */
+function facilityIdFromLocation(location, facilityByCity) {
+  if (!location || !facilityByCity) return "";
+  const loc = location.toLowerCase();
+  for (const [city, id] of Object.entries(facilityByCity)) {
+    const escaped = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`\\b${escaped}\\b`).test(loc)) return id;
+  }
+  return "";
+}
+
 function parseVEvents(icsText) {
   // Unfold continuation lines (RFC 5545: line starting with space/tab continues previous)
   const unfolded = icsText.replace(/\r?\n[ \t]/g, "");
@@ -340,6 +356,32 @@ function todayISO() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
 }
 
+/**
+ * Returns the umpire slot types that should be created for a given division.
+ * Checks config/payRates.divisionSlotTypes for a per-division override first,
+ * then falls back to defaultSlotTypes.  A division mapped to [] means no slots.
+ */
+function getSlotTypesForDivision(division, rates) {
+  const overrides = rates.divisionSlotTypes || {};
+  if (division && Object.prototype.hasOwnProperty.call(overrides, division)) {
+    return overrides[division]; // may be [] — intentional
+  }
+  return (rates.defaultSlotTypes && rates.defaultSlotTypes.length)
+    ? rates.defaultSlotTypes
+    : ["Plate", "Field"];
+}
+
+/**
+ * Build a fresh umpire slot object for each slot type.
+ * Used everywhere a game needs new (unassigned) slots created.
+ */
+function makeUmpireSlots(slotTypes, rateMap) {
+  return slotTypes.map(t => ({
+    type: t, assignedUid: null, assignedName: null,
+    payRate: rateMap[t] || 0, checkedIn: false, checkedInAt: null, paid: false,
+  }));
+}
+
 function inferDivision(teamName) {
   if (/10U/i.test(teamName)) return "10U";
   if (/12U/i.test(teamName)) return "12U";
@@ -356,11 +398,38 @@ async function runSync() {
   const teams     = teamsSnap.exists ? (teamsSnap.data().teams || []) : [];
   if (teams.length === 0) return { added: 0, linked: 0, flagged: 0, failed: 0 };
 
-  // Load all existing games for dedup
-  const [gamesSnap, practicesSnap] = await Promise.all([
+  // Load all existing games, practices, pay rates, and facilities in parallel
+  const [gamesSnap, practicesSnap, ratesSnap, facilitiesSnap] = await Promise.all([
     db.collection("games").get(),
     db.collection("practices").get(),
+    db.doc("config/payRates").get(),
+    db.collection("facilities").get(),
   ]);
+
+  // Pay-rate config for auto-creating home-game umpire slots
+  const rates   = ratesSnap.exists ? ratesSnap.data() : {};
+  const rateMap = { Plate: rates.plate || 0, Field: rates.field || 0, Extra: rates.extra || 0 };
+
+  // Build city → facilityId map dynamically from all facilities.
+  // Extracts city from address format "Street, City, SD XXXXX[, USA]".
+  const facilityByCity = {};
+  facilitiesSnap.forEach(d => {
+    const data = d.data();
+    const addr = (data.address || "").toLowerCase().trim();
+    if (addr) {
+      const parts = addr.split(",").map(s => s.trim());
+      // "SD" or "South Dakota" segment — city is the segment before it
+      const sdIdx = parts.findIndex(p => /^s\.?d\.?\b|^south\s+dakota\b/.test(p));
+      if (sdIdx > 0) {
+        const city = parts[sdIdx - 1];
+        if (city) facilityByCity[city] = d.id;
+      }
+    }
+  });
+  // Team name → config object for metadata lookups throughout the sync
+  const teamByName = {};
+  for (const t of teams) { if (t.name) teamByName[t.name] = t; }
+
   const existingExtIds         = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
   const existingPracticeExtIds = new Set(practicesSnap.docs.map(d => d.data().externalId).filter(Boolean));
   const linkedUids        = new Set();
@@ -407,8 +476,14 @@ async function runSync() {
 
     for (const ev of parseVEvents(icsText)) {
       if (!ev.uid) continue;
+      if (!ev.date || ev.date < today) continue; // never add or modify past events
       // Correct isAway from the subscribed team's perspective
       ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway);
+      // Location-based override: if the game is at the team's home city it is always a home game,
+      // regardless of how the summary was formatted or whether name-matching was ambiguous.
+      if (team.city && ev.location && ev.location.toLowerCase().includes(team.city.toLowerCase())) {
+        ev.isAway = false;
+      }
 
       // ── Route practice events to `practices` collection ─────────────────────
       if (isPracticeEvent(ev.summary)) {
@@ -470,23 +545,71 @@ async function runSync() {
         continue;
       }
 
-      // Queue new reference game
-      toGameAdd.push({
-        teamName:     team.name,
-        division,
-        date:         ev.date,
-        time:         ev.time,
-        location:     ev.location,
-        homeTeam:     ev.homeTeam,
-        awayTeam:     ev.awayTeam,
-        isAway:       ev.isAway || false,
-        needsUmpires: false,
-        umpireSlots:  [],
-        cancelled:    false,
-        externalId:   ev.uid,
-        source:       "calendar",
-        createdAt:    FieldValue.serverTimestamp()
-      });
+      // Queue new game document.
+      // Home games for a team that has needsUmpireForHome configured are created as
+      // first-class city-schedule games so umpires can sign up immediately.
+      // Away games, teams without a city, and teams without needsUmpireForHome remain
+      // as lightweight reference entries.
+      //
+      // Duplicate guard: if a city-schedule game already exists for this division+date
+      // (entered by admin or created by an earlier sync pass), skip the add — the
+      // city-schedule matching loop below will link this ICS event to that game.
+      const isHomeWithCity = !ev.isAway && team.city && team.needsUmpireForHome;
+      const cityScheduleExists = isHomeWithCity &&
+        cityGames.some(g => g.division === division && g.date === ev.date);
+      if (isHomeWithCity && cityScheduleExists) {
+        // A city-schedule game already exists for this division+date.
+        // The city-schedule matching loop below will link this ICS event to it.
+        // No new document needed — just fall through to the existingExtIds.add() below.
+      } else if (isHomeWithCity) {
+        // Home game with umpires needed and no existing city-schedule entry → create one.
+        const fieldName  = (ev.location || "").split(",")[0].trim();
+        const facilityId = facilityIdFromLocation(ev.location, facilityByCity);
+        const league     = (team.leagueNames && team.leagueNames.length)
+          ? team.leagueNames[0]
+          : (team.leagueName || "");
+        const slotTypes = getSlotTypesForDivision(division, rates);
+        toGameAdd.push({
+          teamName:     team.name,
+          division,
+          city:         team.city,
+          league,
+          facilityId,
+          date:         ev.date,
+          time:         ev.time,
+          field:        fieldName,
+          location:     ev.location,
+          homeTeam:     ev.homeTeam,
+          awayTeam:     ev.awayTeam,
+          isAway:       false,
+          type:         "Regular",
+          needsUmpires: slotTypes.length > 0,
+          umpireSlots:  makeUmpireSlots(slotTypes, rateMap),
+          icsLinks:     [{ uid: ev.uid, teamName: team.name }],
+          cancelled:    false,
+          externalId:   ev.uid,
+          source:       "city-schedule",
+          createdAt:    FieldValue.serverTimestamp()
+        });
+      } else {
+        // Away game or no city context → lightweight reference entry only.
+        toGameAdd.push({
+          teamName:     team.name,
+          division,
+          date:         ev.date,
+          time:         ev.time,
+          location:     ev.location,
+          homeTeam:     ev.homeTeam,
+          awayTeam:     ev.awayTeam,
+          isAway:       ev.isAway || false,
+          needsUmpires: false,
+          umpireSlots:  [],
+          cancelled:    false,
+          externalId:   ev.uid,
+          source:       "calendar",
+          createdAt:    FieldValue.serverTimestamp()
+        });
+      }
       existingExtIds.add(ev.uid);
       added++;
     }
@@ -538,10 +661,16 @@ async function runSync() {
         gameUpdate.possibleChange = false;
       }
       // Pick up team names, location, and away flag if GameChanger fills them in later
-      const locatedMatch = matches.find(e =>
-        /crooks,\s*sd/i.test(e.location) || /colton,\s*sd/i.test(e.location)
-      );
-      if (locatedMatch) gameUpdate.field = locatedMatch.location;
+      const locatedMatch = matches.find(e => !!facilityIdFromLocation(e.location, facilityByCity));
+      // Only fill in field if not already set; take just the first segment of the ICS
+      // location string ("West Field, Colton, SD" → "West Field"), not the full address.
+      // Also self-heal games where the full address was previously written as the field.
+      if (locatedMatch) {
+        const fieldName = locatedMatch.location.split(",")[0].trim();
+        if (!game.field || game.field.includes(",")) {
+          gameUpdate.field = fieldName;
+        }
+      }
       const namedMatch = matches.find(e => e.homeTeam);
       if (namedMatch && !game.homeTeam) {
         gameUpdate.homeTeam = namedMatch.homeTeam;
@@ -552,10 +681,129 @@ async function runSync() {
       if (awayMatch && (game.isAway || false) !== awayMatch.isAway) gameUpdate.isAway = awayMatch.isAway;
     }
 
+    // ── Fill in missing metadata from team config + ICS location ──────────────
+    // Runs regardless of link status; safe on any city-schedule game.
+    {
+      const tName = (game.icsLinks?.[0]?.teamName) || (matches[0]?.teamName) || game.teamName || "";
+      const t = teamByName[tName];
+      if (!game.league) {
+        const l = t?.leagueNames?.[0] || t?.leagueName || "";
+        if (l) gameUpdate.league = l;
+      }
+      if (!game.city && t?.city) gameUpdate.city = t.city;
+      if (!game.facilityId) {
+        const locMatch = matches.find(e => !!facilityIdFromLocation(e.location, facilityByCity));
+        if (locMatch) {
+          const fid = facilityIdFromLocation(locMatch.location, facilityByCity);
+          if (fid) gameUpdate.facilityId = fid;
+        }
+      }
+      // Restore umpire slots if missing and team needs umpires (no assigned umpires present)
+      const hasAssigned = (game.umpireSlots || []).some(s => s.assignedUid);
+      if (!hasAssigned && t?.needsUmpireForHome) {
+        const slotTypes = getSlotTypesForDivision(game.division, rates);
+        if (slotTypes.length > 0 && (game.umpireSlots || []).length === 0) {
+          gameUpdate.umpireSlots  = makeUmpireSlots(slotTypes, rateMap);
+          gameUpdate.needsUmpires = true;
+        }
+      }
+    }
+
     if (Object.keys(gameUpdate).length) cityUpdates.push({ ref: game.ref, update: gameUpdate });
   }
   if (cityUpdates.length > 0) {
     await Promise.all(cityUpdates.map(({ ref, update }) => ref.update(update)));
+  }
+
+  // ── Repair pass: promote existing source:"calendar" home games ───────────────
+  // Handles games imported before the home-game promotion logic existed.
+  // Runs on every sync so no manual button is needed.
+  {
+    // Build the set of division+date slots already covered by city-schedule games
+    // (includes games just created above in toGameAdd).
+    const coveredKeys = new Set(cityGames.map(g => `${g.division}|${g.date}`));
+    for (const g of toGameAdd) {
+      if (g.source === "city-schedule") coveredKeys.add(`${g.division}|${g.date}`);
+    }
+
+    const repairOps = [];
+    for (const d of gamesSnap.docs) {
+      const g = d.data();
+      if (g.source !== "calendar") continue;
+      if (!g.date || g.date < today) continue;
+      if ((g.umpireSlots || []).some(s => s.assignedUid)) continue; // never touch assigned games
+
+      const team = teamByName[g.teamName];
+      if (!team || !team.needsUmpireForHome) continue;
+
+      // Location-based home detection: if we find a known facility in the location OR
+      // the location text contains the team's home city, it's a home game.
+      const loc = (g.location || "").toLowerCase();
+      const isAtHome = !!facilityIdFromLocation(g.location, facilityByCity) ||
+                       (team.city && loc.includes(team.city.toLowerCase())) ||
+                       (team.city && g.isAway !== true && !g.location); // no location — fall back to stored value
+      if (!isAtHome) continue;
+
+      const key = `${g.division}|${g.date}`;
+      if (coveredKeys.has(key)) {
+        // A city-schedule game already covers this slot — delete the calendar duplicate
+        repairOps.push(d.ref.delete());
+      } else {
+        const fieldName  = (g.field && !g.field.includes(",")) ? g.field : (g.location || "").split(",")[0].trim();
+        const facilityId = g.facilityId || facilityIdFromLocation(g.location, facilityByCity) || "";
+        const city       = g.city || team.city || "";
+        const league     = g.league || team.leagueNames?.[0] || team.leagueName || "";
+        const division   = g.division || inferDivision(team.name);
+        const slotTypes  = getSlotTypesForDivision(division, rates);
+        // Re-derive isAway: location at home city always wins
+        const correctedIsAway = (team.city && loc.includes(team.city.toLowerCase()))
+          ? false
+          : resolveIsAway(team.name, g.homeTeam || "", g.awayTeam || "", g.isAway || false);
+        repairOps.push(d.ref.update({
+          source:       "city-schedule",
+          city, league, division, facilityId,
+          field:        fieldName,
+          isAway:       correctedIsAway,
+          type:         g.type || "Regular",
+          needsUmpires: slotTypes.length > 0,
+          umpireSlots:  makeUmpireSlots(slotTypes, rateMap),
+          ...(g.externalId && !(g.icsLinks || []).length
+            ? { icsLinks: [{ uid: g.externalId, teamName: g.teamName || team.name }] }
+            : {}),
+        }));
+        coveredKeys.add(key);
+        corrected++;
+      }
+    }
+    if (repairOps.length > 0) await Promise.all(repairOps);
+  }
+
+  // ── Slot cleanup pass: remove umpire slots from city-schedule games whose
+  // team no longer needs umpires (needsUmpireForHome false/absent, or division
+  // override produces zero slot types).  Never touches games with assigned
+  // umpires or games in the past.
+  {
+    const cleanupOps = [];
+    for (const d of gamesSnap.docs) {
+      const g = d.data();
+      if (g.source !== "city-schedule") continue;
+      if (!g.date || g.date < today) continue;
+      if ((g.umpireSlots || []).some(s => s.assignedUid)) continue;
+      // Only clear if slots exist (avoid no-op writes)
+      if (!g.needsUmpires && !(g.umpireSlots || []).length) continue;
+
+      const team = teamByName[g.teamName];
+      const slotTypes = team ? getSlotTypesForDivision(g.division, rates) : [];
+      const shouldHaveSlots = team?.needsUmpireForHome && slotTypes.length > 0;
+
+      if (!shouldHaveSlots && (g.needsUmpires || (g.umpireSlots || []).length > 0)) {
+        cleanupOps.push(d.ref.update({ umpireSlots: [], needsUmpires: false }));
+      }
+    }
+    if (cleanupOps.length > 0) {
+      console.log(`Slot cleanup: removing slots from ${cleanupOps.length} game(s)`);
+      await Promise.all(cleanupOps);
+    }
   }
 
   await db.doc("config/syncState").set(
@@ -635,10 +883,17 @@ exports.previewCalendarImport = onCall({ cors: CORS }, async request => {
 
   const ready = [], conflicts = [], duplicates = [], warnings = [];
 
-  for (const team of teams) {
-    let icsText;
-    try { icsText = await fetchICS(team.icsUrl); }
-    catch (err) { warnings.push({ source: team.name, message: `Failed to fetch: ${err.message}` }); continue; }
+  // Fetch all ICS feeds concurrently
+  const icsResults = await Promise.allSettled(teams.map(t => fetchICS(t.icsUrl)));
+
+  for (let ti = 0; ti < teams.length; ti++) {
+    const team = teams[ti];
+    const icsResult = icsResults[ti];
+    if (icsResult.status === "rejected") {
+      warnings.push({ source: team.name, message: `Failed to fetch: ${icsResult.reason?.message ?? icsResult.reason}` });
+      continue;
+    }
+    const icsText = icsResult.value;
 
     const events   = parseVEvents(icsText);
     const division = inferDivision(team.name);
@@ -669,7 +924,7 @@ exports.previewCalendarImport = onCall({ cors: CORS }, async request => {
         awayTeam:    ev.awayTeam || "",
         isAway:      ev.isAway || false,
         city:        team.city || "",
-        gameType:    "Regular",
+        type:        "Regular",
         needsUmpires: true,
         cancelled:   false,
         umpireSlots: [],
@@ -773,9 +1028,8 @@ exports.commitCalendarImport = onCall({ cors: CORS }, async request => {
   // Load default slot types
   const paySnap      = await db.doc("config/payRates").get();
   const payData      = paySnap.exists ? paySnap.data() : {};
-  const defaultSlots = (payData.defaultSlotTypes || []).map(type => ({
-    type, assignedUid: null, assignedName: null, paid: false, payRate: payData[type.toLowerCase()] || 0
-  }));
+  const defaultRateMap = { Plate: payData.plate || 0, Field: payData.field || 0, Extra: payData.extra || 0 };
+  const defaultSlots = makeUmpireSlots(payData.defaultSlotTypes || [], defaultRateMap);
 
   // Dedup against already-existing externalIds
   const gamesSnap        = await db.collection("games").get();
@@ -796,13 +1050,13 @@ exports.commitCalendarImport = onCall({ cors: CORS }, async request => {
       field:       g.field       || "",
       city:        g.city        || "",
       division:    g.division    || "",
-      gameType:    g.gameType    || "Regular",
+      type:        g.type        || "Regular",
       homeTeam:    g.homeTeam    || "",
       awayTeam:    g.awayTeam    || "",
       isAway:       g.isAway      || false,
-      needsUmpires: g.needsUmpires === false ? false : true,
       cancelled:    false,
       umpireSlots: (g.needsUmpires === false) ? [] : (g.umpireSlots?.length ? g.umpireSlots : defaultSlots),
+      needsUmpires: g.needsUmpires === false ? false : (g.umpireSlots?.length ? true : defaultSlots.length > 0),
       notes:       g.notes       || "",
       importedAt:  new Date().toISOString(),
       importedBy:  request.auth.uid,
@@ -817,6 +1071,135 @@ exports.commitCalendarImport = onCall({ cors: CORS }, async request => {
   }
   if (opsInBatch > 0) await batch.commit();
   return { added };
+});
+
+// ── repairCalendarGames — bulk-fix bad source:"calendar" imports ──────────────
+//
+// Finds all future source:"calendar" games (no past games, no assigned umpires)
+// that are home games at a known facility, then either:
+//   • Promotes them to source:"city-schedule" with full metadata + umpire slots, OR
+//   • Deletes them if a city-schedule game already exists for that division+date.
+
+exports.repairCalendarGames = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db = getFirestore();
+  const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const today = todayISO();
+
+  const [gamesSnap, teamsSnap, ratesSnap, facilitiesSnap] = await Promise.all([
+    db.collection("games").get(),
+    db.doc("config/teamCalendars").get(),
+    db.doc("config/payRates").get(),
+    db.collection("facilities").get(),
+  ]);
+
+  // Team lookup by name
+  const teams = teamsSnap.exists ? (teamsSnap.data().teams || []) : [];
+  const teamByName = {};
+  for (const t of teams) { if (t.name) teamByName[t.name] = t; }
+
+  // Pay-rate config
+  const rates   = ratesSnap.exists ? ratesSnap.data() : {};
+  const rateMap = { Plate: rates.plate || 0, Field: rates.field || 0, Extra: rates.extra || 0 };
+
+  // Build city → facilityId map dynamically from all facilities
+  const facilityByCity = {};
+  facilitiesSnap.forEach(d => {
+    const addr = (d.data().address || "").toLowerCase().trim();
+    if (addr) {
+      const parts = addr.split(",").map(s => s.trim());
+      const sdIdx = parts.findIndex(p => /^s\.?d\.?\b|^south\s+dakota\b/.test(p));
+      if (sdIdx > 0) {
+        const city = parts[sdIdx - 1];
+        if (city) facilityByCity[city] = d.id;
+      }
+    }
+  });
+
+  // Separate existing city-schedule games (keyed by "division|date") from calendar games to repair
+  const cityScheduleKeys = new Set(); // "division|date" of all existing city-schedule games
+  const calendarGames    = [];        // source:"calendar" candidates for repair
+
+  for (const d of gamesSnap.docs) {
+    const g = d.data();
+    if (g.source === "city-schedule") {
+      cityScheduleKeys.add(`${g.division}|${g.date}`);
+    } else if (g.source === "calendar") {
+      if (!g.date || g.date < today) continue;                          // never touch past games
+      const hasAssigned = (g.umpireSlots || []).some(s => s.assignedUid);
+      if (hasAssigned) continue;                                         // never touch assigned games
+      calendarGames.push({ ref: d.ref, ...g });
+    }
+  }
+
+  let promoted = 0, deleted = 0, skipped = 0;
+  const ops = []; // collected Firestore operations executed in parallel at the end
+
+  for (const game of calendarGames) {
+    const team = teamByName[game.teamName];
+
+    if (!team) { skipped++; continue; } // no team config — admin must fix manually
+
+    // Only repair home games for teams that have needsUmpireForHome configured.
+    // Use the location as primary signal; fall back to team city + isAway flag.
+    const loc = (game.location || "").toLowerCase();
+    const isAtHome = !!facilityIdFromLocation(game.location, facilityByCity) ||
+                     (team.city && loc.includes(team.city.toLowerCase())) ||
+                     (team.city && game.isAway !== true && !game.location);
+
+    if (!isAtHome || !team.needsUmpireForHome) { skipped++; continue; }
+
+    const key = `${game.division}|${game.date}`;
+
+    if (cityScheduleKeys.has(key)) {
+      // A city-schedule game already exists for this slot — the calendar entry is a duplicate.
+      ops.push(game.ref.delete());
+      deleted++;
+    } else {
+      // Promote: update the existing document in-place (preserves the document ID and
+      // any icsLinks / externalId already stored on it).
+      const fieldName  = (game.field && !game.field.includes(","))
+        ? game.field
+        : (game.location || "").split(",")[0].trim();
+      const facilityId = game.facilityId || facilityIdFromLocation(game.location, facilityByCity) || "";
+      const city       = game.city || team.city || "";
+      const league     = game.league ||
+        ((team.leagueNames && team.leagueNames.length) ? team.leagueNames[0] : (team.leagueName || ""));
+      const division   = game.division || inferDivision(team.name);
+      const slotTypes  = getSlotTypesForDivision(division, rates);
+
+      // Re-compute isAway: location at team's home city always wins
+      const correctedIsAway = (team.city && loc.includes(team.city.toLowerCase()))
+        ? false
+        : resolveIsAway(team.name, game.homeTeam || "", game.awayTeam || "", game.isAway || false);
+
+      ops.push(game.ref.update({
+        source:       "city-schedule",
+        city,
+        league,
+        division,
+        facilityId,
+        field:        fieldName,
+        isAway:       correctedIsAway,
+        type:         game.type || "Regular",
+        needsUmpires: slotTypes.length > 0,
+        umpireSlots:  makeUmpireSlots(slotTypes, rateMap),
+        // Ensure icsLinks is initialised if the game has an externalId
+        ...(game.externalId && !(game.icsLinks || []).length
+          ? { icsLinks: [{ uid: game.externalId, teamName: game.teamName || team.name }] }
+          : {}),
+      }));
+
+      // Mark this slot as covered so a second calendar game for the same div+date is deleted
+      cityScheduleKeys.add(key);
+      promoted++;
+    }
+  }
+
+  await Promise.all(ops);
+  return { promoted, deleted, skipped };
 });
 
 // ── Callable: admin panel "Sync" button ───────────────────────────────────────
@@ -855,6 +1238,9 @@ exports.importCitySchedule = onCall(
     const db       = getFirestore();
     const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
     if (!adminDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+    const adminData = adminDoc.data() || {};
+    const isSuperAdmin = adminData.superAdmin === true || (Array.isArray(adminData.roles) && adminData.roles.length === 0);
+    if (!isSuperAdmin) throw new HttpsError("permission-denied", "Super admin access required.");
 
     const ratesSnap = await db.doc("config/payRates").get();
     const rates     = ratesSnap.exists ? ratesSnap.data() : {};
@@ -888,9 +1274,7 @@ exports.importCitySchedule = onCall(
         type:         "Regular",
         field:        entry.field,
         needsUmpires: true,
-        umpireSlots:  defaultSlotTypes.map(t => ({
-          type: t, assignedUid: null, assignedName: null, payRate: rateMap[t] || 0
-        })),
+        umpireSlots:  makeUmpireSlots(getSlotTypesForDivision(entry.division, rates), rateMap),
         cancelled:  false,
         externalId: entry.externalId,
         source:     "city-schedule",
@@ -905,16 +1289,31 @@ exports.importCitySchedule = onCall(
 
 // ── Phase 11: single-team sync ────────────────────────────────────────────────
 
-async function runSyncForTeam(team, teamIndex) {
+async function runSyncForTeam(team) {
   const db = getFirestore();
 
-  // Fetch games + practices + ICS feed in parallel
-  const [[gamesSnap, practicesSnap], icsText] = await Promise.all([
-    Promise.all([db.collection("games").get(), db.collection("practices").get()]),
+  // Fetch games + practices + config (pay rates, facilities) + ICS feed in parallel
+  const [[gamesSnap, practicesSnap, ratesSnap, facilitiesSnap], icsText] = await Promise.all([
+    Promise.all([
+      db.collection("games").get(),
+      db.collection("practices").get(),
+      db.doc("config/payRates").get(),
+      db.collection("facilities").get(),
+    ]),
     fetchICS(team.icsUrl).catch(err => {
       throw new Error(`Failed to fetch ICS for ${team.name}: ${err.message}`);
     }),
   ]);
+
+  const rates   = ratesSnap.exists ? ratesSnap.data() : {};
+  const rateMap = { Plate: rates.plate || 0, Field: rates.field || 0, Extra: rates.extra || 0 };
+  const facilityByCity = {};
+  for (const d of facilitiesSnap.docs) {
+    const cities = d.data().cities || [];
+    for (const city of cities) { if (city) facilityByCity[city] = d.id; }
+    const city = d.data().city;
+    if (city) facilityByCity[city] = d.id;
+  }
 
   const existingExtIds         = new Set(gamesSnap.docs.map(d => d.data().externalId).filter(Boolean));
   const existingPracticeExtIds = new Set(practicesSnap.docs.map(d => d.data().externalId).filter(Boolean));
@@ -947,6 +1346,7 @@ async function runSyncForTeam(team, teamIndex) {
 
   for (const ev of events) {
     if (!ev.uid) continue;
+    if (!ev.date || ev.date < today) continue; // never add or modify past events
     // Correct isAway from the subscribed team's perspective
     ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway);
 
@@ -1072,6 +1472,72 @@ async function runSyncForTeam(team, teamIndex) {
     await Promise.all(cityUpdates.map(({ ref, update }) => ref.update(update)));
   }
 
+  // ── Repair pass (this team only) ─────────────────────────────────────────────
+  // Promotes source:"calendar" home games for this team to source:"city-schedule".
+  {
+    const coveredKeys = new Set(cityGames.map(g => `${g.division}|${g.date}`));
+    for (const g of toGameAdd) {
+      if (g.source === "city-schedule") coveredKeys.add(`${g.division}|${g.date}`);
+    }
+    const repairOps = [];
+    for (const d of gamesSnap.docs) {
+      const g = d.data();
+      if (g.source !== "calendar" || g.teamName !== team.name) continue;
+      if (!g.date || g.date < today) continue;
+      if ((g.umpireSlots || []).some(s => s.assignedUid)) continue;
+      if (!team.needsUmpireForHome) continue;
+      const loc      = (g.location || "").toLowerCase();
+      const isAtHome = !!facilityIdFromLocation(g.location, facilityByCity) ||
+                       (team.city && loc.includes(team.city.toLowerCase())) ||
+                       (team.city && g.isAway !== true && !g.location);
+      if (!isAtHome) continue;
+      const key = `${g.division}|${g.date}`;
+      if (coveredKeys.has(key)) {
+        repairOps.push(d.ref.delete());
+      } else {
+        const fieldName  = (g.field && !g.field.includes(",")) ? g.field : (g.location || "").split(",")[0].trim();
+        const facilityId = g.facilityId || facilityIdFromLocation(g.location, facilityByCity) || "";
+        const city       = g.city || team.city || "";
+        const league     = g.league || team.leagueNames?.[0] || team.leagueName || "";
+        const slotTypes  = getSlotTypesForDivision(g.division || division, rates);
+        const correctedIsAway = (team.city && loc.includes(team.city.toLowerCase()))
+          ? false
+          : resolveIsAway(team.name, g.homeTeam || "", g.awayTeam || "", g.isAway || false);
+        repairOps.push(d.ref.update({
+          source: "city-schedule", city, league, facilityId,
+          field: fieldName, isAway: correctedIsAway, type: g.type || "Regular",
+          needsUmpires: slotTypes.length > 0,
+          umpireSlots:  makeUmpireSlots(slotTypes, rateMap),
+          ...(g.externalId && !(g.icsLinks || []).length
+            ? { icsLinks: [{ uid: g.externalId, teamName: g.teamName || team.name }] }
+            : {}),
+        }));
+        coveredKeys.add(key);
+        corrected++;
+      }
+    }
+    if (repairOps.length > 0) await Promise.all(repairOps);
+  }
+
+  // ── Slot cleanup pass (this team only) ───────────────────────────────────────
+  // Removes umpire slots from city-schedule games when the team no longer needs umpires.
+  {
+    const cleanupOps = [];
+    for (const d of gamesSnap.docs) {
+      const g = d.data();
+      if (g.source !== "city-schedule" || g.teamName !== team.name) continue;
+      if (!g.date || g.date < today) continue;
+      if ((g.umpireSlots || []).some(s => s.assignedUid)) continue;
+      if (!g.needsUmpires && !(g.umpireSlots || []).length) continue;
+      const slotTypes     = getSlotTypesForDivision(g.division, rates);
+      const shouldHaveSlots = team.needsUmpireForHome && slotTypes.length > 0;
+      if (!shouldHaveSlots && (g.needsUmpires || (g.umpireSlots || []).length > 0)) {
+        cleanupOps.push(d.ref.update({ umpireSlots: [], needsUmpires: false }));
+      }
+    }
+    if (cleanupOps.length > 0) await Promise.all(cleanupOps);
+  }
+
   return { added, corrected, linked, flagged };
 }
 
@@ -1091,7 +1557,7 @@ exports.syncTeamNow = onCall(
     if (teamIndex < 0 || teamIndex >= teams.length)
       throw new HttpsError("out-of-range", "Invalid team index.");
 
-    return await runSyncForTeam(teams[teamIndex], teamIndex);
+    return await runSyncForTeam(teams[teamIndex]);
   }
 );
 
@@ -1257,11 +1723,6 @@ function postSlack(webhookUrl, text) {
   });
 }
 
-async function getSlackWebhooks(db) {
-  const snap = await db.doc("config/slackWebhooks").get();
-  return snap.exists ? snap.data() : {};
-}
-
 async function loadWebhookConfig(db) {
   const snap = await db.doc("config/slackWebhooks").get();
   return snap.exists ? snap.data() : {};
@@ -1300,6 +1761,7 @@ function getTargetWebhooks(config, eventType, division = null) {
     case "coachRegistration":
     case "umpireRequests":
     case "practiceRequests":
+    case "callupRequests":
     case "checkIn":
     case "fieldIssues":
     case "rainout":
@@ -1330,14 +1792,16 @@ function gameLabel(g) {
 
 // ── Phase 12: onGameWrite trigger ─────────────────────────────────────────────
 
-exports.onGameWrite = onDocumentWritten(
-  { document: "games/{gameId}", secrets: [GMAIL_USER, GMAIL_PASS] },
-  async event => {
+exports.onGameWrite = onDocumentWritten("games/{gameId}", async event => {
   const before = event.data.before?.data() ?? null;
   const after  = event.data.after?.data()  ?? null;
 
-  // Only fire for needsUmpires games
-  if (!after?.needsUmpires && !before?.needsUmpires) return;
+  // Skip if neither side ever needed umpires AND the game wasn't deleted/created
+  // (a deletion/creation always gets a Slack notification regardless of needsUmpires)
+  const isCreate  = !before && !!after;
+  const isDelete  = !!before && !after;
+  const isUpdate  = !!before && !!after;
+  if (isUpdate && !after.needsUmpires && !before.needsUmpires) return;
 
   const db     = getFirestore();
   const div    = after?.division ?? before?.division ?? "";
@@ -1347,11 +1811,11 @@ exports.onGameWrite = onDocumentWritten(
   let broadcastMsg = null;
   let rainoutMsg   = null;
 
-  if (!before && after) {
+  if (isCreate) {
     broadcastMsg = `🆕 New game added: ${gameLabel(after)}`;
-  } else if (before && !after) {
+  } else if (isDelete) {
     broadcastMsg = `🗑️ Game deleted: ${gameLabel(before)}`;
-  } else if (before && after) {
+  } else {
     if (!before.cancelled && after.cancelled) {
       if (after.cancellationType === "rainout") {
         rainoutMsg = `🌧 Rain Out — ${gameLabel(after)}`;
@@ -1368,10 +1832,9 @@ exports.onGameWrite = onDocumentWritten(
 
   // ── 2. Slot assignment changes → slotChanges webhooks ───────────────────────
   let jeffMsg = null;
-  const newlyAssignedUids = [];
   const checkIns = [];
 
-  if (before && after) {
+  if (isUpdate) {
     const beforeSlots = before.umpireSlots || [];
     const afterSlots  = after.umpireSlots  || [];
     const signups  = [];
@@ -1382,7 +1845,6 @@ exports.onGameWrite = onDocumentWritten(
       const a = afterSlots[i];
       if (!b.assignedUid && a.assignedUid && !after.cancelled) {
         signups.push(`${a.type}: ${a.assignedName || a.assignedUid}`);
-        newlyAssignedUids.push(a.assignedUid);
       } else if (b.assignedUid && !a.assignedUid && !after.cancelled) {
         cancels.push(`${b.type}: ${b.assignedName || b.assignedUid}`);
       }
@@ -1424,88 +1886,7 @@ exports.onGameWrite = onDocumentWritten(
   }
 
   if (sends.length) await Promise.allSettled(sends);
-
-  // ── 3. Direct push to newly assigned umpires ────────────────────────────────
-  let section3TokenSnaps = null; // reused by section 4 to avoid re-fetching
-  if (newlyAssignedUids.length > 0) {
-    try {
-      const tokenSnaps = await Promise.all(
-        newlyAssignedUids.map(uid => db.doc(`notifications/${uid}`).get())
-      );
-      section3TokenSnaps = tokenSnaps; // share with section 4
-      const tokens = tokenSnaps.map(s => s.exists ? s.data()?.token : null).filter(Boolean);
-      if (tokens.length > 0) {
-        const label = gameLabel(after);
-        const result = await getMessaging().sendEachForMulticast({
-          tokens,
-          notification: {
-            title: "⚾ Game Assignment",
-            body: `You've been assigned: ${label}`,
-          },
-          webpush: { fcmOptions: { link: "https://tri-valley-baseball-umpires.web.app/schedule.html" } },
-        });
-        // Prune stale tokens
-        const stale = result.responses.map((r, i) => r.error ? tokens[i] : null).filter(Boolean);
-        if (stale.length > 0) {
-          const batch = db.batch();
-          for (const snap of tokenSnaps) {
-            if (snap.exists && stale.includes(snap.data()?.token)) batch.delete(snap.ref);
-          }
-          await batch.commit();
-        }
-      }
-    } catch (e) {
-      console.error("Assignment push error:", e);
-    }
-  }
-
-  // ── 4. Email fallback for umpires without a push token ──────────────────────
-  if (newlyAssignedUids.length > 0) {
-    try {
-      await Promise.allSettled(newlyAssignedUids.map(async (uid, i) => {
-        // Reuse the token snap already fetched in section 3 — avoid re-reading Firestore
-        const tokenSnap = (section3TokenSnaps && section3TokenSnaps[i]) || null;
-        if (tokenSnap?.exists && tokenSnap.data()?.token) return; // push covered it
-
-        const umpSnap = await db.doc(`umpires/${uid}`).get();
-        if (!umpSnap.exists) return;
-        const ump = umpSnap.data();
-        if (!ump.email) return;
-
-        const label     = gameLabel(after);
-        const slotTypes = (after.umpireSlots ?? [])
-          .filter(s => s.assignedUid === uid)
-          .map(s => s.type)
-          .join(", ") || "Umpire";
-        const APP_URL   = "https://tri-valley-baseball-umpires.web.app";
-
-        const transport = buildTransport();
-        await transport.sendMail({
-          from:    `"Tri-Valley Baseball" <${GMAIL_USER.value()}>`,
-          to:      ump.email,
-          subject: `⚾ Game Assignment — ${fmtDateSlack(after.date)}`,
-          text: [
-            `Hi ${ump.name || "Umpire"},`,
-            ``,
-            `You've been assigned to a game:`,
-            `  Role: ${slotTypes}`,
-            `  ${label}`,
-            ``,
-            `View your schedule: ${APP_URL}/schedule.html`,
-          ].join("\n"),
-          html: `<p>Hi ${ump.name || "Umpire"},</p>
-<p>You've been assigned to a game:</p>
-<table style="border-collapse:collapse;margin:8px 0">
-  <tr><td style="color:#888;padding:2px 12px 2px 0">Role</td><td><strong>${slotTypes}</strong></td></tr>
-  <tr><td style="color:#888;padding:2px 12px 2px 0">Game</td><td>${label}</td></tr>
-</table>
-<p><a href="${APP_URL}/schedule.html" style="background:#601929;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px">View Schedule</a></p>`,
-        });
-      }));
-    } catch (e) {
-      console.error("Assignment email error:", e);
-    }
-  }
+  // Push + email to assigned umpires is handled by onGameSlotChanged (more precise).
 });
 
 // ── Cancellation request notifications ───────────────────────────────────────
@@ -1545,8 +1926,6 @@ exports.onCancellationRequest = onDocumentWritten(
   const pushBody   = isApproved
     ? `Your ${slot} slot on ${date} has been released. You are no longer assigned.`
     : `Your cancellation request for ${slot} on ${date} was denied. You remain assigned.`;
-
-  const sends = [];
 
   // Push notification
   try {
@@ -1617,8 +1996,6 @@ exports.onCancellationRequest = onDocumentWritten(
   } catch (err) {
     console.error("onCancellationRequest email:", err);
   }
-
-  await Promise.allSettled(sends);
 });
 
 // ── Incident report notifications ────────────────────────────────────────────
@@ -2108,7 +2485,7 @@ exports.sendBroadcast = onCall({ cors: CORS }, async request => {
 
   // Also post to Slack if a webhook was provided
   let slacked = false;
-  const webhook = slackWebhook || (await getSlackWebhooks(db)).broadcast || null;
+  const webhook = slackWebhook || (await loadWebhookConfig(db)).broadcast || null;
   if (webhook) {
     await postSlack(webhook, `📣 *${title}*\n${body}`).catch(() => {});
     slacked = true;
@@ -3537,46 +3914,33 @@ exports.onGameSlotChanged = onDocumentWritten(
     const dateStr  = fmtDateSlack(gameDate);
     const timeStr  = gameTime ? fmtTimeSlack(gameTime) : "";
 
-    // Build slot maps keyed by slot type
-    const beforeMap = Object.fromEntries(beforeSlots.map(s => [s.type, s]));
-    const afterMap  = Object.fromEntries(afterSlots.map(s =>  [s.type, s]));
-
-    // Collect notifications to send: { uid, type: "assigned"|"removed", slotType }
+    // Collect notifications to send: { uid, action: "assigned"|"removed", slotType }
     const notifications = [];
 
-    const allTypes = new Set([...beforeSlots.map(s => s.type), ...afterSlots.map(s => s.type)]);
-    for (const slotType of allTypes) {
-      const b = beforeMap[slotType];
-      const a = afterMap[slotType];
-      const prevUid = b?.assignedUid || null;
-      const nextUid = a?.assignedUid || null;
+    // Use index-based comparison to correctly handle multiple slots of the same type.
+    // Check if any non-slot field changed as a proxy for admin write vs self-signup.
+    const nonSlotChanged = (() => {
+      const track = ["date","time","city","division","field","notes","cancelled","homeTeam","awayTeam"];
+      return track.some(k => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
+    })();
+
+    const maxLen = Math.max(beforeSlots.length, afterSlots.length);
+    for (let i = 0; i < maxLen; i++) {
+      const b = beforeSlots[i];
+      const a = afterSlots[i];
+      const prevUid  = b?.assignedUid || null;
+      const nextUid  = a?.assignedUid || null;
+      const slotType = a?.type ?? b?.type ?? `Slot ${i}`;
 
       if (prevUid === nextUid) continue; // no change
 
-      // Skip self-signup: an empty→filled transition where the umpire writes their
-      // own uid is handled by the umpire, not an admin. We don't have the writer's
-      // uid from triggers, so we use a heuristic: umpires can ONLY write
-      // umpireSlots+needsUmpires. Admin edits also touch other fields (date, city,
-      // notes, etc.). Check if any non-slot field changed as a proxy for admin write.
-      const nonSlotChanged = (() => {
-        const track = ["date","time","city","division","field","notes","cancelled","homeTeam","awayTeam"];
-        return track.some(k => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
-      })();
-
-      // For assignments (empty→filled): only notify if this looks like an admin
-      // action — either other fields changed (admin game edit) OR the umpire who
-      // was assigned didn't sign up themselves (we can't fully distinguish, so we
-      // always notify on admin-side direct assigns; self-signup notifications are
-      // already handled client-side by the schedule page UI).
+      // For assignments (empty→filled): only notify for admin-initiated assigns.
+      // Self-signups on schedule.html only write umpireSlots+needsUmpires, so
+      // nonSlotChanged will be false and we correctly skip them.
       if (!prevUid && nextUid) {
-        // Only fire for admin-initiated assigns (other fields changed, or needsUmpires
-        // explicitly set to false — admin scheduler sets needsUmpires). To avoid
-        // double-notifying on self-signup, skip if the only change is umpireSlots/needsUmpires.
         if (nonSlotChanged) {
           notifications.push({ uid: nextUid, action: "assigned", slotType });
         }
-        // Note: self-signups on schedule.html only write umpireSlots+needsUmpires,
-        // so nonSlotChanged will be false and we skip them correctly.
       }
 
       // For removals (filled→empty): always notify the umpire who was removed.
@@ -3584,7 +3948,7 @@ exports.onGameSlotChanged = onDocumentWritten(
         notifications.push({ uid: prevUid, action: "removed", slotType });
       }
 
-      // For swaps (uid A → uid B): notify both the removed and newly assigned umpire.
+      // For swaps (uid A → uid B): notify both.
       if (prevUid && nextUid && prevUid !== nextUid) {
         notifications.push({ uid: prevUid, action: "removed",  slotType });
         notifications.push({ uid: nextUid, action: "assigned", slotType });

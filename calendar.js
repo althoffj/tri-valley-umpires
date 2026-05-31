@@ -149,7 +149,6 @@ function renderMonth() {
   // Build date → {games, practices} map for visible items
   const dayMap = {};
   visibleGames().forEach(g => {
-    if (g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled") return;
     if (!dayMap[g.date]) dayMap[g.date] = { games: [], practices: [] };
     dayMap[g.date].games.push(g);
   });
@@ -171,34 +170,37 @@ function renderMonth() {
     html += `<div class="cal-month-cell${!isThisMonth ? " cal-other-month" : ""}${isToday ? " cal-today" : ""}" data-date="${iso}">`;
     html += `<div class="cal-day-num${isToday ? " cal-today-num" : ""}">${cur.getDate()}</div>`;
 
-    const gamesToShow     = items.games.slice(0, Math.min(items.games.length, MAX_CELL));
+    // Sort so non-cancelled games appear first; cancelled ones get pushed into overflow.
+    const sortedGames     = [...items.games].sort((a, b) => (a.cancelled ? 1 : 0) - (b.cancelled ? 1 : 0));
+    const gamesToShow     = sortedGames.slice(0, Math.min(sortedGames.length, MAX_CELL));
     const practiceSlots   = Math.max(0, MAX_CELL - gamesToShow.length);
     const practicesToShow = items.practices.slice(0, practiceSlots);
 
     gamesToShow.forEach(g => {
-      const mine      = isMyGame(g);
-      const isMuted   = g.cancelled && (g.cancellationType === "rainout" || g.cancellationType === "rescheduled");
-      const mutedIcon = g.cancellationType === "rainout" ? "🌧" : "🔄";
-      const isAway    = g.isAway === true;
-      const isRef     = g.source === "calendar" && !g.needsUmpires;
-      const color     = mine ? "#b8f2c4" : isAway ? "#f59e42" : isRef ? "#8888aa" : "var(--accent)";
-      const assigned  = (g.umpireSlots||[]).filter(s => s.assignedUid).length;
-      const total     = (g.umpireSlots||[]).length;
-      const awayLabel = isAway ? `<div style="font-size:0.62rem;color:#f59e42">↗ Away</div>` : "";
-      html += `<div class="cal-card${mine ? " cal-card-mine" : ""}${isRef ? " cal-card-ref" : ""}"
+      const mine       = isMyGame(g);
+      const isHardCancel = g.cancelled && g.cancellationType !== "rainout" && g.cancellationType !== "rescheduled";
+      const isMuted    = g.cancelled && !isHardCancel;
+      const cancelIcon = isHardCancel ? "⛔" : "";
+      const mutedIcon  = g.cancellationType === "rainout" ? "🌧" : "🔄";
+      const isAway     = g.isAway === true;
+      const isRef      = g.source === "calendar" && !g.needsUmpires;
+      const color      = isHardCancel ? "#666" : mine ? "#b8f2c4" : isAway ? "#f59e42" : isRef ? "#8888aa" : "var(--accent)";
+      const assigned   = (g.umpireSlots||[]).filter(s => s.assignedUid).length;
+      const total      = (g.umpireSlots||[]).length;
+      const awayLabel  = isAway && !isHardCancel ? `<div style="font-size:0.62rem;color:#f59e42">↗ Away</div>` : "";
+      const prefix     = cancelIcon || (isMuted ? mutedIcon : "");
+      html += `<div class="cal-card${mine ? " cal-card-mine" : ""}${isRef ? " cal-card-ref" : ""}${isHardCancel ? " cal-cancelled-muted" : ""}"
         data-game-id="${esc(g.id)}"
-        style="border-left-color:${color}${isMuted ? ";opacity:0.5;border-style:dashed" : ""}${isRef ? ";opacity:0.7" : ""};cursor:pointer"
+        style="border-left-color:${color}${isMuted || isHardCancel ? ";opacity:0.5;border-style:dashed" : ""}${isRef ? ";opacity:0.7" : ""};cursor:pointer"
         title="Click for details">
-        <div style="font-size:0.7rem;color:var(--light-text)">${isMuted ? mutedIcon+" " : ""}${g.time ? fmtTime(g.time).replace(":00","") : ""} ${esc(g.division||"")}</div>
+        <div style="font-size:0.7rem;color:var(--light-text)">${prefix ? prefix+" " : ""}${g.time ? fmtTime(g.time).replace(":00","") : ""} ${esc(g.division||"")}</div>
         <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(g.city||"Game")}</div>
         ${awayLabel}${mine ? `<div style="font-size:0.65rem;color:#b8f2c4">★ Yours</div>` : ""}
-        ${total && !isMuted ? `<div style="font-size:0.68rem;color:${assigned===total?"#6fcf97":"#ffcc80"}">${assigned}/${total} ump</div>` : ""}
+        ${total && !isMuted && !isHardCancel ? `<div style="font-size:0.68rem;color:${assigned===total?"#6fcf97":"#ffcc80"}">${assigned}/${total} ump</div>` : ""}
       </div>`;
     });
 
-    const hiddenGames = items.games.filter(g =>
-      !g.cancelled || g.cancellationType === "rainout" || g.cancellationType === "rescheduled"
-    ).length - gamesToShow.length;
+    const hiddenGames = sortedGames.length - gamesToShow.length;
     if (hiddenGames > 0) {
       html += `<div style="font-size:0.7rem;color:var(--light-text);padding:1px 4px">+${hiddenGames} more game${hiddenGames !== 1 ? "s" : ""}</div>`;
     }

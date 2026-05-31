@@ -361,7 +361,7 @@ document.getElementById("rosterFilterStatus")?.addEventListener("change", render
 
 // ── Create Umpire ─────────────────────────────────────────────────────────────
 
-const createUmpireAccountFn = httpsCallable(getFunctions(app), "createUmpireAccount");
+const createUmpireAccountFn = httpsCallable(getFunctions(app, "us-central1"), "createUmpireAccount");
 
 function openCreateUmpireModal() {
   ["cuFirstName","cuLastName","cuEmail","cuPhone"].forEach(id => {
@@ -408,7 +408,7 @@ document.getElementById("saveCreateUmpireBtn")?.addEventListener("click", async 
 
 // ── Create Coach ──────────────────────────────────────────────────────────────
 
-const createCoachAccountFn = httpsCallable(getFunctions(app), "createCoachAccount");
+const createCoachAccountFn = httpsCallable(getFunctions(app, "us-central1"), "createCoachAccount");
 
 // Teams cache for the coach team dropdown
 let _coachTeamList = [];  // [{id, name, division, city, coaches:[{uid,role}]}]
@@ -846,32 +846,17 @@ document.getElementById("addAdminForm")?.addEventListener("submit", async functi
   setMsg("addAdminMessage", "Looking up user…", "info");
 
   try {
-    const q    = query(collection(db, "umpires"), where("email", "==", email));
-    const snap = await getDocs(q);
-
-    if (!snap.empty) {
-      const uid      = snap.docs[0].id;
-      const existing = await getDoc(doc(db, "admins", uid));
-      if (existing.exists()) {
-        setMsg("addAdminMessage", "This user is already an admin.", "warning");
-        btn.disabled = false;
-        return;
-      }
-      await setDoc(doc(db, "admins", uid), {
-        superAdmin: addPermIsSA,
-        roles:      addPermIsSA ? [] : [...addPermGranted],
-        addedAt:    new Date().toISOString()
-      });
-      setMsg("addAdminMessage", `Admin access granted to ${email}.`, "success");
-    } else {
-      const fns    = getFunctions(app, "us-central1");
-      const result = await httpsCallable(fns, "createAdminUser")({ email, name, superAdmin: addPermIsSA, roles: addPermIsSA ? [] : [...addPermGranted] });
-      const { isNew } = result.data;
-      setMsg("addAdminMessage",
-        isNew ? `New admin account created for ${email}. A welcome email with sign-in instructions has been sent.`
-              : `Admin access granted to ${email}. A welcome email has been sent.`,
-        "success");
-    }
+    // Route all cases through createAdminUser — it handles existing users,
+    // new users, and always sends a welcome/notification email.
+    const fns    = getFunctions(app, "us-central1");
+    const result = await httpsCallable(fns, "createAdminUser")({
+      email, name, superAdmin: addPermIsSA, roles: addPermIsSA ? [] : [...addPermGranted],
+    });
+    const { isNew } = result.data;
+    setMsg("addAdminMessage",
+      isNew ? `New admin account created for ${email}. A welcome email with sign-in instructions has been sent.`
+            : `Admin access granted to ${email}. A welcome email has been sent.`,
+      "success");
 
     this.reset();
     addPermGranted = new Set();

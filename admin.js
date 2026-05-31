@@ -32,14 +32,16 @@ async function loadPending() {
       orderBy("submittedAt")
     ));
 
-    if (snap.empty) {
+    const pending = snap.docs.filter(d => !d.data().denied);
+
+    if (pending.length === 0) {
       noteEl.textContent = "No pending approvals.";
       listEl.innerHTML = "";
       return;
     }
 
-    noteEl.textContent = `${snap.size} umpire${snap.size !== 1 ? "s" : ""} awaiting approval.`;
-    listEl.innerHTML = snap.docs.map(d => {
+    noteEl.textContent = `${pending.length} umpire${pending.length !== 1 ? "s" : ""} awaiting approval.`;
+    listEl.innerHTML = pending.map(d => {
       const p = d.data();
       // Support new parents[] array as well as flat parentName for older profiles
       const parents = Array.isArray(p.parents) && p.parents.length ? p.parents

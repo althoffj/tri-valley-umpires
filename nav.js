@@ -1,6 +1,7 @@
 // nav.js — Dynamic top navigation, auth-aware, single source of truth
 import { authReadyPromise, isApproved, isAdmin, isCoach } from "./auth.js";
 import { getOrgSettings } from "./org.js";
+import { esc } from "./utils.js";
 
 // Kick off org settings fetch immediately so data-org-* elements are patched ASAP
 getOrgSettings();
@@ -26,7 +27,7 @@ const section = (() => {
 
 function navLink(href, label) {
   const active = href === page ? ' class="active"' : "";
-  return `<a href="${href}"${active}>${label}</a>`;
+  return `<a href="${href}"${active}>${esc(label)}</a>`;
 }
 
 function navTrigger(sec, label, items) {

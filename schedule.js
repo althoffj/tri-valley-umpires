@@ -34,8 +34,8 @@ import {
 document.getElementById("scheduleYear").textContent = new Date().getFullYear();
 
 let games = [];
-let statusFilter  = "all";   // all | needs | filled | mine
-let dateFilter    = "today"; // today | week | month | upcoming | past | all | custom
+let statusFilter  = "all";      // all | needs | filled | mine
+let dateFilter    = "upcoming"; // today | week | month | upcoming | past | all | custom
 let dateFrom      = "";      // YYYY-MM-DD  (custom range start)
 let dateTo        = "";      // YYYY-MM-DD  (custom range end)
 let cityFilter    = "";      // "" = all cities
@@ -389,7 +389,8 @@ async function adminUnassignSlot(gameId, slotType, targetUid) {
       if (!snap.exists()) throw new Error("Game not found.");
       updatedSlots = (snap.data().umpireSlots || []).map(s =>
         (s.type === slotType && s.assignedUid === targetUid)
-          ? { type: s.type, payRate: s.payRate }   // strip assignment fields
+          ? { type: s.type, payRate: s.payRate, assignedUid: null, assignedName: null,
+              checkedIn: false, checkedInAt: null, paid: false, noShow: false }
           : s
       );
       tx.update(gameRef, { umpireSlots: updatedSlots, needsUmpires: true });
@@ -1367,12 +1368,12 @@ async function initUmpireCalendar(uid) {
   });
 
   document.getElementById("calMyResetBtn")?.addEventListener("click", async () => {
-    if (!confirm("This will invalidate your current subscription URL. Any calendar apps using the old URL will stop updating. Generate a new URL?")) return;
+    if (!await showConfirm("This will invalidate your current subscription URL. Any calendar apps using the old URL will stop updating. Generate a new URL?")) return;
     const token = crypto.randomUUID();
     await updateDoc(doc(db, "umpires", uid), { calendarToken: token });
     const url = `${BASE_URL}/ics/umpire?token=${token}`;
     navigator.clipboard.writeText(url);
-    alert("New URL generated and copied to clipboard.");
+    showToast("New URL generated and copied to clipboard.");
   });
 }
 

@@ -138,8 +138,8 @@ export async function loadSlackWebhooks() {
 
 // ── Slack Manual Triggers ─────────────────────────────────────────────────────
 
-const triggerDayOfRemindersFn   = httpsCallable(getFunctions(app), "triggerDayOfReminders");
-const triggerDailyGameSummaryFn = httpsCallable(getFunctions(app), "triggerDailyGameSummary");
+const triggerDayOfRemindersFn   = httpsCallable(getFunctions(app, "us-central1"), "triggerDayOfReminders");
+const triggerDailyGameSummaryFn = httpsCallable(getFunctions(app, "us-central1"), "triggerDailyGameSummary");
 
 async function runSlackTrigger(fn, btnId, label) {
   const btn = document.getElementById(btnId);

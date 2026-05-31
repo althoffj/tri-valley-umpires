@@ -343,7 +343,7 @@
       <h3 style="margin-bottom:12px">Default Umpire Slot Types</h3>
       <form id="sSlotTypesForm" class="signup-form" style="margin-bottom:24px">
         <div class="document-note" style="margin:0 0 12px">
-          <p style="margin:0">Slot types automatically assigned to imported games.</p>
+          <p style="margin:0">Slot types assigned to imported games when no per-division override is set below.</p>
         </div>
         <div class="check-list">
           <label><input type="checkbox" id="sSlotPlate" value="Plate" /> Plate</label>
@@ -354,6 +354,18 @@
           <button type="submit" class="btn">Save Default Slot Types</button>
         </div>
         <p id="sSlotTypesMsg" class="signup-message" aria-live="polite"></p>
+      </form>
+
+      <h3 style="margin-bottom:8px">Per-Division Slot Types</h3>
+      <form id="sDivSlotTypesForm" class="signup-form" style="margin-bottom:24px">
+        <div class="document-note" style="margin:0 0 12px">
+          <p style="margin:0">Override which umpire slots are created for a specific division. Check none to create no slots for that division.</p>
+        </div>
+        <div id="sDivSlotTypesGrid" style="margin-bottom:12px"></div>
+        <div class="page-actions">
+          <button type="submit" class="btn">Save Division Slot Types</button>
+        </div>
+        <p id="sDivSlotTypesMsg" class="signup-message" aria-live="polite"></p>
       </form>
 
       <!-- Scheduling Rules -->
@@ -595,10 +607,10 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=25"></script>
-  <script type="module" src="admin-scheduler.js?v=18"></script>
+  <script type="module" src="auth.js?v=27"></script>
+  <script type="module" src="admin-scheduler.js?v=22"></script>
   <script type="module" src="/pwa.js?v=6"></script>
-  <script type="module" src="/tabs.js?v=5"></script>
-  <script type="module" src="nav.js?v=8"></script>
+  <script type="module" src="/tabs.js?v=6"></script>
+  <script type="module" src="nav.js?v=9"></script>
 </body>
 </html>

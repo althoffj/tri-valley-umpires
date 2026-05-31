@@ -182,7 +182,7 @@ document.addEventListener("click", e => {
 
 // ── Broadcast: Push Notifications ─────────────────────────────────────────────
 
-const sendBroadcastFn = httpsCallable(getFunctions(app), "sendBroadcast");
+const sendBroadcastFn = httpsCallable(getFunctions(app, "us-central1"), "sendBroadcast");
 
 document.getElementById("alNotifForm")?.addEventListener("submit", async function(e) {
   e.preventDefault();
@@ -212,7 +212,7 @@ document.getElementById("alNotifForm")?.addEventListener("submit", async functio
 
 // ── Broadcast: Email All Umpires ──────────────────────────────────────────────
 
-const sendBroadcastEmailFn = httpsCallable(getFunctions(app), "sendBroadcastEmail");
+const sendBroadcastEmailFn = httpsCallable(getFunctions(app, "us-central1"), "sendBroadcastEmail");
 
 document.getElementById("alEmailAllForm")?.addEventListener("submit", async function(e) {
   e.preventDefault();

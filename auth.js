@@ -1,5 +1,6 @@
 // auth.js — Firebase Authentication + session management + hamburger auth UI
 import { auth, db, messaging } from "./firebase.js";
+import { esc } from "./utils.js";
 import { isPWAMode, isMobileDevice, isIOS, canInstall, triggerInstall } from "./pwa.js";
 import {
   onAuthStateChanged,
@@ -48,6 +49,7 @@ function getAuthEls() {
 
 // Resolves once the initial auth state check completes
 let authReadyResolve;
+let _authResolved = false;
 export const authReadyPromise = new Promise(resolve => { authReadyResolve = resolve; });
 
 onAuthStateChanged(auth, async (user) => {
@@ -80,7 +82,7 @@ onAuthStateChanged(auth, async (user) => {
     currentAdminDoc = null;
     currentCoachDoc = null;
   }
-  authReadyResolve();
+  if (!_authResolved) { _authResolved = true; authReadyResolve(); }
   applyAuthGate();
 });
 
@@ -127,49 +129,68 @@ function _logLogin(user, method) {
   } catch (_) {}
 }
 
-export async function login(email, password) {
-  const credential = await signInWithEmailAndPassword(auth, email, password);
-  // Set flag before the Promise.all so onAuthStateChanged (which fires immediately
-  // after sign-in) sees it and skips its own redundant fetch
-  _skipAuthFetch = true;
-  const [umpireSnap, adminSnap, coachSnap] = await Promise.all([
-    getDoc(doc(db, "umpires", credential.user.uid)),
-    getDoc(doc(db, "admins", credential.user.uid)),
-    getDoc(doc(db, "coaches", credential.user.uid))
-  ]);
+/**
+ * Shared profile resolution for login() and googleSignIn().
+ * Throws if the account is inactive/unapproved or has no profile.
+ * Returns the credential on success; may redirect for new Google users.
+ */
+async function _resolveProfilesAfterSignIn(credential, umpireSnap, adminSnap, coachSnap, method) {
+  const user = credential.user;
 
-  // Admin accounts are always allowed through, regardless of umpires doc
   if (adminSnap.exists()) {
     currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
     currentIsAdmin  = true;
     currentAdminDoc = adminSnap.data();
-    _logLogin(credential.user, "email");
+    _logLogin(user, method);
     return credential;
   }
 
-  // Check umpire profile
   if (umpireSnap.exists()) {
     const profile = umpireSnap.data();
     if (profile.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
     if (profile.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
     currentProfile = profile;
-    _logLogin(credential.user, "email");
+    _logLogin(user, method);
     return credential;
   }
 
-  // Check coach profile
   if (coachSnap.exists()) {
     const coach = coachSnap.data();
     if (coach.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
     if (coach.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
     currentCoachDoc = coach;
-    _logLogin(credential.user, "email");
+    _logLogin(user, method);
     return credential;
   }
 
+  // No profile found
   _skipAuthFetch = false;
+  if (method === "google") {
+    // New Google user — redirect to registration
+    window.location.href = "coach-form.html?google=1";
+    return credential; // navigation is in-flight; won't reach callers
+  }
   await signOut(auth);
   throw new Error("Account profile not found. Please contact the league administrator.");
+}
+
+export async function login(email, password) {
+  // Set flag BEFORE the await so onAuthStateChanged (which can fire in the same
+  // microtask flush when the sign-in resolves) always sees it and skips its own
+  // redundant Firestore fetch.  Clear it on failure so the flag doesn't stick.
+  _skipAuthFetch = true;
+  try {
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    const [umpireSnap, adminSnap, coachSnap] = await Promise.all([
+      getDoc(doc(db, "umpires", credential.user.uid)),
+      getDoc(doc(db, "admins", credential.user.uid)),
+      getDoc(doc(db, "coaches", credential.user.uid))
+    ]);
+    return _resolveProfilesAfterSignIn(credential, umpireSnap, adminSnap, coachSnap, "email");
+  } catch (err) {
+    _skipAuthFetch = false;
+    throw err;
+  }
 }
 
 export async function logout() { await signOut(auth); }
@@ -178,52 +199,20 @@ export async function sendResetEmail(email) { await sendPasswordResetEmail(auth,
 
 export async function googleSignIn() {
   const provider = new GoogleAuthProvider();
-  const credential = await signInWithPopup(auth, provider);
-  const user = credential.user;
-  // Set flag before the Promise.all so onAuthStateChanged sees it immediately
+  // Set flag BEFORE the await for the same reason as login() above.
   _skipAuthFetch = true;
-
-  const [umpireSnap, adminSnap, coachSnap] = await Promise.all([
-    getDoc(doc(db, "umpires", user.uid)),
-    getDoc(doc(db, "admins", user.uid)),
-    getDoc(doc(db, "coaches", user.uid))
-  ]);
-
-  // Admin accounts are allowed through even without an umpire profile
-  if (adminSnap.exists()) {
-    currentProfile  = umpireSnap.exists() ? umpireSnap.data() : null;
-    currentIsAdmin  = true;
-    currentAdminDoc = adminSnap.data();
-    _logLogin(user, "google");
-    return credential;
+  try {
+    const credential = await signInWithPopup(auth, provider);
+    const [umpireSnap, adminSnap, coachSnap] = await Promise.all([
+      getDoc(doc(db, "umpires", credential.user.uid)),
+      getDoc(doc(db, "admins", credential.user.uid)),
+      getDoc(doc(db, "coaches", credential.user.uid))
+    ]);
+    return _resolveProfilesAfterSignIn(credential, umpireSnap, adminSnap, coachSnap, "google");
+  } catch (err) {
+    _skipAuthFetch = false;
+    throw err;
   }
-
-  // Has umpire profile
-  if (umpireSnap.exists()) {
-    const profile = umpireSnap.data();
-    if (profile.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has not yet been approved. Please wait for administrator approval."); }
-    if (profile.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your account has been deactivated. Please contact the league administrator."); }
-    currentProfile = profile;
-    _logLogin(user, "google");
-    return credential;
-  }
-
-  // Has coach profile
-  if (coachSnap.exists()) {
-    const coach = coachSnap.data();
-    if (coach.approved === false) { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account is pending approval. Please wait for administrator approval."); }
-    if (coach.active === false)   { _skipAuthFetch = false; await signOut(auth); throw new Error("Your coach account has been deactivated. Please contact the league administrator."); }
-    currentCoachDoc = coach;
-    _logLogin(user, "google");
-    return credential;
-  }
-
-  // No profile — new user navigating to registration; clear flag (no profiles to skip)
-  _skipAuthFetch = false;
-
-  // No profile at all — new user, hand off to coach registration form
-  window.location.href = "coach-form.html?google=1";
-  return credential; // navigation is in-flight; won't reach callers
 }
 
 export async function updateProfile(fields) {
@@ -795,9 +784,9 @@ function initAuthUI() {
     row.className = "profile-parent-row";
     row.style.cssText = "display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;margin-bottom:8px;align-items:center";
     row.innerHTML = `
-      <input type="text"  class="ppr-name"  placeholder="Name"            value="${(p.name  || "").replace(/"/g,'&quot;')}" style="${INPUT_STYLE}" />
-      <input type="tel"   class="ppr-phone" placeholder="Phone"           value="${(p.phone || "").replace(/"/g,'&quot;')}" style="${INPUT_STYLE}" />
-      <input type="email" class="ppr-email" placeholder="Email (optional)" value="${(p.email || "").replace(/"/g,'&quot;')}" style="${INPUT_STYLE}" />
+      <input type="text"  class="ppr-name"  placeholder="Name"            value="${esc(p.name  || "")}" style="${INPUT_STYLE}" />
+      <input type="tel"   class="ppr-phone" placeholder="Phone"           value="${esc(p.phone || "")}" style="${INPUT_STYLE}" />
+      <input type="email" class="ppr-email" placeholder="Email (optional)" value="${esc(p.email || "")}" style="${INPUT_STYLE}" />
       <button type="button" class="ppr-remove" title="Remove parent"
         style="padding:4px 8px;background:transparent;color:#ff8a8a;border:1px solid #884444;border-radius:5px;cursor:pointer;font-size:1rem;line-height:1;flex-shrink:0">×</button>`;
     return row;

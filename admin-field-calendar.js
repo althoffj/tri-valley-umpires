@@ -8,7 +8,7 @@ import {
 import { getFunctions, httpsCallable }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 
-const functions        = getFunctions(app);
+const functions        = getFunctions(app, "us-central1");
 const fetchFacilityIcs = httpsCallable(functions, "fetchFacilityIcs");
 const fetchOrgIcs      = httpsCallable(functions, "fetchOrgIcs");
 

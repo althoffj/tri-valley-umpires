@@ -69,7 +69,7 @@ async function loadEarnings(fromDate, toDate) {
     renderEarnings();
   } catch (err) {
     console.error(err);
-    tbody.innerHTML = '<tr><td colspan="5" style="color:#ffb4b4">Error loading earnings.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#ffb4b4">Error loading earnings.</td></tr>';
   }
 }
 

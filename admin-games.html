@@ -48,7 +48,12 @@
     <!-- ── Game List ──────────────────────────────────────────────────────── -->
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
       <h2 style="margin:0">All Games</h2>
-      <a href="admin-add-game.html" class="btn">+ Add Game</a>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button type="button" id="syncNowBtn" class="btn print-btn">🔄 Sync Calendars</button>
+        <button type="button" id="repairImportsBtn" class="btn print-btn">🔧 Repair Imports</button>
+        <span id="syncNowMsg" style="font-size:0.82rem;color:var(--light-text)"></span>
+        <a href="admin-add-game.html" class="btn">+ Add Game</a>
+      </div>
     </div>
 
     <!-- Status + date range row -->
@@ -281,10 +286,10 @@
     </div>
   </div>
 
-  <script type="module" src="auth.js?v=25"></script>
-  <script type="module" src="admin-games.js?v=32"></script>
+  <script type="module" src="auth.js?v=27"></script>
+  <script type="module" src="admin-games.js?v=37"></script>
   <script type="module" src="/pwa.js?v=6"></script>
-  <script type="module" src="/tabs.js?v=5"></script>
-  <script type="module" src="nav.js?v=8"></script>
+  <script type="module" src="/tabs.js?v=6"></script>
+  <script type="module" src="nav.js?v=9"></script>
 </body>
 </html>
