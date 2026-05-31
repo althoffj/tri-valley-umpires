@@ -3260,6 +3260,121 @@ exports.onUmpireApproved = onDocumentWritten(
   }
 );
 
+// ── createManualUmpire — add umpire record without Firebase Auth credentials ───
+// Admin-only. Creates an approved umpires/{autoId} doc with noCredentials:true.
+// Credentials can be added later via grantUmpireCredentials.
+exports.createManualUmpire = onCall({ cors: CORS }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db        = getFirestore();
+  const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { firstName, lastName, email, phone } = request.data;
+  if (!firstName || !lastName)
+    throw new HttpsError("invalid-argument", "firstName and lastName are required.");
+
+  const docRef = await db.collection("umpires").add({
+    firstName,
+    lastName,
+    name:          `${firstName} ${lastName}`,
+    email:         email ? email.toLowerCase().trim() : "",
+    phone:         phone ? phone.trim()               : "",
+    approved:      true,
+    active:        true,
+    noCredentials: true,
+    createdAt:     new Date().toISOString(),
+    createdBy:     request.auth.uid,
+  });
+
+  return { id: docRef.id };
+});
+
+// ── grantUmpireCredentials — create login for a no-credentials umpire ─────────
+// Migrates an existing noCredentials umpire doc to a new Auth-keyed doc:
+//   1. Creates a Firebase Auth account with the provided email.
+//   2. Writes umpires/{newUid} copying the existing data.
+//   3. Deletes umpires/{oldDocId}.
+//   4. Sends a password-setup welcome email.
+exports.grantUmpireCredentials = onCall({ cors: CORS, secrets: [GMAIL_USER, GMAIL_PASS] }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+  const db        = getFirestore();
+  const callerDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  if (!callerDoc.exists) throw new HttpsError("permission-denied", "Admin access required.");
+
+  const { docId, email } = request.data;
+  if (!docId || !email)
+    throw new HttpsError("invalid-argument", "docId and email are required.");
+
+  const cleanEmail = email.toLowerCase().trim();
+
+  // Fetch the existing manual umpire doc
+  const oldRef  = db.doc(`umpires/${docId}`);
+  const oldSnap = await oldRef.get();
+  if (!oldSnap.exists) throw new HttpsError("not-found", "Umpire record not found.");
+  const oldData = oldSnap.data();
+  if (!oldData.noCredentials)
+    throw new HttpsError("failed-precondition", "This umpire already has login credentials.");
+
+  const adminAuth = getAuth();
+  let uid; let isNew = false; let resetLink = null;
+
+  try {
+    const existing = await adminAuth.getUserByEmail(cleanEmail);
+    uid = existing.uid;
+  } catch (err) {
+    if (err.code !== "auth/user-not-found") throw new HttpsError("internal", err.message);
+    const created = await adminAuth.createUser({
+      email:         cleanEmail,
+      displayName:   oldData.name,
+      emailVerified: false,
+    });
+    uid = created.uid; isNew = true;
+  }
+
+  // Ensure no existing umpire doc for this Auth uid
+  const newRef  = db.doc(`umpires/${uid}`);
+  const newSnap = await newRef.get();
+  if (newSnap.exists)
+    throw new HttpsError("already-exists", "A profile already exists for this email address.");
+
+  // Migrate: write auth-keyed doc (without noCredentials flag), delete manual doc
+  const { noCredentials: _drop, ...baseData } = oldData;
+  const newData = { ...baseData, email: cleanEmail };
+  const batch = db.batch();
+  batch.set(newRef, newData);
+  batch.delete(oldRef);
+  await batch.commit();
+
+  // Generate password reset link
+  try {
+    resetLink = await adminAuth.generatePasswordResetLink(cleanEmail,
+      { url: "https://tri-valley-baseball-umpires.web.app/index.html" });
+  } catch (_) {}
+
+  // Welcome email (non-fatal)
+  try {
+    const APP_URL  = "https://tri-valley-baseball-umpires.web.app";
+    const firstName = oldData.firstName || (oldData.name || "").split(" ")[0] || "there";
+    const transport = buildTransport();
+    await transport.sendMail({
+      from:    `"Tri-Valley Umpires" <${GMAIL_USER.value()}>`,
+      to:      cleanEmail,
+      subject: "Your Tri-Valley Umpire account is ready",
+      html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e8e8f0;padding:32px;border-radius:12px">
+        <h2 style="color:#7ec8f7;margin-top:0">Welcome to Tri-Valley Baseball Umpires!</h2>
+        <p>Hi ${firstName},</p>
+        <p>Your Tri-Valley Baseball Umpires account now has login access. It is already approved and ready to use.</p>
+        ${resetLink
+          ? `<p><a href="${resetLink}" style="background:#601929;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block">Set Your Password</a></p>
+             <p style="color:#aaa;font-size:0.85rem">This link expires in 24 hours. After setting your password you can sign in at <a href="${APP_URL}" style="color:#7ec8f7">${APP_URL}</a>.</p>`
+          : `<p>Sign in at <a href="${APP_URL}" style="color:#7ec8f7">${APP_URL}</a> using your email address.</p>`}
+      </div>`,
+    });
+  } catch (mailErr) { console.error("grantUmpireCredentials welcome email failed:", mailErr.message); }
+
+  return { uid, isNew };
+});
+
 // ── getUmpireAuthStatus — Firebase Auth metadata for every umpire (admin) ─────
 exports.getUmpireAuthStatus = onCall({ cors: CORS }, async request => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
@@ -3306,6 +3421,8 @@ exports.onUmpireRegistered = onDocumentWritten(
     if (event.data.before && event.data.before.exists) return;
     const after = event.data.after;
     if (!after || !after.exists) return;
+    // Skip admin-created accounts (createUmpireAccount / createManualUmpire set createdBy)
+    if (after.data().createdBy) return;
 
     const d = after.data();
     const APP_URL  = "https://tri-valley-baseball-umpires.web.app";

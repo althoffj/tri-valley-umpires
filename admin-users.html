@@ -59,7 +59,10 @@
       <!-- Add Umpire -->
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
         <h2 style="margin:0">Umpire Directory</h2>
-        <button type="button" class="btn" id="addUmpireBtn" style="font-size:0.88rem;padding:7px 14px">+ Add Umpire</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn" id="addUmpireBtn" style="font-size:0.88rem;padding:7px 14px">+ Add Umpire</button>
+          <button type="button" class="btn print-btn" id="addManualUmpireBtn" style="font-size:0.88rem;padding:7px 14px">+ Add (No Login)</button>
+        </div>
       </div>
       <div class="document-note" style="margin-bottom:16px">
         <p style="margin:0">All umpire accounts. Approved umpires can sign up for games. Inactive umpires are hidden from game signups but their records are retained. Super admins can edit account details, manage parent/guardian info for minors, and permanently delete accounts.</p>
@@ -365,6 +368,54 @@
     </div>
   </div>
 
+  <!-- ── Manual Umpire Modal ──────────────────────────────────────────────────── -->
+  <div id="manualUmpireModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto">
+      <h2 style="margin-top:0">Add Umpire (No Login)</h2>
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0;font-size:0.88rem">Creates an approved umpire record without a login account. Useful for umpires who don't use the app. Login credentials can be granted later from the umpire roster.</p>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="muFirstName">First Name *</label>
+          <input type="text" id="muFirstName" required autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="muLastName">Last Name *</label>
+          <input type="text" id="muLastName" required autocomplete="off" />
+        </div>
+      </div>
+      <label for="muEmail">Email <span style="color:var(--light-text);font-size:0.85rem">(optional — required to grant login later)</span></label>
+      <input type="email" id="muEmail" autocomplete="off" />
+      <label for="muPhone">Phone <span style="color:var(--light-text);font-size:0.85rem">(optional)</span></label>
+      <input type="tel" id="muPhone" placeholder="(605) 555-1234" autocomplete="off" />
+      <p id="manualUmpireMsg" class="signup-message" aria-live="polite" style="margin-top:12px"></p>
+      <div class="page-actions" style="margin-top:20px">
+        <button type="button" class="btn" id="saveManualUmpireBtn">Add Umpire</button>
+        <button type="button" class="btn print-btn" id="cancelManualUmpireBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Grant Credentials Modal ───────────────────────────────────────────────── -->
+  <div id="grantCredentialsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:480px">
+      <h2 style="margin-top:0">Grant Login Access</h2>
+      <p style="margin-top:0;margin-bottom:16px;font-size:0.9rem;color:var(--light-text)">Creating login for <strong id="gcName" style="color:var(--text)"></strong>.</p>
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0;font-size:0.88rem">A Firebase account will be created and a password-setup email sent. The umpire's existing record and game history will be preserved.</p>
+      </div>
+      <input type="hidden" id="gcDocId" />
+      <label for="gcEmail">Email *</label>
+      <input type="email" id="gcEmail" required autocomplete="off" />
+      <p id="grantCredentialsMsg" class="signup-message" aria-live="polite" style="margin-top:12px"></p>
+      <div class="page-actions" style="margin-top:20px">
+        <button type="button" class="btn" id="saveGrantCredentialsBtn">Grant Access</button>
+        <button type="button" class="btn print-btn" id="cancelGrantCredentialsBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Create Coach Modal ──────────────────────────────────────────────────── -->
   <div id="createCoachModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1100;align-items:center;justify-content:center;padding:20px">
     <div style="background:var(--container);border-radius:12px;padding:28px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto">
@@ -504,7 +555,7 @@
     </div>
 
   <script type="module" src="auth.js?v=27"></script>
-  <script type="module" src="admin-users.js?v=20"></script>
+  <script type="module" src="admin-users.js?v=21"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=6"></script>
   <script type="module" src="nav.js?v=9"></script>

@@ -223,7 +223,9 @@ function renderRoster() {
     // Auth status indicator (from Firebase Auth metadata)
     const auth = authStatusMap[p.id];
     let authBadge = "";
-    if (auth) {
+    if (p.noCredentials) {
+      authBadge = `<div style="font-size:0.72rem;color:#8ab4f8;margin-top:4px">🔑 Manual entry · no login</div>`;
+    } else if (auth) {
       if (auth.noAuthAccount) {
         authBadge = `<div style="font-size:0.72rem;color:#ff8a8a;margin-top:4px">⚠ No auth account</div>`;
       } else if (!auth.lastSignInTime) {
@@ -256,6 +258,13 @@ function renderRoster() {
     } else if (superAdmin) {
       actionBtns += `<button class="btn print-btn delete-umpire-btn" data-uid="${esc(p.id)}" data-name="${esc(p.name||"")}"
         style="background:#5a1a1a;font-size:0.78rem">Delete</button>`;
+    }
+    if (p.noCredentials) {
+      actionBtns += `<button class="btn grant-credentials-btn"
+        data-uid="${esc(p.id)}"
+        data-name="${esc(p.name || `${p.firstName||""} ${p.lastName||""}`.trim())}"
+        data-email="${esc(p.email || "")}"
+        style="font-size:0.78rem">🔑 Grant Login</button>`;
     }
     if (superAdmin) {
       actionBtns += `<button class="btn print-btn edit-account-btn"
@@ -358,6 +367,98 @@ async function exportRosterCSV() {
 document.getElementById("exportRosterBtn")?.addEventListener("click", exportRosterCSV);
 document.getElementById("rosterSearch")?.addEventListener("input",    renderRoster);
 document.getElementById("rosterFilterStatus")?.addEventListener("change", renderRoster);
+
+// ── Manual Umpire (no credentials) ───────────────────────────────────────────
+
+const createManualUmpireFn    = httpsCallable(getFunctions(app, "us-central1"), "createManualUmpire");
+const grantUmpireCredentialsFn = httpsCallable(getFunctions(app, "us-central1"), "grantUmpireCredentials");
+
+function openManualUmpireModal() {
+  ["muFirstName","muLastName","muEmail","muPhone"].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = "";
+  });
+  setMsg("manualUmpireMsg", "", "info");
+  document.getElementById("manualUmpireModal").style.display = "flex";
+}
+
+function closeManualUmpireModal() {
+  document.getElementById("manualUmpireModal").style.display = "none";
+}
+
+document.getElementById("addManualUmpireBtn")?.addEventListener("click", openManualUmpireModal);
+document.getElementById("cancelManualUmpireBtn")?.addEventListener("click", closeManualUmpireModal);
+document.getElementById("manualUmpireModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("manualUmpireModal")) closeManualUmpireModal();
+});
+
+document.getElementById("saveManualUmpireBtn")?.addEventListener("click", async () => {
+  const firstName = document.getElementById("muFirstName").value.trim();
+  const lastName  = document.getElementById("muLastName").value.trim();
+  const email     = document.getElementById("muEmail").value.trim();
+  const phone     = document.getElementById("muPhone").value.trim();
+  if (!firstName || !lastName) {
+    setMsg("manualUmpireMsg", "First name and last name are required.", "error"); return;
+  }
+  const btn = document.getElementById("saveManualUmpireBtn");
+  btn.disabled = true;
+  setMsg("manualUmpireMsg", "Adding umpire…", "info");
+  try {
+    await createManualUmpireFn({ firstName, lastName, email, phone });
+    setMsg("manualUmpireMsg", `✓ ${firstName} ${lastName} added.`, "success");
+    await loadRoster();
+    setTimeout(closeManualUmpireModal, 1500);
+  } catch (err) {
+    setMsg("manualUmpireMsg", err.message || "Failed to add umpire.", "error");
+  } finally { btn.disabled = false; }
+});
+
+// Grant credentials modal
+function openGrantCredentialsModal(docId, name, email) {
+  document.getElementById("gcDocId").value = docId;
+  document.getElementById("gcName").textContent = name;
+  document.getElementById("gcEmail").value = email || "";
+  setMsg("grantCredentialsMsg", "", "info");
+  document.getElementById("grantCredentialsModal").style.display = "flex";
+}
+
+function closeGrantCredentialsModal() {
+  document.getElementById("grantCredentialsModal").style.display = "none";
+}
+
+document.getElementById("cancelGrantCredentialsBtn")?.addEventListener("click", closeGrantCredentialsModal);
+document.getElementById("grantCredentialsModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("grantCredentialsModal")) closeGrantCredentialsModal();
+});
+
+document.getElementById("saveGrantCredentialsBtn")?.addEventListener("click", async () => {
+  const docId = document.getElementById("gcDocId").value;
+  const email = document.getElementById("gcEmail").value.trim();
+  if (!email) {
+    setMsg("grantCredentialsMsg", "Email is required to create a login.", "error"); return;
+  }
+  const btn = document.getElementById("saveGrantCredentialsBtn");
+  btn.disabled = true;
+  setMsg("grantCredentialsMsg", "Creating login…", "info");
+  try {
+    const result = await grantUmpireCredentialsFn({ docId, email });
+    setMsg("grantCredentialsMsg",
+      result.data.isNew
+        ? `✓ Login created. A password-setup email has been sent to ${email}.`
+        : `✓ Existing account linked.`,
+      "success");
+    await loadRoster();
+    setTimeout(closeGrantCredentialsModal, 2000);
+  } catch (err) {
+    setMsg("grantCredentialsMsg", err.message || "Failed to grant credentials.", "error");
+  } finally { btn.disabled = false; }
+});
+
+// Delegation for grant-credentials-btn (rendered inside tbody)
+document.getElementById("rosterBody")?.addEventListener("click", e => {
+  const btn = e.target.closest(".grant-credentials-btn");
+  if (!btn) return;
+  openGrantCredentialsModal(btn.dataset.uid, btn.dataset.name, btn.dataset.email);
+});
 
 // ── Create Umpire ─────────────────────────────────────────────────────────────
 
