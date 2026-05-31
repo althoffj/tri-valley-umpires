@@ -66,7 +66,10 @@ async function loadAll() {
   const teamsSnap = await getDoc(doc(db, "config/teamCalendars"));
   allTeams = teamsSnap.exists() ? (teamsSnap.data().teams || []) : [];
 
-  myTeams = allTeams.filter(t => t.coachId === currentUid);
+  myTeams = allTeams.filter(t =>
+    t.coachId === currentUid ||
+    (Array.isArray(t.coaches) && t.coaches.some(c => c.uid === currentUid))
+  );
 
   if (!myTeams.length) {
     document.getElementById("cuContent").style.display = "none";

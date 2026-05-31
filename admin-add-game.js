@@ -284,7 +284,7 @@ document.getElementById("addGameForm").addEventListener("submit", async function
 
   const umpireSlots = checkedTypes.map(t => {
     const payInput = document.querySelector(`.slot-pay-input[data-slot-type="${t}"]`);
-    return { type: t, assignedUid: null, assignedName: null, payRate: payInput ? (parseFloat(payInput.value) || 0) : 0, checkedIn: false, checkedInAt: null, paid: false };
+    return { type: t, assignedUid: null, assignedName: null, payRate: payInput ? (parseFloat(payInput.value) || 0) : 0, checkedIn: false, checkedInAt: null, paid: false, noShow: false };
   });
 
   try {

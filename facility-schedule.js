@@ -1,4 +1,4 @@
-import { esc, fmtDate, fmtTime, fmtTime as fmt12, todayISO } from "./utils.js";
+import { esc, fmtDate, fmtTime, todayISO } from "./utils.js";
 // facility-schedule.js — Public shareable facility field schedule
 // No auth required. Calls getFacilitySchedule cloud function.
 
@@ -188,7 +188,7 @@ function renderListView() {
           ? `${esc(item.awayTeam)} @ ${esc(item.homeTeam)}`
           : esc(item.homeTeam || item.awayTeam || "TBD");
         return `<div class="cal-list-item" style="${isCancelled ? "opacity:0.55" : ""}">
-          <div class="cal-list-time">${item.time ? fmt12(item.time) : "TBD"}</div>
+          <div class="cal-list-time">${item.time ? fmtTime(item.time) : "TBD"}</div>
           <div class="cal-list-badge ${badgeClass}">${badgeLabel}</div>
           <div class="cal-list-body">
             <div class="cal-list-primary">${teams}</div>
@@ -197,7 +197,7 @@ function renderListView() {
         </div>`;
       } else {
         const timeStr = item.startTime
-          ? `${fmt12(item.startTime)}${item.endTime ? " – " + fmt12(item.endTime) : ""}`
+          ? `${fmtTime(item.startTime)}${item.endTime ? " – " + fmtTime(item.endTime) : ""}`
           : "TBD";
         return `<div class="cal-list-item">
           <div class="cal-list-time">${timeStr}</div>
@@ -271,8 +271,8 @@ function renderMonthView() {
         ? `${g.awayTeam.split(" ").pop()} @ ${g.homeTeam.split(" ").pop()}`
         : (g.homeTeam || g.division || "Game");
       html += `<div class="cal-card${isCancelled ? " cancelled" : ""}" style="border-left-color:#601929"
-        title="${isCancelled ? (g.cancellationType || "Cancelled") + " · " : ""}${esc(teams)} · ${esc(g.field||"")}">
-        <div style="color:var(--light-text)">${cancelIcon ? cancelIcon + " " : ""}${g.time ? fmt12(g.time).replace(":00","") : ""} ${esc(g.division||"")}</div>
+        title="${isCancelled ? esc(g.cancellationType || "Cancelled") + " · " : ""}${esc(teams)} · ${esc(g.field||"")}">
+        <div style="color:var(--light-text)">${cancelIcon ? cancelIcon + " " : ""}${g.time ? fmtTime(g.time).replace(":00","") : ""} ${esc(g.division||"")}</div>
         <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(teams)}</div>
       </div>`;
     });
@@ -284,7 +284,7 @@ function renderMonthView() {
     practicesToShow.forEach(p => {
       html += `<div class="cal-card practice"
         title="Practice: ${esc(p.teamName||"")} · ${esc(p.field||"")}">
-        <div style="color:#8ab4f8">${p.startTime ? fmt12(p.startTime).replace(":00","") : "Practice"}</div>
+        <div style="color:#8ab4f8">${p.startTime ? fmtTime(p.startTime).replace(":00","") : "Practice"}</div>
         <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--light-text)">${esc(p.teamName||"Practice")}</div>
       </div>`;
     });

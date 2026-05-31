@@ -486,8 +486,8 @@ function renderRoster(players) {
 
   bodyEl.innerHTML = players.map(p => `
     <tr style="border-bottom:1px solid #333">
-      <td style="padding:9px 10px;font-weight:600">${esc(p.name)}</td>
-      <td style="padding:9px 10px;color:var(--light-text)">${esc(p.positions || "—")}</td>
+      <td style="padding:9px 10px;font-weight:600">${esc(p.name || `${p.firstName || ""} ${p.lastName || ""}`.trim() || "—")}</td>
+      <td style="padding:9px 10px;color:var(--light-text)">${esc(p.positions || p.position || "—")}</td>
       <td style="padding:9px 10px;color:var(--light-text)">${p.gradYear ? esc(String(p.gradYear)) : "—"}</td>
       <td style="padding:9px 10px;color:var(--light-text);font-size:0.85rem">${esc(p.notes || "")}</td>
       <td style="padding:9px 10px;white-space:nowrap">
@@ -516,8 +516,8 @@ function openPlayerForm(playerId) {
     editingPlayerId = playerId;
     const p = rosterPlayers.find(x => x.id === playerId);
     if (!p) return;
-    document.getElementById("rpName").value      = p.name      || "";
-    document.getElementById("rpPositions").value = p.positions || "";
+    document.getElementById("rpName").value      = p.name || `${p.firstName || ""} ${p.lastName || ""}`.trim() || "";
+    document.getElementById("rpPositions").value = p.positions || p.position || "";
     document.getElementById("rpGradYear").value  = p.gradYear  ? String(p.gradYear) : "";
     document.getElementById("rpNotes").value      = p.notes     || "";
     if (titleEl) titleEl.textContent = "Edit Player";
