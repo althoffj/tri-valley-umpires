@@ -1,8 +1,9 @@
 import { esc, fmtDate, fmtTime, todayISO } from "./utils.js";
+import { app } from "./firebase.js";
 // facility-schedule.js — Public shareable facility field schedule
 // No auth required. Calls getFacilitySchedule cloud function.
 
-const FUNCTIONS_BASE = "https://us-central1-tri-valley-baseball-umpires.cloudfunctions.net";
+const FUNCTIONS_BASE = `https://us-central1-${app.options.projectId}.cloudfunctions.net`;
 
 // ── URL params ────────────────────────────────────────────────────────────────
 

@@ -380,15 +380,20 @@ document.getElementById("cancelGameModal").addEventListener("click", e => {
 
 async function toggleCheckIn(gameId, slotType, newCheckedIn) {
   try {
+    const gameRef = doc(db, "games", gameId);
+    let updatedSlots;
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(gameRef);
+      if (!snap.exists()) throw new Error("Game not found.");
+      updatedSlots = (snap.data().umpireSlots || []).map(s =>
+        s.type === slotType
+          ? { ...s, checkedIn: newCheckedIn, checkedInAt: newCheckedIn ? new Date().toISOString() : null }
+          : s
+      );
+      tx.update(gameRef, { umpireSlots: updatedSlots });
+    });
     const game = allGames.find(g => g.id === gameId);
-    if (!game) throw new Error("Game not found.");
-    const updatedSlots = (game.umpireSlots || []).map(s =>
-      s.type === slotType
-        ? { ...s, checkedIn: newCheckedIn, checkedInAt: newCheckedIn ? new Date().toISOString() : null }
-        : s
-    );
-    await updateDoc(doc(db, "games", gameId), { umpireSlots: updatedSlots });
-    game.umpireSlots = updatedSlots;
+    if (game) game.umpireSlots = updatedSlots;
     showToast(newCheckedIn ? "Marked as checked in." : "Check-in removed.");
     renderAdminGames();
   } catch (err) {
