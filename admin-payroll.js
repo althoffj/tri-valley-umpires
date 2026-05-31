@@ -68,10 +68,11 @@ async function loadPayroll() {
           division:    g.division ?? "",
           field:       g.field ?? "",
           pay,
-          paid:        slot.paid      === true,
-          checkedIn:   slot.checkedIn === true,
-          noShow:      slot.noShow    === true,
-          checkNumber: slot.checkNumber || "",
+          paid:         slot.paid         === true,
+          checkedIn:    slot.checkedIn    === true,
+          noShow:       slot.noShow       === true,
+          checkNumber:  slot.checkNumber  || "",
+          checkCleared: slot.checkCleared === true,
         });
       });
     });
@@ -381,13 +382,22 @@ function renderDetailTable() {
       ? `<div style="font-size:0.73rem;color:var(--light-text);margin-top:2px">Check #${esc(r.checkNumber)}</div>`
       : "";
     const paidBadge = r.paid
-      ? `<span class="badge" style="background:#17351f;color:#b8f2c4">Paid</span>${checkNumLabel}`
+      ? r.checkCleared
+        ? `<span class="badge" style="background:#0d3030;color:#7ef7d8">✓ Cleared</span>${checkNumLabel}`
+        : `<span class="badge" style="background:#17351f;color:#b8f2c4">Paid</span>${checkNumLabel}`
       : `<span class="badge" style="background:#4a2c00;color:#ffcc80">Unpaid</span>`;
     const toggleBtn = `<button class="btn ${r.paid ? "print-btn" : ""} payroll-toggle-btn"
         data-game-id="${esc(r.gameId)}" data-slot-type="${esc(r.slotType)}" data-uid="${esc(r.uid)}"
         style="font-size:0.78rem;padding:3px 10px;margin-left:6px">
         ${r.paid ? "Unmark" : "Mark Paid"}
       </button>`;
+    const clearedBtn = r.paid
+      ? `<button class="btn print-btn payroll-cleared-btn"
+          data-game-id="${esc(r.gameId)}" data-slot-type="${esc(r.slotType)}" data-uid="${esc(r.uid)}"
+          style="font-size:0.78rem;padding:3px 10px;margin-left:4px">
+          ${r.checkCleared ? "Unmark Cleared" : "Mark Cleared"}
+        </button>`
+      : "";
     return `<tr>
       <td>${esc(r.umpireName)}</td>
       <td>${esc(fmtDate(r.date))}</td>
@@ -396,9 +406,14 @@ function renderDetailTable() {
       <td><span class="badge badge-${(r.slotType||"").toLowerCase()}">${esc(r.slotType)}</span></td>
       <td style="text-align:center">${checkedInCell}</td>
       <td>$${r.pay.toFixed(2)}</td>
-      <td style="white-space:nowrap">${paidBadge}${toggleBtn}</td>
+      <td style="white-space:nowrap">${paidBadge}${toggleBtn}${clearedBtn}</td>
     </tr>`;
   }).join("");
+
+  tbody.querySelectorAll(".payroll-cleared-btn").forEach(btn => {
+    btn.addEventListener("click", () =>
+      toggleCleared(btn.dataset.gameId, btn.dataset.slotType, btn.dataset.uid));
+  });
 
   tbody.querySelectorAll(".payroll-toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -429,7 +444,8 @@ async function togglePaid(gameId, slotType, uid, checkNumber = "") {
           if (newPaid) {
             if (checkNumber) updated.checkNumber = checkNumber; else delete updated.checkNumber;
           } else {
-            delete updated.checkNumber; // clear check number on unmark
+            delete updated.checkNumber;  // clear check tracking on unmark
+            delete updated.checkCleared;
           }
           return updated;
         }
@@ -439,12 +455,41 @@ async function togglePaid(gameId, slotType, uid, checkNumber = "") {
     });
     if (newPaid !== undefined) {
       const row = payrollRows.find(r => r.gameId === gameId && r.slotType === slotType && r.uid === uid);
-      if (row) { row.paid = newPaid; row.checkNumber = newPaid ? checkNumber : ""; }
+      if (row) { row.paid = newPaid; row.checkNumber = newPaid ? checkNumber : ""; if (!newPaid) row.checkCleared = false; }
       renderAll();
     }
   } catch (err) {
     console.error(err);
     showToast("Error updating paid status.");
+  }
+}
+
+async function toggleCleared(gameId, slotType, uid) {
+  const ref = doc(db, "games", gameId);
+  try {
+    let newCleared;
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return;
+      const slots = (snap.data().umpireSlots ?? []).map(s => {
+        if (s.type === slotType && s.assignedUid === uid && s.paid) {
+          newCleared = !s.checkCleared;
+          const updated = { ...s, checkCleared: newCleared };
+          if (!newCleared) delete updated.checkCleared;
+          return updated;
+        }
+        return s;
+      });
+      tx.update(ref, { umpireSlots: slots });
+    });
+    if (newCleared !== undefined) {
+      const row = payrollRows.find(r => r.gameId === gameId && r.slotType === slotType && r.uid === uid);
+      if (row) row.checkCleared = newCleared;
+      renderAll();
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Error updating cleared status.");
   }
 }
 
@@ -480,7 +525,7 @@ async function generatePayStub(uid) {
         <td>${esc(r.field) || "—"}</td>
         <td>${esc(r.slotType)}</td>
         <td class="money">$${r.pay.toFixed(2)}</td>
-        <td class="${r.paid ? "paid" : "unpaid"}">${r.paid ? "Paid" : "Unpaid"}${r.paid && r.checkNumber ? `<br><span style="font-size:0.75em;font-weight:normal">#${esc(r.checkNumber)}</span>` : ""}</td>
+        <td class="${r.paid ? "paid" : "unpaid"}">${r.paid ? (r.checkCleared ? "✓ Cleared" : "Paid") : "Unpaid"}${r.paid && r.checkNumber ? `<br><span style="font-size:0.75em;font-weight:normal">#${esc(r.checkNumber)}</span>` : ""}</td>
       </tr>`).join("");
 
   const brand = org.accentColor || "#601929";
@@ -758,7 +803,7 @@ function csvCell(v) { return `"${String(v || "").replace(/"/g, '""')}"`; }
 
 function exportCSV() {
   const rows    = filteredRows();
-  const headers = ["Umpire", "Date", "City", "Division", "Field", "Slot", "Pay", "Paid", "Check #", "No Show"];
+  const headers = ["Umpire", "Date", "City", "Division", "Field", "Slot", "Pay", "Paid", "Check #", "Cleared", "No Show"];
   const lines   = [
     headers.join(","),
     ...rows.map(r => [
@@ -771,6 +816,7 @@ function exportCSV() {
       r.noShow ? "0.00" : r.pay.toFixed(2),
       r.noShow ? "N/A" : (r.paid ? "Yes" : "No"),
       r.noShow ? "" : csvCell(r.checkNumber || ""),
+      r.noShow ? "" : (r.paid && r.checkCleared ? "Yes" : "No"),
       r.noShow ? "Yes" : "No",
     ].join(","))
   ];
