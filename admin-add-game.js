@@ -148,6 +148,22 @@ document.getElementById("gameCitySelect")?.addEventListener("change", function (
   else                             { inp.style.display = "none"; inp.value = ""; }
 });
 
+// ── Tournaments ───────────────────────────────────────────────────────────────
+
+async function loadTournaments() {
+  try {
+    const snap = await getDocs(query(collection(db, "tournaments"), orderBy("date")));
+    const sel  = document.getElementById("gameTournament");
+    if (!sel) return;
+    sel.innerHTML = `<option value="">— None / Other —</option>` +
+      snap.docs.map(d => {
+        const t = d.data();
+        const label = t.name + (t.date ? ` (${t.date})` : "") + (t.division ? ` · ${t.division}` : "");
+        return `<option value="${esc(d.id)}">${esc(label)}</option>`;
+      }).join("");
+  } catch (_) {}
+}
+
 // ── Leagues ───────────────────────────────────────────────────────────────────
 
 async function loadLeagues() {
@@ -234,6 +250,13 @@ async function applyMakeupPrefill(gameId) {
       }
     });
 
+    // Pre-fill tournament if the original game was part of one
+    const tournSel = document.getElementById("gameTournament");
+    if (tournSel && g.tournamentId) {
+      const opt = [...tournSel.options].find(o => o.value === g.tournamentId);
+      if (opt) tournSel.value = g.tournamentId;
+    }
+
     const banner = document.getElementById("makeupBanner");
     if (banner) {
       banner.style.display = "";
@@ -271,9 +294,10 @@ document.getElementById("addGameForm").addEventListener("submit", async function
   btn.disabled = true;
   setMsg("addGameMessage", "Adding game…", "info");
 
-  const time       = document.getElementById("gameTime").value;
-  const type       = document.getElementById("gameType").value;
-  const facilityId = document.getElementById("gameFacility")?.value || "";
+  const time         = document.getElementById("gameTime").value;
+  const type         = document.getElementById("gameType").value;
+  const facilityId   = document.getElementById("gameFacility")?.value || "";
+  const tournamentId = document.getElementById("gameTournament")?.value || null;
   const fieldSel   = document.getElementById("gameFieldSelect");
   const fieldInp   = document.getElementById("gameField");
   const field      = (fieldSel?.style.display !== "none" && fieldSel?.value)
@@ -293,9 +317,10 @@ document.getElementById("addGameForm").addEventListener("submit", async function
       umpireSlots, needsUmpires: true, cancelled: false,
       createdAt: serverTimestamp(),
     };
-    if (homeTeam) gameData.homeTeam = homeTeam;
-    if (awayTeam) gameData.awayTeam = awayTeam;
-    if (notes)    gameData.notes    = notes;
+    if (homeTeam)    gameData.homeTeam    = homeTeam;
+    if (awayTeam)    gameData.awayTeam    = awayTeam;
+    if (notes)       gameData.notes       = notes;
+    if (tournamentId) gameData.tournamentId = tournamentId;
 
     await addDoc(collection(db, "games"), gameData);
     setMsg("addGameMessage", "Game added! Redirecting…", "success");
@@ -317,7 +342,7 @@ authReadyPromise.then(async () => {
   document.getElementById("adminContent").style.display = "";
   document.getElementById("noAccess").style.display     = "none";
 
-  await Promise.all([loadFacilities(), loadLeagues(), loadPayRates(), loadTeams()]);
+  await Promise.all([loadFacilities(), loadLeagues(), loadPayRates(), loadTeams(), loadTournaments()]);
   populateCities();
   cascadeTeams();
 

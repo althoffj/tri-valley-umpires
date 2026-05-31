@@ -24,8 +24,9 @@ import {
 
 let allGames       = [];
 let gameFilter     = "today";
-let facilitiesData = []; // [{ id, name, fields:[{name,notes}] }]
-let leaguesData    = []; // [{ id, name }] from leagues collection
+let facilitiesData  = []; // [{ id, name, fields:[{name,notes}] }]
+let leaguesData     = []; // [{ id, name }] from leagues collection
+let tournamentsData = []; // [{ id, name, date, division }]
 
 // Active filter state
 let gfFrom     = "";
@@ -507,6 +508,9 @@ function openEditModal(gameId) {
   document.getElementById("editIsAway").checked      = game.isAway === true;
   document.getElementById("editGameNotes").value     = game.notes || "";
 
+  const editTournSel = document.getElementById("editGameTournament");
+  if (editTournSel) editTournSel.value = game.tournamentId || "";
+
   // Set facility select and trigger field cascade
   const editFacSel = document.getElementById("editGameFacility");
   if (editFacSel) {
@@ -602,20 +606,22 @@ async function saveGameEdit() {
   setMsg("editGameMessage", "Saving…", "info");
 
   try {
-    const facilityId = document.getElementById("editGameFacility")?.value || "";
+    const facilityId   = document.getElementById("editGameFacility")?.value || "";
+    const tournamentId = document.getElementById("editGameTournament")?.value || null;
     const updates = {
       league,
       city,
       division,
       date,
-      time:       document.getElementById("editGameTime").value,
-      type:       document.getElementById("editGameType").value,
-      field:      getFieldValue("editGameFieldSelect", "editGameField"),
-      homeTeam:   document.getElementById("editHomeTeam").value.trim(),
-      awayTeam:   document.getElementById("editAwayTeam").value.trim(),
-      isAway:     document.getElementById("editIsAway").checked,
-      facilityId: facilityId,
-      notes:      document.getElementById("editGameNotes").value.trim(),
+      time:         document.getElementById("editGameTime").value,
+      type:         document.getElementById("editGameType").value,
+      field:        getFieldValue("editGameFieldSelect", "editGameField"),
+      homeTeam:     document.getElementById("editHomeTeam").value.trim(),
+      awayTeam:     document.getElementById("editAwayTeam").value.trim(),
+      isAway:       document.getElementById("editIsAway").checked,
+      facilityId,
+      notes:        document.getElementById("editGameNotes").value.trim(),
+      tournamentId: tournamentId || null,
     };
 
     // Rebuild umpire slots from checkboxes + pay inputs, preserving existing assignments.
@@ -816,6 +822,28 @@ async function loadLeagues() {
     leaguesData = [];
   }
   populateLeagueSelects();
+}
+
+async function loadTournaments() {
+  try {
+    const snap = await getDocs(query(collection(db, "tournaments"), orderBy("date")));
+    tournamentsData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (_) {
+    tournamentsData = [];
+  }
+  populateTournamentSelect();
+}
+
+function populateTournamentSelect() {
+  const sel = document.getElementById("editGameTournament");
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">— None / Other —</option>` +
+    tournamentsData.map(t => {
+      const label = t.name + (t.date ? ` (${t.date})` : "") + (t.division ? ` · ${t.division}` : "");
+      return `<option value="${esc(t.id)}">${esc(label)}</option>`;
+    }).join("");
+  if (cur) sel.value = cur;
 }
 
 function populateLeagueSelects() {
@@ -1271,6 +1299,7 @@ authReadyPromise.then(() => {
   document.getElementById("noAccess").style.display = "none";
 
   loadLeagues();
+  loadTournaments();
   loadGames();
   loadFacilitiesIntoSelects();
   loadPendingCancellations();
