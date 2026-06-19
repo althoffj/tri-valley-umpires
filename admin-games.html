@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Admin: Games - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=18" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
 </head>
 <body>
@@ -20,20 +20,21 @@
   <div class="container" id="adminContent" style="display:none">
 
     <nav class="admin-subnav">
-      <a href="admin.html">Overview</a>
-      <a href="admin-games.html" class="admin-subnav-active">Games</a>
-      <a href="admin-scheduler.html">Scheduler</a>
-      <a href="admin-teams.html">Teams</a>
-      <a href="admin-tournament.html">Tournaments</a>
-      <a href="admin-payroll.html">Payroll</a>
-      <a href="admin-facilities.html">Facilities</a>
-      <a href="admin-sponsors.html">Sponsors</a>
-      <a href="admin-callup.html">Call-Ups</a>
-      <a href="admin-incidents.html">Incidents</a>
-      <a href="admin-alerts.html">Alerts</a>
-      <a href="admin-config.html">Config</a>
-      <a href="admin-analytics.html">Analytics</a>
-      <a href="admin-users.html">Users</a>
+      <a href="admin.html">📋 Overview</a>
+      <a href="admin-games.html" class="admin-subnav-active">⚾ Games</a>
+      <a href="admin-scheduler.html">📅 Scheduler</a>
+      <a href="admin-teams.html">👕 Teams</a>
+      <a href="admin-tournament.html">🏆 Tournaments</a>
+      <a href="admin-payroll.html">💵 Payroll</a>
+      <a href="admin-ledger.html">📒 Ledger</a>
+      <a href="admin-facilities.html">📍 Facilities</a>
+      <a href="admin-sponsors.html">🤝 Sponsors</a>
+      <a href="admin-callup.html">📣 Call-Ups</a>
+      <a href="admin-incidents.html">⚠️ Incidents</a>
+      <a href="admin-alerts.html">🔔 Alerts</a>
+      <a href="admin-config.html">⚙️ Config</a>
+      <a href="admin-analytics.html">📊 Analytics</a>
+      <a href="admin-users.html">👤 Users</a>
     </nav>
 
     <!-- ── Pending Cancellations ────────────────────────────────────────── -->
@@ -61,6 +62,7 @@
     <!-- Status + date range row -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
       <button type="button" class="btn filter-btn filter-active" data-filter="today">Today</button>
+      <button type="button" class="btn print-btn filter-btn" data-filter="week">This Week</button>
       <button type="button" class="btn print-btn filter-btn" data-filter="upcoming">Active (±14 days)</button>
       <button type="button" class="btn print-btn filter-btn" data-filter="all">All Dates</button>
       <div style="display:flex;gap:6px;align-items:center;margin-left:8px">
@@ -139,7 +141,10 @@
         </div>
         <div class="form-group">
           <label for="editGameCity">City / Town</label>
-          <input type="text" id="editGameCity" placeholder="e.g. Crooks" />
+          <select id="editGameCity">
+            <option value="">— None —</option>
+          </select>
+          <input type="text" id="editGameCityCustom" placeholder="e.g. Sioux Falls" style="display:none;margin-top:6px" />
         </div>
       </div>
 
@@ -350,10 +355,10 @@
     </div>
   </div>
 
-  <script type="module" src="auth.js?v=27"></script>
-  <script type="module" src="admin-games.js?v=45"></script>
+  <script type="module" src="auth.js?v=28"></script>
+  <script type="module" src="admin-games.js?v=50"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=6"></script>
-  <script type="module" src="nav.js?v=9"></script>
+  <script type="module" src="nav.js?v=14"></script>
 </body>
 </html>

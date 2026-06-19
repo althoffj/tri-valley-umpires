@@ -117,29 +117,27 @@ function gameRowCells(game) {
     <td>${sourceLabel(game)}</td>`;
 }
 
-/** Find team color by matching homeTeam or awayTeam name */
-function teamColor(game) {
-  if (!teams.length) return "var(--accent)";
-  const lc = (s) => (s || "").toLowerCase();
-  const home = lc(game.homeTeam);
-  const tm   = teams.find(t =>
-    home && (lc(t.name).includes(home) || home.includes(lc(t.name)))
-  ) || teams.find(t => {
-    const away = lc(game.awayTeam);
-    return away && (lc(t.name).includes(away) || away.includes(lc(t.name)));
-  });
-  return tm ? tm.color : "var(--accent)";
-}
-
-/** Return team object whose home game this is, or null */
+/** Return team object whose home game this is, or null.
+ *  Checks calendarName exact-match first, then falls back to fuzzy name matching. */
 function findHomeTeam(homeTeamName) {
   if (!homeTeamName) return null;
   const lc = (s) => (s || "").toLowerCase();
+  const ht = lc(homeTeamName);
+  // 1. Exact match on calendarName
+  const byCalName = teams.find(t => t.calendarName && lc(t.calendarName) === ht);
+  if (byCalName) return byCalName;
+  // 2. Fuzzy match on team name (legacy fallback)
   return teams.find(t => {
     const tn = lc(t.name);
-    const ht = lc(homeTeamName);
     return tn.includes(ht) || ht.includes(tn);
   }) || null;
+}
+
+/** Find team color by matching homeTeam or awayTeam name */
+function teamColor(game) {
+  if (!teams.length) return "var(--accent)";
+  const tm = findHomeTeam(game.homeTeam) || findHomeTeam(game.awayTeam);
+  return tm ? tm.color : "var(--accent)";
 }
 
 // ── Section navigation ────────────────────────────────────────────────────────

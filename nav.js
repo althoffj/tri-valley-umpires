@@ -12,6 +12,7 @@ const page = window.location.pathname.split("/").pop() || "index.html";
 
 const section = (() => {
   if (["schedule.html", "calendar.html", "availability.html"].includes(page)) return "games";
+  if (page === "tournament.html") return "tournaments";
   if (["fields.html", "facility-schedule.html"].includes(page)) return "fields";
   if (["incident.html", "field-issues.html", "coach-callup.html", "admin-callup.html"].includes(page)) return "reports";
   if (["expectations.html", "principles_of_umpiring.html", "rule_breakdown.html",
@@ -47,7 +48,7 @@ function navTrigger(sec, label, items) {
 // ── Nav templates ─────────────────────────────────────────────────────────
 
 function trainingDropdown() {
-  return navTrigger("training", "Training",
+  return navTrigger("training", "📚 Training",
     navLink("training.html",              "Training Overview") +
     navLink("expectations.html",          "Expectations") +
     navLink("principles_of_umpiring.html","Principles") +
@@ -57,14 +58,14 @@ function trainingDropdown() {
 }
 
 function fieldsDropdown() {
-  return navTrigger("fields", "Fields",
+  return navTrigger("fields", "📍 Fields",
     navLink("fields.html",            "Field Directory") +
     navLink("facility-schedule.html", "Field Schedule")
   );
 }
 
 function reportsDropdown(callupHref = null) {
-  return navTrigger("reports", "Reports",
+  return navTrigger("reports", "📋 Reports",
     navLink("incident.html",     "Incident Report") +
     navLink("field-issues.html", "Field Issues") +
     (callupHref ? navLink(callupHref, "Player Call-Ups") : "")
@@ -74,14 +75,14 @@ function reportsDropdown(callupHref = null) {
 // Guest: public visitors, prospective umpires, and coaches without an account
 function guestNav() {
   return `
-    ${navLink("index.html", "Home")}
-    ${trainingDropdown()}
-    ${navLink("fields.html", "Fields")}
-    ${navTrigger("join", "Join",
+    ${navLink("index.html", "🏠 Home")}
+    ${navLink("tournament.html", "🏆 Tournaments")}
+    ${navLink("fields.html", "📍 Fields")}
+    ${navTrigger("join", "📝 Join",
       navLink("form.html",        "Become an Umpire") +
       navLink("coach-form.html",  "Register as a Coach")
     )}
-    ${navTrigger("request", "Request",
+    ${navTrigger("request", "📬 Request",
       navLink("request-umpire.html",  "Request an Umpire") +
       navLink("practice-request.html","Request Practice Time")
     )}
@@ -89,7 +90,7 @@ function guestNav() {
 }
 
 function requestDropdown(callupHref = null) {
-  return navTrigger("request", "Request",
+  return navTrigger("request", "📬 Request",
     navLink("request-umpire.html",   "Request an Umpire") +
     navLink("practice-request.html", "Request Practice Time") +
     (callupHref ? navLink(callupHref, "Player Call-Up Request") : "")
@@ -99,12 +100,13 @@ function requestDropdown(callupHref = null) {
 // Approved umpire: schedule, signups, fields, reporting, training
 function umpireNav() {
   return `
-    ${navLink("index.html", "Home")}
-    ${navTrigger("games", "Games",
-      navLink("schedule.html",    "Schedule &amp; Signups") +
+    ${navLink("index.html", "🏠 Home")}
+    ${navTrigger("games", "⚾ Games",
+      navLink("schedule.html",    "Schedule & Signups") +
       navLink("calendar.html",    "Calendar") +
       navLink("availability.html","My Availability")
     )}
+    ${navLink("tournament.html", "🏆 Tournaments")}
     ${fieldsDropdown()}
     ${reportsDropdown()}
     ${trainingDropdown()}
@@ -115,12 +117,13 @@ function umpireNav() {
 // Admin: same as umpire but with call-ups in Reports and Request
 function adminNav() {
   return `
-    ${navLink("index.html", "Home")}
-    ${navTrigger("games", "Games",
-      navLink("schedule.html",    "Schedule &amp; Signups") +
+    ${navLink("index.html", "🏠 Home")}
+    ${navTrigger("games", "⚾ Games",
+      navLink("schedule.html",    "Schedule & Signups") +
       navLink("calendar.html",    "Calendar") +
       navLink("availability.html","My Availability")
     )}
+    ${navLink("tournament.html", "🏆 Tournaments")}
     ${fieldsDropdown()}
     ${reportsDropdown("admin-callup.html")}
     ${trainingDropdown()}
@@ -131,11 +134,12 @@ function adminNav() {
 // Coach: portal-centric nav with fields access and reporting
 function coachNav() {
   return `
-    ${navLink("index.html",        "Home")}
-    ${navTrigger("coach", "Coach",
+    ${navLink("index.html",        "🏠 Home")}
+    ${navTrigger("coach", "🤝 Coach",
       navLink("coach-portal.html", "Coach Portal") +
       navLink("coach-callup.html", "Player Call-Ups")
     )}
+    ${navLink("tournament.html", "🏆 Tournaments")}
     ${fieldsDropdown()}
     ${reportsDropdown("coach-callup.html")}
     ${trainingDropdown()}

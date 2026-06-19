@@ -125,8 +125,24 @@ async function denyUmpire(uid, name) {
 
 // ── Roster ────────────────────────────────────────────────────────────────────
 
-let allUmpires   = [];
-let authStatusMap = {}; // uid → { lastSignInTime, emailVerified, hasPassword, noAuthAccount }
+let allUmpires     = [];
+let authStatusMap  = {}; // uid → { lastSignInTime, emailVerified, hasPassword, noAuthAccount }
+let allTeamNames   = []; // team names from config/teamCalendars for playerTeam dropdown
+
+async function loadTeamNames() {
+  try {
+    const snap = await getDoc(doc(db, "config", "teamCalendars"));
+    const teams = snap.exists() ? (snap.data().teams || []) : [];
+    allTeamNames = teams.map(t => t.name).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  } catch { allTeamNames = []; }
+}
+
+function populatePlayerTeamSelect(currentValue = "") {
+  const sel = document.getElementById("editPlayerTeam");
+  if (!sel) return;
+  sel.innerHTML = `<option value="">— None —</option>` +
+    allTeamNames.map(n => `<option value="${esc(n)}"${n === currentValue ? " selected" : ""}>${esc(n)}</option>`).join("");
+}
 
 async function loadRoster() {
   const tbody = document.getElementById("rosterBody");
@@ -184,8 +200,11 @@ function renderRoster() {
     const certsList  = (p.certifications || []).join(", ");
     const noteText   = p.notes ? `<div style="color:var(--light-text);font-size:0.78rem;margin-top:2px;font-style:italic">${esc(p.notes)}</div>` : "";
     const certHtml   = certsList ? `<div style="color:#c9a0ff;font-size:0.78rem;margin-top:2px">🎓 ${esc(certsList)}</div>` : "";
-    const maxGames   = p.maxGamesPerWeek != null ? `Max ${p.maxGamesPerWeek}/wk` : "";
-    const equipList  = (p.equipment || []).join(", ") || "";
+    const maxGames      = p.maxGamesPerWeek != null ? `Max ${p.maxGamesPerWeek}/wk` : "";
+    const equipList     = (p.equipment || []).join(", ") || "";
+    const playerTeamBadge = p.playerTeam
+      ? `<div style="color:#86efac;font-size:0.78rem;margin-top:2px">⚾ Plays for: ${esc(p.playerTeam)}</div>`
+      : "";
     const equipHtml  = equipList
       ? `<div style="color:var(--light-text);font-size:0.78rem;margin-top:2px">${esc(equipList)}${maxGames ? " · " + esc(maxGames) : ""}</div>`
       : (maxGames ? `<div style="color:var(--light-text);font-size:0.78rem;margin-top:2px">${esc(maxGames)}</div>` : "");
@@ -201,10 +220,12 @@ function renderRoster() {
              </div>`).join("")}
          </div>`
       : "";
-    const emergencyHtml = p.emergencyContactName
+    const emergencyName  = p.emergencyContactName  || (normalizeParents(p)[0]?.name  ?? "");
+    const emergencyPhone = p.emergencyContactPhone || (normalizeParents(p)[0]?.phone ?? "");
+    const emergencyHtml = emergencyName
       ? `<div style="background:rgba(255,80,80,0.07);border:1px solid rgba(255,80,80,0.2);border-radius:4px;padding:4px 8px;margin-top:4px;font-size:0.78rem">
-           🆘 Emergency: ${esc(p.emergencyContactName)}
-           ${p.emergencyContactPhone ? ` · <a href="tel:${esc(p.emergencyContactPhone)}" style="color:#ff9999">${esc(p.emergencyContactPhone)}</a>` : ""}
+           🆘 Emergency: ${esc(emergencyName)}
+           ${emergencyPhone ? ` · <a href="tel:${esc(emergencyPhone)}" style="color:#ff9999">${esc(emergencyPhone)}</a>` : ""}
          </div>`
       : "";
 
@@ -273,7 +294,7 @@ function renderRoster() {
     }
 
     return `<tr>
-      <td>${esc(p.name || `${p.firstName||""} ${p.lastName||""}`)}${certHtml}${equipHtml}${noteText}${parentHtml}${emergencyHtml}</td>
+      <td>${esc(p.name || `${p.firstName||""} ${p.lastName||""}`)}${certHtml}${equipHtml}${playerTeamBadge}${noteText}${parentHtml}${emergencyHtml}</td>
       <td><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></td>
       <td>${esc(p.phone || "—")}</td>
       <td style="font-size:0.85rem">${[p.street, p.city, p.state, p.zip].filter(Boolean).join(", ") || "—"}</td>
@@ -1018,8 +1039,10 @@ function syncFirstEditParentToEmergency() {
   if (!first) return;
   const name  = first.querySelector(".epr-name").value.trim();
   const phone = first.querySelector(".epr-phone").value.trim();
-  if (name)  document.getElementById("editEmergencyName").value  = name;
-  if (phone) document.getElementById("editEmergencyPhone").value = phone;
+  const eName  = document.getElementById("editEmergencyName");
+  const ePhone = document.getElementById("editEmergencyPhone");
+  if (name  && !eName.value.trim())  eName.value  = name;
+  if (phone && !ePhone.value.trim()) ePhone.value = phone;
 }
 
 function collectEditParents() {
@@ -1068,6 +1091,7 @@ function openEditAccountModal(uid) {
   document.getElementById("editZip").value            = p.zip       || "";
   document.getElementById("editCertifications").value = (p.certifications || []).join(", ");
   document.getElementById("editNotes").value          = p.notes     || "";
+  populatePlayerTeamSelect(p.playerTeam || "");
   document.getElementById("editApproved").checked     = p.approved  === true;
 
   const parents = normalizeParents(p);
@@ -1114,6 +1138,7 @@ async function saveAccountEdits() {
   const isMinor = document.getElementById("editIsMinor").checked;
 
   try {
+    const playerTeam = document.getElementById("editPlayerTeam")?.value || "";
     await httpsCallable(getFunctions(app, "us-central1"), "updateUmpireAccount")({
       uid:           editAccountUid,
       firstName:     document.getElementById("editFirstName").value.trim(),
@@ -1140,6 +1165,8 @@ async function saveAccountEdits() {
         };
       })(),
     });
+    // playerTeam is Firestore-only (not in Auth), write it directly
+    await updateDoc(doc(db, "umpires", editAccountUid), { playerTeam });
     msg.textContent = "Saved successfully."; msg.className = "signup-message success";
     // Update the local cache in place — avoids re-fetching the full collection
     const eParents  = isMinor ? collectEditParents() : [];
@@ -1162,6 +1189,7 @@ async function saveAccountEdits() {
       parentPhone:           firstEPar?.phone || "",
       emergencyContactName:  firstEPar?.name  || document.getElementById("editEmergencyName").value.trim(),
       emergencyContactPhone: firstEPar?.phone || document.getElementById("editEmergencyPhone").value.trim(),
+      playerTeam,
     };
     updatedFields.name = [updatedFields.firstName, updatedFields.lastName].filter(Boolean).join(" ");
     const idx = allUmpires.findIndex(u => u.id === editAccountUid);
@@ -1299,6 +1327,7 @@ function renderCoachRoster() {
       data-city="${esc(c.city||"")}"
       data-approved="${c.approved ? "1" : "0"}"
       data-allow-sign-in="${c.allowSignIn === false ? "0" : "1"}"
+      data-years-of-service="${c.yearsOfService ?? 0}"
       style="font-size:0.78rem;padding:3px 10px">Edit</button>`);
 
     if (!isPending && !isInactive) {
@@ -1376,6 +1405,7 @@ function openEditCoachModal(data) {
   document.getElementById("editCoachTeam").value        = data.team  || "";
   document.getElementById("editCoachDivision").value    = data.division || "";
   document.getElementById("editCoachCity").value        = data.city  || "";
+  document.getElementById("editCoachYearsOfService").value = data.yearsOfService ?? 0;
   document.getElementById("editCoachApproved").checked  = data.approved === "1";
 
   const allowEl = document.getElementById("editCoachAllowSignIn");
@@ -1423,8 +1453,9 @@ async function saveCoachEdits() {
       name:       [first, last].filter(Boolean).join(" "),
       phone:      document.getElementById("editCoachPhone").value.trim(),
       teamName:   document.getElementById("editCoachTeam").value.trim(),
-      division:   document.getElementById("editCoachDivision").value,
-      city:       document.getElementById("editCoachCity").value.trim(),
+      division:       document.getElementById("editCoachDivision").value,
+      city:           document.getElementById("editCoachCity").value.trim(),
+      yearsOfService: parseInt(document.getElementById("editCoachYearsOfService").value) || 0,
       approved,
       allowSignIn,
     };
@@ -1632,6 +1663,7 @@ authReadyPromise.then(async () => {
   document.getElementById("noAccess").style.display     = "none";
 
   await loadCurrentAdminDoc();
+  loadTeamNames(); // non-blocking — populates playerTeam dropdown when edit modal opens
 
   // Default section: Umpires
   switchSection("umpires");

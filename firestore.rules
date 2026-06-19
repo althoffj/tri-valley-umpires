@@ -36,7 +36,11 @@ service cloud.firestore {
       allow update: if isAdmin() ||
         (isApproved() &&
          resource.data.get('cancelled', false) != true &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['umpireSlots', 'needsUmpires']));
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['umpireSlots', 'needsUmpires'])) ||
+        // Approved umpires may enter final scores on tournament games
+        (isApproved() &&
+         resource.data.get('tournamentId', null) != null &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['homeScore', 'awayScore']));
     }
 
     // Umpires: own profile read/create; admin can read/update all;
@@ -53,8 +57,9 @@ service cloud.firestore {
     }
 
     // Config: approved umpires can read general config; slackWebhooks requires superAdmin
+    // teamCalendars and org are readable by anyone (used on public registration/home pages)
     match /config/{docId} {
-      allow read:  if docId == "slackWebhooks" ? isSuperAdmin() : isSignedIn();
+      allow read:  if docId == "slackWebhooks" ? isSuperAdmin() : (docId == "teamCalendars" || docId == "org") ? true : isSignedIn();
       allow write: if docId == "slackWebhooks" ? isSuperAdmin() : isAdmin();
     }
 
@@ -208,6 +213,16 @@ service cloud.firestore {
 
     // Manual (unscheduled) umpire pay entries: admin only
     match /manualPay/{entryId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // Ledger expense entries: admin only
+    match /ledgerExpenses/{id} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // Coach seasonal pay records: admin only
+    match /coachPay/{id} {
       allow read, create, update, delete: if isAdmin();
     }
   }

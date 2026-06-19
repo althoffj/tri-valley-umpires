@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Admin: Teams &amp; Leagues - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=18" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.trivalleyball.com https://img.shields.io https://firebasestorage.googleapis.com; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
 </head>
 <body>
@@ -20,20 +20,21 @@
   <div class="container" id="adminContent" style="display:none">
 
     <nav class="admin-subnav">
-      <a href="admin.html">Overview</a>
-      <a href="admin-games.html">Games</a>
-      <a href="admin-scheduler.html">Scheduler</a>
-      <a href="admin-teams.html" class="admin-subnav-active">Teams</a>
-      <a href="admin-tournament.html">Tournaments</a>
-      <a href="admin-payroll.html">Payroll</a>
-      <a href="admin-facilities.html">Facilities</a>
-      <a href="admin-sponsors.html">Sponsors</a>
-      <a href="admin-callup.html">Call-Ups</a>
-      <a href="admin-incidents.html">Incidents</a>
-      <a href="admin-alerts.html">Alerts</a>
-      <a href="admin-config.html">Config</a>
-      <a href="admin-analytics.html">Analytics</a>
-      <a href="admin-users.html">Users</a>
+      <a href="admin.html">📋 Overview</a>
+      <a href="admin-games.html">⚾ Games</a>
+      <a href="admin-scheduler.html">📅 Scheduler</a>
+      <a href="admin-teams.html" class="admin-subnav-active">👕 Teams</a>
+      <a href="admin-tournament.html">🏆 Tournaments</a>
+      <a href="admin-payroll.html">💵 Payroll</a>
+      <a href="admin-ledger.html">📒 Ledger</a>
+      <a href="admin-facilities.html">📍 Facilities</a>
+      <a href="admin-sponsors.html">🤝 Sponsors</a>
+      <a href="admin-callup.html">📣 Call-Ups</a>
+      <a href="admin-incidents.html">⚠️ Incidents</a>
+      <a href="admin-alerts.html">🔔 Alerts</a>
+      <a href="admin-config.html">⚙️ Config</a>
+      <a href="admin-analytics.html">📊 Analytics</a>
+      <a href="admin-users.html">👤 Users</a>
     </nav>
 
     <h2 style="margin-bottom:4px">Teams &amp; Leagues</h2>
@@ -98,6 +99,29 @@
             <label for="tIcsUrl">GameChanger iCal URL <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
             <input type="url" id="tIcsUrl" placeholder="https://gc.com/..." />
           </div>
+          <div class="form-group">
+            <label for="tCalendarName">Calendar / Import Name
+              <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — team name as it appears in master calendar &amp; GameChanger imports</span>
+            </label>
+            <select id="tCalendarName" style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.95rem">
+              <option value="">— None / Same as team name —</option>
+            </select>
+          </div>
+          <div style="margin-bottom:8px">
+            <label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:6px">Team Type</label>
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:7px;font-weight:normal;cursor:pointer">
+                <input type="radio" name="tTeamType" id="tTeamTypeAssoc" value="association" checked />
+                Association team
+                <span style="color:var(--light-text);font-size:0.82rem"> — managed by this org</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;font-weight:normal;cursor:pointer">
+                <input type="radio" name="tTeamType" id="tTeamTypeOpponent" value="opponent" />
+                Opponent
+                <span style="color:var(--light-text);font-size:0.82rem"> — external team only</span>
+              </label>
+            </div>
+          </div>
           <div style="margin-bottom:12px">
             <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
               <input type="checkbox" id="tNeedsUmpire" />
@@ -109,7 +133,7 @@
             <label>Competitive Leagues
               <span style="font-weight:normal;color:var(--light-text);font-size:0.82rem"> — e.g. MinnDak, VFW (optional)</span>
             </label>
-            <div id="tLeagueCheckboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;padding:8px 10px;background:var(--container);border:1px solid #444;border-radius:6px;min-height:36px">
+            <div id="tLeagueCheckboxes" style="display:flex;flex-direction:column;gap:6px;margin-top:6px;padding:8px 10px;background:var(--container);border:1px solid #444;border-radius:6px;min-height:36px">
               <span style="color:var(--light-text);font-size:0.85rem" id="tLeagueEmpty">No leagues available</span>
             </div>
           </div>
@@ -343,7 +367,7 @@
 
       <div class="form-group" style="margin-bottom:8px">
         <label>Aliases <span style="font-weight:normal;color:var(--light-text)">(these names will be renamed to canonical)</span></label>
-        <div id="mergeAliasCheckboxes" style="max-height:140px;overflow-y:auto;padding:8px 10px;background:var(--container);border:1px solid #444;border-radius:6px;display:flex;flex-direction:column;gap:4px;margin-top:4px">
+        <div id="mergeAliasCheckboxes" style="max-height:160px;overflow-y:auto;padding:8px 10px;background:var(--container);border:1px solid #444;border-radius:6px;display:flex;flex-direction:column;gap:6px;margin-top:4px">
           <span style="color:var(--light-text);font-size:0.85rem">Select a canonical team first</span>
         </div>
       </div>
@@ -371,10 +395,10 @@
     </div>
   </div>
 
-  <script type="module" src="auth.js?v=27"></script>
-  <script type="module" src="admin-teams.js?v=13"></script>
+  <script type="module" src="auth.js?v=28"></script>
+  <script type="module" src="admin-teams.js?v=17"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=6"></script>
-  <script type="module" src="nav.js?v=9"></script>
+  <script type="module" src="nav.js?v=14"></script>
 </body>
 </html>

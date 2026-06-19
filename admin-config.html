@@ -31,26 +31,28 @@
   <div class="container" id="adminContent" style="display:none">
 
     <nav class="admin-subnav">
-      <a href="admin.html">Overview</a>
-      <a href="admin-games.html">Games</a>
-      <a href="admin-scheduler.html">Scheduler</a>
-      <a href="admin-teams.html">Teams</a>
-      <a href="admin-tournament.html">Tournaments</a>
-      <a href="admin-payroll.html">Payroll</a>
-      <a href="admin-facilities.html">Facilities</a>
-      <a href="admin-sponsors.html">Sponsors</a>
-      <a href="admin-callup.html">Call-Ups</a>
-      <a href="admin-incidents.html">Incidents</a>
-      <a href="admin-alerts.html">Alerts</a>
-      <a href="admin-config.html" class="admin-subnav-active">Config</a>
-      <a href="admin-analytics.html">Analytics</a>
-      <a href="admin-users.html">Users</a>
+      <a href="admin.html">📋 Overview</a>
+      <a href="admin-games.html">⚾ Games</a>
+      <a href="admin-scheduler.html">📅 Scheduler</a>
+      <a href="admin-teams.html">👕 Teams</a>
+      <a href="admin-tournament.html">🏆 Tournaments</a>
+      <a href="admin-payroll.html">💵 Payroll</a>
+      <a href="admin-ledger.html">📒 Ledger</a>
+      <a href="admin-facilities.html">📍 Facilities</a>
+      <a href="admin-sponsors.html">🤝 Sponsors</a>
+      <a href="admin-callup.html">📣 Call-Ups</a>
+      <a href="admin-incidents.html">⚠️ Incidents</a>
+      <a href="admin-alerts.html">🔔 Alerts</a>
+      <a href="admin-config.html" class="admin-subnav-active">⚙️ Config</a>
+      <a href="admin-analytics.html">📊 Analytics</a>
+      <a href="admin-users.html">👤 Users</a>
     </nav>
 
     <!-- ── Config section tabs ───────────────────────────────────────────── -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;border-bottom:1px solid #333;padding-bottom:12px">
       <button class="sched-sec-btn active" data-cfg="org">🏢 Organization</button>
       <button class="sched-sec-btn" data-cfg="comms">📣 Communication</button>
+      <button class="sched-sec-btn" data-cfg="ledger">💰 Ledger</button>
     </div>
 
     <div id="cfg-tab-org">
@@ -58,7 +60,7 @@
     <!-- ── Scheduling Settings moved to Scheduler ────────────────────────── -->
     <div class="document-note" style="margin-bottom:24px">
       <p style="margin:0">Pay rates, default umpire slot types, and scheduling rules (game durations, late-start cutoff) have moved to the
-        <a href="admin-scheduler.html">Scheduler</a> → <strong>Settings</strong> tab.</p>
+        <a href="admin-scheduler.html">📅 Scheduler</a> → <strong>Settings</strong> tab.</p>
     </div>
 
     <!-- ── Organization Settings ────────────────────────────────────────── -->
@@ -385,6 +387,65 @@
 
     </div><!-- /#cfg-tab-comms -->
 
+    <!-- ════════════════════════════════════════════════════════════════════════
+         LEDGER CONFIG TAB
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div id="cfg-tab-ledger" style="display:none">
+
+      <!-- ── Coach Pay Rates ──────────────────────────────────────────────── -->
+      <h2>Coach Pay Rates</h2>
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0">Seasonal stipends for head and assistant coaches. Pay is calculated as <strong>Base + (Per-Year Bonus × Years of Service)</strong>. Volunteer payment types always calculate as $0.</p>
+      </div>
+      <div style="background:var(--field);border-radius:10px;padding:20px;margin-bottom:32px">
+        <h3 style="margin:0 0 14px;font-size:1rem">Head Coach</h3>
+        <div class="form-row">
+          <div class="form-group form-group--sm">
+            <label for="coachRateHeadBase">Base Pay ($)</label>
+            <input type="number" id="coachRateHeadBase" min="0" step="1" placeholder="600" />
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="coachRateHeadPerYear">Per-Year Bonus ($)</label>
+            <input type="number" id="coachRateHeadPerYear" min="0" step="1" placeholder="50" />
+          </div>
+        </div>
+        <h3 style="margin:16px 0 14px;font-size:1rem;border-top:1px solid #333;padding-top:14px">Assistant Coach</h3>
+        <div class="form-row">
+          <div class="form-group form-group--sm">
+            <label for="coachRateAsstBase">Base Pay ($)</label>
+            <input type="number" id="coachRateAsstBase" min="0" step="1" placeholder="300" />
+          </div>
+          <div class="form-group form-group--sm">
+            <label for="coachRateAsstPerYear">Per-Year Bonus ($)</label>
+            <input type="number" id="coachRateAsstPerYear" min="0" step="1" placeholder="25" />
+          </div>
+        </div>
+        <div class="page-actions" style="margin-top:16px">
+          <button type="button" class="btn" id="saveCoachPayRatesBtn">Save Coach Pay Rates</button>
+        </div>
+        <p id="coachPayRatesMsg" class="signup-message" aria-live="polite"></p>
+      </div>
+
+      <!-- ── Expense Categories ────────────────────────────────────────────── -->
+      <h2>Expense Categories</h2>
+      <div class="document-note" style="margin-bottom:16px">
+        <p style="margin:0">Categories available when adding ledger expenses. Add or remove as needed. Default categories are seeded on first load.</p>
+      </div>
+      <div style="background:var(--field);border-radius:10px;padding:20px;margin-bottom:32px">
+        <div id="expenseCategoryTagList" style="display:flex;flex-wrap:wrap;gap:8px;min-height:44px;padding:10px;background:var(--container);border:1px solid #444;border-radius:6px;margin-bottom:10px;align-items:center"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
+          <input type="text" id="newExpenseCategoryInput" placeholder="e.g. Flowers" maxlength="60"
+            style="width:180px;padding:8px 10px;border:1px solid #555;border-radius:6px;background:var(--field);color:#eee;font-size:0.9rem" />
+          <button type="button" id="addExpenseCategoryBtn" class="btn print-btn" style="font-size:0.85rem;padding:7px 14px">+ Add Category</button>
+        </div>
+        <div class="page-actions" style="margin-top:16px">
+          <button type="button" class="btn" id="saveExpenseCategoriesBtn">Save Expense Categories</button>
+        </div>
+        <p id="expenseCategoriesMsg" class="signup-message" aria-live="polite"></p>
+      </div>
+
+    </div><!-- /#cfg-tab-ledger -->
+
   </div>
 
   <!-- Not-admin fallback -->
@@ -402,10 +463,10 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=27"></script>
-  <script type="module" src="admin-config.js?v=24"></script>
+  <script type="module" src="auth.js?v=28"></script>
+  <script type="module" src="admin-config.js?v=25"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=6"></script>
-  <script type="module" src="nav.js?v=9"></script>
+  <script type="module" src="nav.js?v=14"></script>
 </body>
 </html>

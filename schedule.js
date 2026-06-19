@@ -10,6 +10,7 @@ import {
   isLoggedIn,
   isApproved,
   isAdmin,
+  hasRole,
   isCoach,
   getCurrentUser,
   getCurrentProfile
@@ -24,6 +25,7 @@ import {
   addDoc,
   runTransaction,
   updateDoc,
+  writeBatch,
   doc,
   query,
   orderBy,
@@ -34,14 +36,19 @@ import {
 document.getElementById("scheduleYear").textContent = new Date().getFullYear();
 
 let games = [];
+let viewMode      = "regular";  // regular | tournament
 let statusFilter  = "all";      // all | needs | filled | mine
 let dateFilter    = "upcoming"; // today | week | month | upcoming | past | all | custom
 let dateFrom      = "";      // YYYY-MM-DD  (custom range start)
 let dateTo        = "";      // YYYY-MM-DD  (custom range end)
 let cityFilter    = "";      // "" = all cities
 let umpireFilter  = "";      // "" = all umpires (admin only)
+
+// Tournaments map: id → { name, date, fields, division }
+let tournamentsMap = {};
 let pendingGameId   = null;
 let pendingSlotType = null;
+let pendingScoreGameId = null;   // game currently being scored
 
 let _gameDayBarCache = null; // { date: "YYYY-MM-DD", data: { todayGames, facilities, shedCodes, weatherMap } }
 let _renderToday     = "";   // cached todayISO() for the current render pass
@@ -49,8 +56,6 @@ let _renderToday     = "";   // cached todayISO() for the current render pass
 // Pending cancellation requests for the current user: "gameId|slotType" → requestDocId
 let pendingCancels = {};
 
-// Cache: team name → Set of ISO date strings with games
-const teamGameDates = {};
 let teamCalendars   = []; // [{name, icsUrl}]
 
 // ── Weather ───────────────────────────────────────────────────────────────────
@@ -179,6 +184,10 @@ function allSlotsFilled(game) {
 
 function gameMatchesFilter(game) {
   const today = _renderToday || todayISO();
+
+  // ── View mode ────────────────────────────────────────────────────────────
+  if (viewMode === "regular"    &&  game.tournamentId) return false;
+  if (viewMode === "tournament" && !game.tournamentId) return false;
 
   // ── Status filter ────────────────────────────────────────────────────────
   if (statusFilter === "needs"  && (game.cancelled || openSlots(game).length === 0)) return false;
@@ -523,9 +532,9 @@ function renderAdminGameCard(game, facility, shedCodes, wx) {
         const badge = `<span class="badge badge-${slotTypeCls(s.type)}">${esc(s.type)}</span>`;
         if (s.assignedUid) {
           const name       = esc(s.assignedName || s.assignedUid);
-          const unassignBtn = `<button class="btn print-btn admin-unassign-btn"
+          const unassignBtn = hasRole("umpires") ? `<button class="btn print-btn admin-unassign-btn"
             data-game-id="${esc(game.id)}" data-slot-type="${esc(s.type)}"
-            data-target-uid="${esc(s.assignedUid)}" style="font-size:0.78rem">Unassign</button>`;
+            data-target-uid="${esc(s.assignedUid)}" style="font-size:0.78rem">Unassign</button>` : "";
           if (s.noShow) {
             return `<div class="admin-gameday-slot">
               ${badge}
@@ -699,20 +708,14 @@ function buildActionCell(game) {
   return `<div style="display:flex;flex-direction:column;gap:4px">${slots.map(slot => {
     const label = esc(slot.type);
     if (slot.assignedUid === uid) {
-      const cancelKey = `${game.id}|${slot.type}`;
-      if (pendingCancels[cancelKey]) {
-        return `<div style="display:flex;flex-direction:column;gap:3px">
-          <button type="button" class="btn print-btn" disabled
-            style="opacity:0.7;cursor:default;font-size:0.85rem">⏳ Cancel Pending…</button>
-          <button type="button" class="btn withdraw-cancel-btn"
-            data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}"
-            style="font-size:0.78rem;padding:3px 10px;background:transparent;border-color:#666">
-            Withdraw Request</button>
-        </div>`;
-      }
-      return `<button type="button" class="btn print-btn cancel-btn"
-        data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}">
-        Cancel — ${label} (you)</button>`;
+      return `<div style="display:flex;flex-direction:column;gap:3px">
+        <button type="button" class="btn print-btn" disabled
+          style="opacity:0.9;cursor:default;font-size:0.85rem">✓ Signed up: ${label}</button>
+        <button type="button" class="btn contact-coordinator-btn"
+          data-game-id="${esc(game.id)}" data-slot-type="${esc(slot.type)}"
+          style="font-size:0.78rem;padding:3px 10px;background:transparent;border:1px solid #666;color:var(--light-text)">
+          Need to cancel?</button>
+      </div>`;
     }
     if (slot.assignedUid) {
       return `<button type="button" class="btn locked-btn" disabled>${label}: ${esc(slot.assignedName || "Filled")}</button>`;
@@ -792,6 +795,11 @@ function renderGameRows() {
   _renderToday = todayISO(); // compute once for the entire render pass
   populateSecondaryFilters();
 
+  if (viewMode === "tournament") {
+    renderTournamentGameRows(container);
+    return;
+  }
+
   // Exclude games with no umpire slots configured — they have nothing for umpires to sign up for
   const visible = games.filter(g => getSlots(g).length > 0).filter(gameMatchesFilter);
 
@@ -831,6 +839,122 @@ function renderGameRows() {
   renderGameDayBar();
 }
 
+function renderTournamentGameRows(container) {
+  const visible = games.filter(g => getSlots(g).length > 0).filter(gameMatchesFilter);
+
+  if (visible.length === 0) {
+    container.innerHTML = `<div class="document-note"><p style="margin:0;text-align:center;color:var(--light-text)">No tournament games match this filter.</p></div>`;
+    renderCount();
+    renderPaySummary();
+    renderGameDayBar();
+    return;
+  }
+
+  // Group by tournament, then bracket (field), then date+time (already sorted)
+  const tOrder = [];
+  const byT    = {};
+  visible.forEach(g => {
+    const tid  = g.tournamentId || "unknown";
+    const t    = tournamentsMap[tid];
+    const tKey = tid;
+    if (!byT[tKey]) { byT[tKey] = { t, games: [] }; tOrder.push(tKey); }
+    byT[tKey].games.push(g);
+  });
+
+  const TABLE_HEAD = `
+    <thead><tr>
+      <th>Date / Time</th><th>Game</th>
+      <th>Field</th><th>Score</th><th>Status</th><th>Action</th>
+    </tr></thead>`;
+
+  container.innerHTML = tOrder.map(tid => {
+    const { t, games: tGames } = byT[tid];
+    const tName    = t ? esc(t.name) : "Tournament";
+    const tDate    = t ? ` <span style="color:var(--light-text);font-size:0.85rem;font-weight:normal">· ${esc(fmtDate(t.date))}</span>` : "";
+    const tDiv     = t?.division ? ` <span class="badge" style="background:#1a2a3a;color:#7ec8f7">${esc(t.division)}</span>` : "";
+
+    // Group by bracket (field value)
+    const bracketOrder = [];
+    const byBracket    = {};
+    tGames.forEach(g => {
+      const b = g.field || "Games";
+      if (!byBracket[b]) { byBracket[b] = []; bracketOrder.push(b); }
+      byBracket[b].push(g);
+    });
+
+    const bracketSections = bracketOrder.map(bracket => {
+      const rows = byBracket[bracket].map(g => buildTournamentGameRow(g)).join("");
+      return `
+        <div style="margin-bottom:16px">
+          <h3 style="font-size:0.95rem;color:#c9a0ff;margin:12px 0 6px;padding:6px 10px;
+                     background:rgba(100,60,180,0.12);border-left:3px solid #7c44cc;border-radius:0 4px 4px 0">
+            🏟 ${esc(bracket)}
+          </h3>
+          <table>${TABLE_HEAD}
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }).join("");
+
+    return `
+      <div class="schedule-section">
+        <h2>🏆 ${tName}${tDate}${tDiv}</h2>
+        ${bracketSections}
+      </div>`;
+  }).join("");
+
+  renderCount();
+  renderPaySummary();
+  renderGameDayBar();
+}
+
+function buildTournamentGameRow(g) {
+  // Extract game number from notes (e.g. "Bracket 1 - Game 3")
+  const noteMatch = (g.notes || "").match(/Game\s+(\d+)/i);
+  const gameLabel = noteMatch ? `Game ${noteMatch[1]}` : "—";
+  const ifNec     = (g.notes || "").toLowerCase().includes("if necessary")
+    ? ` <span style="color:#ffd966;font-size:0.75rem">(if nec.)</span>` : "";
+
+  const statusCell  = buildStatusCell(g);
+  const statusClass = buildStatusClass(g);
+
+  // Score display
+  const hasScore   = g.homeScore != null && g.awayScore != null;
+  const scoreCell  = hasScore
+    ? `<strong style="color:#86efac">${esc(String(g.homeScore))}</strong>
+       <span style="color:var(--light-text);margin:0 3px">–</span>
+       <strong style="color:#86efac">${esc(String(g.awayScore))}</strong>`
+    : `<span style="color:var(--light-text);font-size:0.82rem">—</span>`;
+
+  // Score entry button — shown to approved umpires/admins for today's or past tournament games
+  const canScore   = (isApproved() || isAdmin()) && !g.cancelled &&
+                     gameDateStatus(g.date) !== "future";
+  const scoreBtn   = canScore
+    ? `<button type="button" class="btn print-btn score-entry-btn"
+         data-game-id="${esc(g.id)}"
+         style="font-size:0.78rem;padding:3px 10px;margin-left:6px">
+         ${hasScore ? "✏️ Edit" : "📊 Score"}</button>`
+    : "";
+
+  // Teams line (if set)
+  const teamsLine = (g.homeTeam || g.awayTeam)
+    ? `<div style="font-size:0.8rem;color:var(--light-text);margin-top:2px">
+         ${esc(g.homeTeam || "TBD")} <span style="margin:0 3px">vs</span> ${esc(g.awayTeam || "TBD")}
+       </div>`
+    : "";
+
+  return `<tr class="${statusClass}">
+    <td style="white-space:nowrap">${esc(fmtDate(g.date))}<br>
+      <span style="font-size:0.8rem;color:var(--light-text)">${esc(fmtTime(g.time))}</span>
+    </td>
+    <td>${esc(gameLabel)}${ifNec}${teamsLine}</td>
+    <td>${esc(g.subField || g.field || "—")}</td>
+    <td style="white-space:nowrap">${scoreCell}${scoreBtn}</td>
+    <td>${statusCell}</td>
+    <td>${buildActionCell(g)}</td>
+  </tr>`;
+}
+
 // ── Load from Firestore ───────────────────────────────────────────────────────
 
 function showLoading() {
@@ -860,15 +984,18 @@ async function loadPendingCancels() {
 async function loadGames() {
   showLoading();
   try {
-    const [snap] = await Promise.all([
+    const [snap, tSnap] = await Promise.all([
       getDocs(query(
         collection(db, "games"),
         orderBy("date"),
         orderBy("time")
       )),
+      getDocs(collection(db, "tournaments")),
       loadPendingCancels()
     ]);
     games = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    tournamentsMap = {};
+    tSnap.forEach(d => { tournamentsMap[d.id] = { id: d.id, ...d.data() }; });
     renderGameRows();
   } catch (err) {
     const container = document.getElementById("gameSchedule");
@@ -886,58 +1013,76 @@ async function loadTeamCalendars() {
   } catch (_) {}
 }
 
+/**
+ * Check whether the umpire's player team has a game or practice conflicting with the given game.
+ * Returns { teamGame, teamPractice } — each is the conflicting doc (or null).
+ * A "hard" time conflict means same date + same time.
+ * A "soft" date conflict means same date, different/unknown time.
+ */
+async function checkPlayerTeamConflict(game) {
+  const profile = getCurrentProfile();
+  const playerTeam = profile?.playerTeam || "";
+  if (!playerTeam) return { teamGame: null, teamPractice: null };
+
+  const date = game.date;
+  const time = game.time || "";
+
+  // Match a calendar name against the team's calendarName or name
+  const lc = s => (s || "").toLowerCase().trim();
+  const nameMatches = (homeTeam, awayTeam) => {
+    // Find the team config entry to get calendarName
+    const teamCfg = teamCalendars.find(t => t.name === playerTeam);
+    const calName = teamCfg?.calendarName || playerTeam;
+    const candidates = [lc(playerTeam), lc(calName)].filter(Boolean);
+    for (const c of candidates) {
+      if (homeTeam && (lc(homeTeam) === c || lc(homeTeam).includes(c) || c.includes(lc(homeTeam)))) return true;
+      if (awayTeam && (lc(awayTeam) === c || lc(awayTeam).includes(c) || c.includes(lc(awayTeam)))) return true;
+    }
+    return false;
+  };
+
+  // Fetch games and practices on the same date in parallel
+  const [gamesSnap, practicesSnap] = await Promise.all([
+    getDocs(query(collection(db, "games"), where("date", "==", date))),
+    getDocs(query(collection(db, "practices"), where("date", "==", date))),
+  ]);
+
+  // Team game conflict
+  let teamGame = null;
+  for (const d of gamesSnap.docs) {
+    if (d.id === game.id) continue; // skip this game itself
+    const g = d.data();
+    if (g.cancelled) continue;
+    if (nameMatches(g.homeTeam, g.awayTeam)) {
+      teamGame = { id: d.id, ...g };
+      break;
+    }
+  }
+
+  // Practice conflict
+  let teamPractice = null;
+  for (const d of practicesSnap.docs) {
+    const p = d.data();
+    const pTeam = p.teamName || "";
+    const candidates = [lc(playerTeam), lc(teamCalendars.find(t => t.name === playerTeam)?.calendarName || "")].filter(Boolean);
+    if (candidates.some(c => c && (lc(pTeam) === c || lc(pTeam).includes(c) || c.includes(lc(pTeam))))) {
+      teamPractice = { id: d.id, ...p };
+      break;
+    }
+  }
+
+  return { teamGame, teamPractice };
+}
+
+// Legacy ICS helpers kept for any external callers
 function normalizeIcsUrl(url) {
   return url.replace(/^webcal:\/\//i, "https://");
 }
-
 async function fetchICS(rawUrl) {
   const url = normalizeIcsUrl(rawUrl);
-  // Try direct fetch first; fall back to CORS proxy if blocked
-  try {
-    const res = await fetch(url, { mode: "cors" });
-    if (res.ok) return await res.text();
-  } catch (_) {}
-  try {
-    const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-    const res = await fetch(proxy);
-    if (res.ok) return await res.text();
-  } catch (_) {}
+  try { const res = await fetch(url, { mode: "cors" }); if (res.ok) return await res.text(); } catch (_) {}
+  try { const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`); if (res.ok) return await res.text(); } catch (_) {}
   return null;
-}
-
-function parseICSdates(icsText) {
-  const dates = new Set();
-  const re = /DTSTART[^:]*:(\d{4})(\d{2})(\d{2})/g;
-  let m;
-  while ((m = re.exec(icsText)) !== null) {
-    dates.add(`${m[1]}-${m[2]}-${m[3]}`);
-  }
-  return dates;
-}
-
-async function getTeamDatesForGame(gameDate) {
-  const profile = getCurrentProfile();
-  const teamsPlayed = profile?.teamsPlayed || [];
-  if (!teamsPlayed.length || !teamCalendars.length) return [];
-
-  const conflictingTeams = [];
-
-  await Promise.all(teamsPlayed.map(async teamName => {
-    const cal = teamCalendars.find(t => t.name === teamName);
-    if (!cal) return;
-
-    // Use cached dates if available
-    if (!teamGameDates[teamName]) {
-      const icsText = await fetchICS(cal.icsUrl);
-      teamGameDates[teamName] = icsText ? parseICSdates(icsText) : new Set();
-    }
-
-    if (teamGameDates[teamName].has(gameDate)) {
-      conflictingTeams.push(teamName);
-    }
-  }));
-
-  return conflictingTeams;
 }
 
 // ── Signup modal ──────────────────────────────────────────────────────────────
@@ -966,7 +1111,9 @@ async function openModal(gameId, slotType) {
   const msgEl = document.getElementById("signupMessage");
   msgEl.textContent = "";
   msgEl.className   = "signup-message";
-  document.getElementById("signupModal").style.display = "";
+  const modalEl = document.getElementById("signupModal");
+  modalEl.style.display = "";
+  modalEl.scrollIntoView({ behavior: "smooth", block: "center" });
   document.getElementById("confirmSignupBtn").disabled = false;
 
   // Conflict checks — run async after modal opens so they don't delay display
@@ -992,11 +1139,37 @@ async function openModal(gameId, slotType) {
       }
     }
 
-    // 2. Soft warning: umpire's player team may have a game on this date
-    const conflicts = await getTeamDatesForGame(game.date);
-    if (conflicts.length > 0) {
-      msgEl.textContent = `⚠️ Possible conflict — ${conflicts.join(", ")} may have a game on this date. Verify your availability before confirming.`;
-      msgEl.className   = "signup-message warning";
+    // 2. Player-team conflict: check Firestore for same-date team games and practices
+    const { teamGame, teamPractice } = await checkPlayerTeamConflict(game);
+    if (teamGame) {
+      const sameTime = teamGame.time && game.time && teamGame.time === game.time;
+      if (sameTime) {
+        // Hard block — exact same time
+        const opponent = [teamGame.homeTeam, teamGame.awayTeam].filter(Boolean).join(" vs ");
+        msgEl.textContent = `⛔ Your team (${esc(getCurrentProfile()?.playerTeam || "")}) has a game at the same time${opponent ? ": " + opponent : ""}. You cannot umpire this game.`;
+        msgEl.className   = "signup-message error";
+        document.getElementById("confirmSignupBtn").disabled = true;
+        return;
+      } else {
+        const timeLabel = teamGame.time ? ` at ${teamGame.time}` : "";
+        const opponent  = [teamGame.homeTeam, teamGame.awayTeam].filter(Boolean).join(" vs ");
+        msgEl.textContent = `⚠️ Your team has a game on this date${timeLabel}${opponent ? " (" + opponent + ")" : ""}. Confirm you're available to umpire.`;
+        msgEl.className   = "signup-message warning";
+      }
+    }
+    if (teamPractice) {
+      const sameTime = teamPractice.startTime && game.time && teamPractice.startTime === game.time;
+      const timeLabel = teamPractice.startTime ? ` at ${teamPractice.startTime}` : "";
+      const prefix    = msgEl.textContent ? msgEl.textContent + " · " : "";
+      if (sameTime && !msgEl.className.includes("error")) {
+        msgEl.textContent = `${prefix}⛔ Your team has practice at the same time${timeLabel}. You cannot umpire this game.`;
+        msgEl.className   = "signup-message error";
+        document.getElementById("confirmSignupBtn").disabled = true;
+        return;
+      } else if (!msgEl.className.includes("error")) {
+        msgEl.textContent = `${prefix}⚠️ Your team has practice on this date${timeLabel}. Confirm you're available to umpire.`;
+        msgEl.className   = "signup-message warning";
+      }
     }
 
     // 3. Weekly game limit — blocks if umpire has hit their self-set cap
@@ -1029,6 +1202,160 @@ function closeModal() {
   document.getElementById("signupModal").style.display = "none";
   pendingGameId   = null;
   pendingSlotType = null;
+}
+
+// ── Score entry ───────────────────────────────────────────────────────────────
+
+function openScoreEntry(gameId) {
+  const g = games.find(x => x.id === gameId);
+  if (!g) return;
+  pendingScoreGameId = gameId;
+
+  const noteMatch  = (g.notes || "").match(/Game\s+(\d+)/i);
+  const gameLabel  = noteMatch ? `Game ${noteMatch[1]}` : "Game";
+  const bracket    = g.field || "";
+  const homeName   = g.homeTeam || "Home";
+  const awayName   = g.awayTeam || "Away";
+
+  document.getElementById("scoreModalDetail").textContent =
+    `${bracket} · ${gameLabel} · ${fmtDate(g.date)} ${fmtTime(g.time)}`;
+  document.getElementById("scoreHomeLabel").textContent = homeName;
+  document.getElementById("scoreAwayLabel").textContent = awayName;
+  document.getElementById("scoreHomeInput").value = g.homeScore ?? "";
+  document.getElementById("scoreAwayInput").value = g.awayScore ?? "";
+  document.getElementById("scoreMessage").textContent = "";
+  document.getElementById("scoreMessage").className = "signup-message";
+  document.getElementById("scoreModal").style.display = "";
+  document.getElementById("scoreHomeInput").focus();
+}
+
+function closeScoreModal() {
+  document.getElementById("scoreModal").style.display = "none";
+  pendingScoreGameId = null;
+}
+
+async function saveScore() {
+  const gameId = pendingScoreGameId;
+  if (!gameId) return;
+
+  const homeVal = document.getElementById("scoreHomeInput").value;
+  const awayVal = document.getElementById("scoreAwayInput").value;
+  const msgEl   = document.getElementById("scoreMessage");
+
+  if (homeVal === "" || awayVal === "") {
+    msgEl.className = "signup-message error";
+    msgEl.textContent = "Enter both scores.";
+    return;
+  }
+  const homeScore = parseInt(homeVal, 10);
+  const awayScore = parseInt(awayVal, 10);
+  if (isNaN(homeScore) || isNaN(awayScore) || homeScore < 0 || awayScore < 0) {
+    msgEl.className = "signup-message error";
+    msgEl.textContent = "Scores must be non-negative numbers.";
+    return;
+  }
+
+  const btn = document.getElementById("confirmScoreBtn");
+  btn.disabled = true;
+  msgEl.className = "signup-message";
+  msgEl.textContent = "Saving…";
+
+  try {
+    await updateDoc(doc(db, "games", gameId), { homeScore, awayScore });
+    const g = games.find(x => x.id === gameId);
+    if (g) { g.homeScore = homeScore; g.awayScore = awayScore; }
+    msgEl.className = "signup-message success";
+    msgEl.textContent = "Score saved!";
+    // Advance teams in background; close modal immediately
+    closeScoreModal();
+    renderGameRows();
+    advanceTeams(gameId, homeScore, awayScore).catch(err =>
+      console.warn("Bracket advancement failed:", err)
+    );
+  } catch (err) {
+    msgEl.className = "signup-message error";
+    msgEl.textContent = "Failed: " + err.message;
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Bracket advancement ───────────────────────────────────────────────────────
+
+async function advanceTeams(gameId, homeScore, awayScore) {
+  const g = games.find(x => x.id === gameId);
+  if (!g?.tournamentId || homeScore == null || awayScore == null) return;
+
+  // Load tournament for bracketAdvancement rules
+  const tSnap = await getDoc(doc(db, "tournaments", g.tournamentId));
+  if (!tSnap.exists()) return;
+  const advancement = tSnap.data().bracketAdvancement || {};
+  const bracket = g.field || "";
+  const rules   = advancement[bracket];
+  if (!rules) return;
+
+  const numMatch = (g.notes || "").match(/Game\s+(\d+)/i);
+  if (!numMatch) return;
+  const gameNum = String(parseInt(numMatch[1], 10));
+  const rule    = rules[gameNum];
+  if (!rule) return;
+
+  const isTie    = homeScore === awayScore;
+  const winner   = isTie ? null : (homeScore > awayScore ? (g.homeTeam || "") : (g.awayTeam || ""));
+  const loser    = isTie ? null : (homeScore > awayScore ? (g.awayTeam || "") : (g.homeTeam || ""));
+
+  // Find a game in same bracket by game number
+  const bracketGames = games.filter(x =>
+    x.tournamentId === g.tournamentId && x.field === bracket
+  );
+  function findByNum(n) {
+    return bracketGames.find(x => {
+      const m = (x.notes || "").match(/Game\s+(\d+)/i);
+      return m && parseInt(m[1], 10) === n;
+    });
+  }
+
+  const batch   = writeBatch(db);
+  let   updated = 0;
+  const changes = []; // for toast
+
+  function scheduleUpdate(dest, team, slot) {
+    if (!dest || !team) return;
+    const field = slot === "away" ? "awayTeam" : "homeTeam";
+    batch.update(doc(db, "games", dest.id), { [field]: team });
+    dest[field] = team; // optimistic in-memory update
+    const destNum = (dest.notes || "").match(/Game\s+(\d+)/i)?.[1] || "?";
+    changes.push(`${bracket} Game ${destNum} ${slot === "away" ? "Away" : "Home"}: ${team}`);
+    updated++;
+  }
+
+  if (winner && rule.winner?.game) {
+    scheduleUpdate(findByNum(rule.winner.game), winner, rule.winner.slot);
+  }
+  if (loser && rule.loser?.game) {
+    scheduleUpdate(findByNum(rule.loser.game), loser, rule.loser.slot);
+  }
+  // Championship "if necessary" — same teams play again
+  if (rule.loser?.game && !rule.winner && rule.loser) {
+    // G14/G16 scenario: loser slot means "if necessary" game gets same teams
+    const ifNecGame = findByNum(rule.loser.game);
+    if (ifNecGame) {
+      batch.update(doc(db, "games", ifNecGame.id), {
+        homeTeam: g.homeTeam || "", awayTeam: g.awayTeam || ""
+      });
+      ifNecGame.homeTeam = g.homeTeam || "";
+      ifNecGame.awayTeam = g.awayTeam || "";
+      changes.push(`${bracket} Game ${rule.loser.game} (if nec): ${g.homeTeam} vs ${g.awayTeam}`);
+      updated++;
+    }
+  }
+
+  if (updated > 0) {
+    await batch.commit();
+    showToast(`Bracket advanced: ${changes.join(" · ")}`);
+    renderGameRows();
+  }
 }
 
 // ── Claim slot ────────────────────────────────────────────────────────────────
@@ -1201,11 +1528,35 @@ document.addEventListener("click", e => {
     return;
   }
 
-  const cancelBtn = e.target.closest(".cancel-btn");
-  if (cancelBtn) { cancelSlot(cancelBtn.dataset.gameId, cancelBtn.dataset.slotType); return; }
+  const contactBtn = e.target.closest(".contact-coordinator-btn");
+  if (contactBtn) {
+    const coordName  = _orgSettings?.coordinatorName  || "the umpire coordinator";
+    const coordPhone = _orgSettings?.coordinatorPhone || "";
+    const coordEmail = _orgSettings?.coordinatorEmail || "";
+    const contact = [coordPhone, coordEmail].filter(Boolean).join(" / ");
+    showToast(
+      `To cancel a game assignment, contact ${coordName}${contact ? " — " + contact : ""}.`,
+      "info",
+      7000
+    );
+    return;
+  }
 
-  const withdrawBtn = e.target.closest(".withdraw-cancel-btn");
-  if (withdrawBtn) { withdrawCancellation(withdrawBtn.dataset.gameId, withdrawBtn.dataset.slotType); return; }
+  const scoreEntryBtn = e.target.closest(".score-entry-btn");
+  if (scoreEntryBtn) { openScoreEntry(scoreEntryBtn.dataset.gameId); return; }
+
+  const viewModeBtn = e.target.closest(".view-mode-btn");
+  if (viewModeBtn) {
+    viewMode = viewModeBtn.dataset.mode;
+    document.querySelectorAll(".view-mode-btn").forEach(b =>
+      b.classList.toggle("active", b.dataset.mode === viewMode)
+    );
+    // Hide city filter — not relevant for tournament view
+    const cityWrap = document.getElementById("cityFilter")?.closest("div");
+    if (cityWrap) cityWrap.style.display = viewMode === "tournament" ? "none" : "";
+    renderGameRows();
+    return;
+  }
 
   const filterBtn = e.target.closest(".filter-btn");
   if (filterBtn) {
@@ -1275,6 +1626,9 @@ document.addEventListener("click", e => {
 document.getElementById("confirmSignupBtn").addEventListener("click", () => {
   if (pendingGameId && pendingSlotType) claimSlot(pendingGameId, pendingSlotType);
 });
+
+document.getElementById("confirmScoreBtn")?.addEventListener("click", saveScore);
+document.getElementById("cancelScoreBtn")?.addEventListener("click", closeScoreModal);
 
 // ── Secondary filter change listeners ────────────────────────────────────────
 

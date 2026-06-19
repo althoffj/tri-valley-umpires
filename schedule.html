@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Game Schedule & Umpire Signups - Tri-Valley Baseball</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=18" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com https://api.allorigins.win https://api.team-manager.gc.com https://*.gamechanger.io;">
 </head>
 <body>
@@ -33,20 +33,10 @@
       </p>
     </div>
 
-    <!-- Calendar subscribe / export -->
-    <div id="calSubscribeBar" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;padding:12px 16px;background:var(--field);border-radius:8px;border:1px solid #333">
-      <span style="font-size:0.88rem;font-weight:600;color:var(--light-text);flex-shrink:0">📅 Calendar:</span>
-      <button type="button" class="btn print-btn" id="calExportBtn" style="font-size:0.82rem;padding:5px 12px">⬇ Export .ics</button>
-      <button type="button" class="btn print-btn" id="calCopyLinkBtn" style="font-size:0.82rem;padding:5px 12px" title="Copy subscription URL to clipboard">🔗 Copy Subscribe URL</button>
-      <span id="calCopyMsg" style="font-size:0.8rem;color:#86efac;display:none">Copied!</span>
-      <!-- Personal umpire calendar — shown only to signed-in approved umpires -->
-      <span id="calUmpireSection" style="display:none;width:100%;margin-top:4px;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:0.82rem;color:var(--light-text)">My Games:</span>
-        <button type="button" class="btn print-btn" id="calMyExportBtn" style="font-size:0.82rem;padding:5px 12px">⬇ Export My Games</button>
-        <button type="button" class="btn print-btn" id="calMyCopyBtn" style="font-size:0.82rem;padding:5px 12px">🔗 Copy My Subscribe URL</button>
-        <button type="button" class="btn print-btn" id="calMyResetBtn" style="font-size:0.82rem;padding:5px 10px;color:#ffb4b4;border-color:#884444" title="Generates a new private URL, invalidating the old one">↺ Reset URL</button>
-        <span id="calMyCopyMsg" style="font-size:0.8rem;color:#86efac;display:none">Copied!</span>
-      </span>
+    <!-- View mode toggle: Regular / Tournament -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;border-bottom:1px solid #333;padding-bottom:12px">
+      <button type="button" class="sched-sec-btn view-mode-btn active" data-mode="regular">⚾ Regular Games</button>
+      <button type="button" class="sched-sec-btn view-mode-btn" data-mode="tournament">🏆 Tournaments</button>
     </div>
 
     <!-- Status filter -->
@@ -105,11 +95,55 @@
       <p id="signupMessage" class="signup-message" aria-live="polite"></p>
     </div>
 
+    <!-- Score entry modal (tournament games) -->
+    <div id="scoreModal" class="document-note" style="display:none;border-left-color:#86efac">
+      <h3 style="margin-top:0">Enter Final Score</h3>
+      <p id="scoreModalDetail" style="font-size:0.88rem;color:var(--light-text);margin-bottom:14px"></p>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
+          <label style="font-size:0.78rem;color:var(--light-text);text-transform:uppercase;letter-spacing:0.05em" id="scoreHomeLabel">Home</label>
+          <input type="number" id="scoreHomeInput" min="0" max="99"
+            style="width:70px;text-align:center;font-size:1.4rem;font-weight:bold;
+                   padding:8px;background:var(--field);color:var(--text);
+                   border:1px solid #555;border-radius:6px" />
+        </div>
+        <span style="font-size:1.2rem;color:var(--light-text);margin-top:16px">–</span>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
+          <label style="font-size:0.78rem;color:var(--light-text);text-transform:uppercase;letter-spacing:0.05em" id="scoreAwayLabel">Away</label>
+          <input type="number" id="scoreAwayInput" min="0" max="99"
+            style="width:70px;text-align:center;font-size:1.4rem;font-weight:bold;
+                   padding:8px;background:var(--field);color:var(--text);
+                   border:1px solid #555;border-radius:6px" />
+        </div>
+      </div>
+      <div class="page-actions">
+        <button type="button" class="btn" id="confirmScoreBtn">Save Score</button>
+        <button type="button" class="btn print-btn" id="cancelScoreBtn">Cancel</button>
+      </div>
+      <p id="scoreMessage" class="signup-message" aria-live="polite"></p>
+    </div>
+
     <!-- Game Day bar (shown to umpires with a game today) -->
     <div id="gameDayBar" style="display:none"></div>
 
     <!-- Game sections — built dynamically from Firestore data -->
     <div id="gameSchedule"></div>
+
+    <!-- Calendar subscribe / export — below the game list -->
+    <div id="calSubscribeBar" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:24px;padding:12px 16px;background:var(--field);border-radius:8px;border:1px solid #333">
+      <span style="font-size:0.88rem;font-weight:600;color:var(--light-text);flex-shrink:0">📅 Calendar:</span>
+      <button type="button" class="btn print-btn" id="calExportBtn" style="font-size:0.82rem;padding:5px 12px">⬇ Export .ics</button>
+      <button type="button" class="btn print-btn" id="calCopyLinkBtn" style="font-size:0.82rem;padding:5px 12px" title="Copy subscription URL to clipboard">🔗 Copy Subscribe URL</button>
+      <span id="calCopyMsg" style="font-size:0.8rem;color:#86efac;display:none">Copied!</span>
+      <!-- Personal umpire calendar — shown only to signed-in approved umpires -->
+      <span id="calUmpireSection" style="display:none;width:100%;margin-top:4px;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:0.82rem;color:var(--light-text)">My Games:</span>
+        <button type="button" class="btn print-btn" id="calMyExportBtn" style="font-size:0.82rem;padding:5px 12px">⬇ Export My Games</button>
+        <button type="button" class="btn print-btn" id="calMyCopyBtn" style="font-size:0.82rem;padding:5px 12px">🔗 Copy My Subscribe URL</button>
+        <button type="button" class="btn print-btn" id="calMyResetBtn" style="font-size:0.82rem;padding:5px 10px;color:#ffb4b4;border-color:#884444" title="Generates a new private URL, invalidating the old one">↺ Reset URL</button>
+        <span id="calMyCopyMsg" style="font-size:0.8rem;color:#86efac;display:none">Copied!</span>
+      </span>
+    </div>
   </div>
 
   <div class="footer">
@@ -124,11 +158,11 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=27"></script>
+  <script type="module" src="auth.js?v=28"></script>
   <script type="module" src="cal.js?v=1"></script>
-  <script type="module" src="schedule.js?v=41"></script>
+  <script type="module" src="schedule.js?v=48"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=6"></script>
-  <script type="module" src="nav.js?v=9"></script>
+  <script type="module" src="nav.js?v=14"></script>
 </body>
 </html>

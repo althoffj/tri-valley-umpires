@@ -278,11 +278,19 @@ function cityBaseName(city) {
  *         false — subscribed team is the home team
  *         parsedValue — neither name matches (fall back to parsed value)
  */
-function resolveIsAway(teamName, homeTeam, awayTeam, parsedValue) {
+function resolveIsAway(teamName, homeTeam, awayTeam, parsedValue, calendarName) {
   if (!teamName || (!homeTeam && !awayTeam)) return parsedValue;
-  const t = teamName.toLowerCase().trim();
-  const matchAway = awayTeam && (awayTeam.toLowerCase().trim().includes(t) || t.includes(awayTeam.toLowerCase().trim()));
-  const matchHome = homeTeam && (homeTeam.toLowerCase().trim().includes(t) || t.includes(homeTeam.toLowerCase().trim()));
+  const lc = (s) => (s || "").toLowerCase().trim();
+  const names = [lc(teamName)];
+  if (calendarName) names.push(lc(calendarName));
+
+  // Check each identity name against homeTeam / awayTeam
+  let matchAway = false, matchHome = false;
+  for (const t of names) {
+    if (!t) continue;
+    if (awayTeam && (lc(awayTeam).includes(t) || t.includes(lc(awayTeam)))) matchAway = true;
+    if (homeTeam && (lc(homeTeam).includes(t) || t.includes(lc(homeTeam)))) matchHome = true;
+  }
   if (matchAway && !matchHome) return true;
   if (matchHome && !matchAway) return false;
   return parsedValue; // ambiguous — keep whatever parseVEvents decided
@@ -488,7 +496,7 @@ async function runSync() {
       if (!ev.uid) continue;
       if (!ev.date || ev.date < today) continue; // never add or modify past events
       // Correct isAway from the subscribed team's perspective
-      ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway);
+      ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway, team.calendarName);
       // Location-based override: if the game is at the team's home city it is always a home game,
       // regardless of how the summary was formatted or whether name-matching was ambiguous.
       // Use cityBaseName() to strip "City of " so "City of Crooks" matches "Crooks" in ICS LOCATION.
@@ -563,12 +571,19 @@ async function runSync() {
       // Away games, teams without a city, and teams without needsUmpireForHome remain
       // as lightweight reference entries.
       //
-      // Duplicate guard: if a city-schedule game already exists for this division+date
-      // (entered by admin or created by an earlier sync pass), skip the add — the
-      // city-schedule matching loop below will link this ICS event to that game.
+      // Duplicate guard: if any non-cancelled game already covers this division+date at
+      // this team's city (whether source="city-schedule", a legacy import with no source,
+      // or an admin-entered game), skip creating a new one — the city-schedule matching
+      // loop below will link this ICS event to the existing game.
       const isHomeWithCity = !ev.isAway && team.city && team.needsUmpireForHome;
       const cityScheduleExists = isHomeWithCity &&
-        cityGames.some(g => g.division === division && g.date === ev.date);
+        gamesSnap.docs.some(d => {
+          const g = d.data();
+          return !g.cancelled &&
+                 g.division === division &&
+                 g.date === ev.date &&
+                 (g.source === "city-schedule" || g.city === team.city);
+        });
       if (isHomeWithCity && cityScheduleExists) {
         // A city-schedule game already exists for this division+date.
         // The city-schedule matching loop below will link this ICS event to it.
@@ -779,7 +794,7 @@ async function runSync() {
         // Re-derive isAway: city-schedule games are always home; location at home city confirms false
         const correctedIsAway = (cityBase && loc.includes(cityBase))
           ? false
-          : resolveIsAway(team.name, g.homeTeam || "", g.awayTeam || "", g.isAway || false);
+          : resolveIsAway(team.name, g.homeTeam || "", g.awayTeam || "", g.isAway || false, team.calendarName);
         repairOps.push(d.ref.update({
           source:       "city-schedule",
           city, league, division, facilityId,
@@ -925,7 +940,7 @@ exports.previewCalendarImport = onCall({ cors: CORS }, async request => {
     for (const ev of events) {
       if (!ev.date || ev.date < today) continue; // skip past events
       // Correct isAway from the subscribed team's perspective
-      ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway);
+      ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway, team.calendarName);
       // Location-based override: strip "City of " prefix so "City of Crooks" matches "Crooks"
       {
         const cityBase = cityBaseName(team.city).toLowerCase();
@@ -1206,7 +1221,7 @@ exports.repairCalendarGames = onCall({ cors: CORS }, async request => {
       // Re-compute isAway: city-schedule games are always home; cityBase match confirms false
       const correctedIsAway = (cityBase && loc.includes(cityBase))
         ? false
-        : resolveIsAway(team.name, game.homeTeam || "", game.awayTeam || "", game.isAway || false);
+        : resolveIsAway(team.name, game.homeTeam || "", game.awayTeam || "", game.isAway || false, team.calendarName);
 
       ops.push(game.ref.update({
         source:       "city-schedule",
@@ -1477,7 +1492,7 @@ async function runSyncForTeam(team) {
     if (!ev.uid) continue;
     if (!ev.date || ev.date < today) continue; // never add or modify past events
     // Correct isAway from the subscribed team's perspective
-    ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway);
+    ev.isAway = resolveIsAway(team.name, ev.homeTeam, ev.awayTeam, ev.isAway, team.calendarName);
     // Location-based override: strip "City of " so "City of Crooks" matches "Crooks" in ICS LOCATION
     {
       const cityBase = cityBaseName(team.city).toLowerCase();
@@ -1654,7 +1669,7 @@ async function runSyncForTeam(team) {
         const slotTypes  = getSlotTypesForDivision(g.division || division, rates);
         const correctedIsAway = (cityBase && loc.includes(cityBase))
           ? false
-          : resolveIsAway(team.name, g.homeTeam || "", g.awayTeam || "", g.isAway || false);
+          : resolveIsAway(team.name, g.homeTeam || "", g.awayTeam || "", g.isAway || false, team.calendarName);
         repairOps.push(d.ref.update({
           source: "city-schedule", city, league, facilityId,
           field: fieldName, isAway: correctedIsAway, type: g.type || "Regular",
@@ -2962,7 +2977,12 @@ exports.updateUmpireAccount = onCall({ cors: CORS }, async request => {
   if (firstName || lastName)    authUpdate.displayName = `${(firstName || "").trim()} ${(lastName || "").trim()}`.trim();
 
   if (Object.keys(authUpdate).length > 0) {
-    await adminAuth.updateUser(uid, authUpdate);
+    try {
+      await adminAuth.updateUser(uid, authUpdate);
+    } catch (e) {
+      if (e.errorInfo?.code !== 'auth/user-not-found') throw e;
+      // No Auth account — Firestore-only profile, skip Auth update
+    }
   }
 
   // Build Firestore profile update

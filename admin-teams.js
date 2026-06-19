@@ -15,7 +15,9 @@ import {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let teams                = [];   // [{id, name, division, city, icsUrl, color, needsUmpireForHome, ...}]
+let teams                = [];   // [{id, name, division, city, icsUrl, color, needsUmpireForHome, calendarName, ...}]
+let calendarTeamNames    = [];   // unique homeTeam values from the games collection (for calendar mapping dropdown)
+let allGameTeamNames     = [];   // unique homeTeam + awayTeam values from games (for merge alias candidates)
 let editTeamCoaches      = []; // [{uid, name, email, phone, role}]
 let leagues              = [];   // [{id, name, division, websiteUrl, notes, contacts, homeLocations}]
 let facilitiesForLeagues = [];   // [{id, name, address}]
@@ -84,6 +86,22 @@ async function loadTeams() {
   } catch {
     allSponsors = [];
   }
+  // Calendar team names — unique homeTeam values from imported games for mapping
+  try {
+    const gamesSnap = await getDocs(collection(db, "games"));
+    const homeSet   = new Set();
+    const allSet    = new Set();
+    gamesSnap.forEach(d => {
+      const { homeTeam, awayTeam } = d.data();
+      if (homeTeam) { homeSet.add(homeTeam); allSet.add(homeTeam); }
+      if (awayTeam) allSet.add(awayTeam);
+    });
+    calendarTeamNames = [...homeSet].sort((a, b) => a.localeCompare(b));
+    allGameTeamNames  = [...allSet].sort((a, b) => a.localeCompare(b));
+  } catch {
+    calendarTeamNames = [];
+    allGameTeamNames  = [];
+  }
   // Ensure every team has a stable id
   let needResave = false;
   teams.forEach(t => {
@@ -95,6 +113,7 @@ async function loadTeams() {
 
   renderTeamList();
   populateLeagueSelector();
+  populateCalendarNameSelect();
   populateCoachSelector();
 }
 
@@ -126,7 +145,11 @@ function teamBadges(t) {
   const aliasBadge = (t.aliases || []).length
     ? `<span style="font-size:0.75rem;color:#c4b0ff;background:rgba(140,100,255,0.12);border:1px solid rgba(140,100,255,0.3);border-radius:4px;padding:1px 6px" title="${esc((t.aliases || []).join(", "))}">🔀 ${t.aliases.length} alias${t.aliases.length !== 1 ? "es" : ""}</span>`
     : "";
-  return (t.needsUmpireForHome ? '<span class="team-needs-ump">⚾ Needs umpire</span>' : "")
+  const opponentBadge = t.teamType === "opponent"
+    ? `<span style="font-size:0.75rem;color:#f8c94b;background:rgba(248,201,75,0.12);border:1px solid rgba(248,201,75,0.3);border-radius:4px;padding:1px 6px">⚔ Opponent</span>`
+    : "";
+  return opponentBadge
+    + (t.needsUmpireForHome ? '<span class="team-needs-ump">⚾ Needs umpire</span>' : "")
     + teamLeagueMeta(t)
     + aliasBadge
     + (t.icsUrl ? '<span style="color:var(--light-text);font-size:0.78rem">📅 iCal linked</span>' : "");
@@ -175,6 +198,9 @@ function startEditTeam(idx) {
   document.getElementById("tColor").value        = t.color || "#601929";
   document.getElementById("tIcsUrl").value       = t.icsUrl || "";
   document.getElementById("tNeedsUmpire").checked = !!t.needsUmpireForHome;
+  populateCalendarNameSelect(t.calendarName || "");
+  const teamType = t.teamType || "association";
+  document.querySelector(`input[name="tTeamType"][value="${teamType}"]`).checked = true;
   // Support new leagueIds array or fall back to legacy single leagueId
   const selectedLeagueIds = Array.isArray(t.leagueIds) ? t.leagueIds : (t.leagueId ? [t.leagueId] : []);
   document.querySelectorAll("#tLeagueCheckboxes .league-select-cb").forEach(cb => {
@@ -526,6 +552,8 @@ document.getElementById("teamForm").addEventListener("submit", async e => {
     color:              document.getElementById("tColor").value,
     icsUrl:             document.getElementById("tIcsUrl").value.trim(),
     needsUmpireForHome: document.getElementById("tNeedsUmpire").checked,
+    teamType:           document.querySelector('input[name="tTeamType"]:checked')?.value || "association",
+    calendarName:       document.getElementById("tCalendarName")?.value || "",
     leagueIds,
     leagueNames,
     leagueId:           leagueIds[0]   || "",
@@ -582,6 +610,18 @@ async function loadLeagues() {
   populateLeagueSelector();
 }
 
+function populateCalendarNameSelect(currentValue = "") {
+  const sel = document.getElementById("tCalendarName");
+  if (!sel) return;
+  // Include currentValue even if it's not in the games list (e.g. newly entered)
+  const names = currentValue && !calendarTeamNames.includes(currentValue)
+    ? [...calendarTeamNames, currentValue].sort((a, b) => a.localeCompare(b))
+    : calendarTeamNames;
+  sel.innerHTML =
+    `<option value="">— None / Same as team name —</option>` +
+    names.map(n => `<option value="${esc(n)}"${n === currentValue ? " selected" : ""}>${esc(n)}</option>`).join("");
+}
+
 function populateLeagueSelector() {
   const wrap = document.getElementById("tLeagueCheckboxes");
   if (!wrap) return;
@@ -592,10 +632,10 @@ function populateLeagueSelector() {
   }
   wrap.innerHTML = leagues.map(l => {
     const divList = Array.isArray(l.divisions) && l.divisions.length ? l.divisions : (l.division ? [l.division] : []);
-    const divLabel = divList.length ? ` <span style="color:var(--light-text);font-size:0.8rem">(${divList.join(", ")})</span>` : "";
-    return `<label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;white-space:nowrap">
-       <input type="checkbox" class="league-select-cb" value="${esc(l.id)}" data-name="${esc(l.name)}" />
-       ${esc(l.name)}${divLabel}
+    const divLabel = divList.length ? `<span style="color:var(--light-text);font-size:0.8rem;margin-left:4px">(${divList.join(", ")})</span>` : "";
+    return `<label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer;font-size:0.9rem">
+       <input type="checkbox" class="league-select-cb" value="${esc(l.id)}" data-name="${esc(l.name)}" style="flex-shrink:0" />
+       <span>${esc(l.name)}${divLabel}</span>
      </label>`;
   }).join("");
 }
@@ -919,21 +959,53 @@ function closeMergeTeamsModal() {
 function renderMergeAliasCandidates(canonicalName) {
   const wrap = document.getElementById("mergeAliasCheckboxes");
   if (!wrap) return;
-  const others = teams
-    .filter(t => t.name !== canonicalName)
-    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  if (!canonicalName || !others.length) {
-    wrap.innerHTML = `<span style="color:var(--light-text);font-size:0.85rem">${canonicalName ? "No other teams in config" : "Select a canonical team first"}</span>`;
+  if (!canonicalName) {
+    wrap.innerHTML = `<span style="color:var(--light-text);font-size:0.85rem">Select a canonical team first</span>`;
     return;
   }
-  wrap.innerHTML = others.map(t => {
-    const isQueued = _mergeAliases.includes(t.name);
-    return `<label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;font-size:0.88rem">
-      <input type="checkbox" class="merge-alias-cb" value="${esc(t.name)}"${isQueued ? " checked" : ""} />
-      ${esc(t.name)}${t.division ? `<span style="color:var(--light-text);font-size:0.78rem">(${esc(t.division)})</span>` : ""}
-      ${(t.aliases || []).length ? `<span style="color:#8ab4f8;font-size:0.75rem">${t.aliases.length} alias${t.aliases.length !== 1 ? "es" : ""}</span>` : ""}
+
+  const configNames = new Set(teams.map(t => t.name));
+
+  // Section 1: other configured teams
+  const configOthers = teams
+    .filter(t => t.name !== canonicalName)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  // Section 2: names from game records that aren't configured teams and aren't the canonical
+  const gameOnlyNames = allGameTeamNames
+    .filter(n => n !== canonicalName && !configNames.has(n));
+
+  if (!configOthers.length && !gameOnlyNames.length) {
+    wrap.innerHTML = `<span style="color:var(--light-text);font-size:0.85rem">No other teams found</span>`;
+    return;
+  }
+
+  function makeRow(name, divSpan = "", extra = "") {
+    const isQueued = _mergeAliases.includes(name);
+    return `<label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer;font-size:0.88rem">
+      <input type="checkbox" class="merge-alias-cb" value="${esc(name)}"${isQueued ? " checked" : ""} style="flex-shrink:0" />
+      <span>${esc(name)}${divSpan}${extra}</span>
     </label>`;
-  }).join("");
+  }
+
+  let html = "";
+
+  if (configOthers.length) {
+    html += `<p style="font-size:0.75rem;color:var(--light-text);margin:0 0 6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Configured Teams</p>`;
+    html += configOthers.map(t => {
+      const divSpan   = t.division ? `<span style="color:var(--light-text);font-size:0.78rem;margin-left:4px">(${esc(t.division)})</span>` : "";
+      const aliasSpan = (t.aliases || []).length ? `<span style="color:#8ab4f8;font-size:0.75rem;margin-left:4px">${t.aliases.length} alias${t.aliases.length !== 1 ? "es" : ""}</span>` : "";
+      return makeRow(t.name, divSpan, aliasSpan);
+    }).join("");
+  }
+
+  if (gameOnlyNames.length) {
+    if (configOthers.length) html += `<hr style="border-color:#333;margin:10px 0" />`;
+    html += `<p style="font-size:0.75rem;color:var(--light-text);margin:0 0 6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">From Game Records</p>`;
+    html += gameOnlyNames.map(n => makeRow(n)).join("");
+  }
+
+  wrap.innerHTML = html;
 
   wrap.querySelectorAll(".merge-alias-cb").forEach(cb => {
     cb.addEventListener("change", () => {

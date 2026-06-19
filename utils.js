@@ -132,7 +132,7 @@ export function showConfirm(msg) {
  * @param {string} msg  - Message to display
  * @param {"error"|"success"|"info"} type
  */
-export function showToast(msg, type = "error") {
+export function showToast(msg, type = "error", duration = 4000) {
   let toast = document.getElementById("__appToast");
   if (!toast) {
     toast = document.createElement("div");
@@ -153,7 +153,7 @@ export function showToast(msg, type = "error") {
   toast.style.opacity    = "1";
   toast.textContent      = msg;
   clearTimeout(toast._hideTimer);
-  toast._hideTimer = setTimeout(() => { toast.style.opacity = "0"; }, 4000);
+  toast._hideTimer = setTimeout(() => { toast.style.opacity = "0"; }, duration);
 }
 
 // ── Phone formatting ──────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Admin: Scheduler - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=18" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
 </head>
 <body>
@@ -20,20 +20,21 @@
   <div class="container" id="adminContent" style="display:none">
 
     <nav class="admin-subnav">
-      <a href="admin.html">Overview</a>
-      <a href="admin-games.html">Games</a>
-      <a href="admin-scheduler.html" class="admin-subnav-active">Scheduler</a>
-      <a href="admin-teams.html">Teams</a>
-      <a href="admin-tournament.html">Tournaments</a>
-      <a href="admin-payroll.html">Payroll</a>
-      <a href="admin-facilities.html">Facilities</a>
-      <a href="admin-sponsors.html">Sponsors</a>
-      <a href="admin-callup.html">Call-Ups</a>
-      <a href="admin-incidents.html">Incidents</a>
-      <a href="admin-alerts.html">Alerts</a>
-      <a href="admin-config.html">Config</a>
-      <a href="admin-analytics.html">Analytics</a>
-      <a href="admin-users.html">Users</a>
+      <a href="admin.html">📋 Overview</a>
+      <a href="admin-games.html">⚾ Games</a>
+      <a href="admin-scheduler.html" class="admin-subnav-active">📅 Scheduler</a>
+      <a href="admin-teams.html">👕 Teams</a>
+      <a href="admin-tournament.html">🏆 Tournaments</a>
+      <a href="admin-payroll.html">💵 Payroll</a>
+      <a href="admin-ledger.html">📒 Ledger</a>
+      <a href="admin-facilities.html">📍 Facilities</a>
+      <a href="admin-sponsors.html">🤝 Sponsors</a>
+      <a href="admin-callup.html">📣 Call-Ups</a>
+      <a href="admin-incidents.html">⚠️ Incidents</a>
+      <a href="admin-alerts.html">🔔 Alerts</a>
+      <a href="admin-config.html">⚙️ Config</a>
+      <a href="admin-analytics.html">📊 Analytics</a>
+      <a href="admin-users.html">👤 Users</a>
     </nav>
 
     <h2 style="margin-bottom:4px">Scheduling Assistant</h2>
@@ -53,7 +54,7 @@
     <div id="sec-import" style="display:none">
       <div class="document-note" style="margin-bottom:16px">
         <p>Import games from team iCal calendar feeds or from a CSV spreadsheet. Games are checked for field-time conflicts, lighting restrictions, and division mismatches before being added to the schedule.</p>
-        <p style="margin-bottom:0">Add or edit team iCal feeds on the <a href="admin-teams.html">Teams</a> page. Game durations and the late-start cutoff are configured on the <a href="#" onclick="switchSectionPublic('settings');return false">Settings</a> tab.</p>
+        <p style="margin-bottom:0">Add or edit team iCal feeds on the <a href="admin-teams.html">👕 Teams</a> page. Game durations and the late-start cutoff are configured on the <a href="#" onclick="switchSectionPublic('settings');return false">Settings</a> tab.</p>
       </div>
 
       <!-- Import mode toggle -->
@@ -608,10 +609,10 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=27"></script>
-  <script type="module" src="admin-scheduler.js?v=22"></script>
+  <script type="module" src="auth.js?v=28"></script>
+  <script type="module" src="admin-scheduler.js?v=23"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=6"></script>
-  <script type="module" src="nav.js?v=9"></script>
+  <script type="module" src="nav.js?v=14"></script>
 </body>
 </html>

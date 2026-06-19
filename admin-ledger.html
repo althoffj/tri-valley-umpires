@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#601929">
+  <title>Admin: Ledger - Tri-Valley Baseball Umpires</title>
+  <link rel="stylesheet" href="styles.css?v=18" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <nav id="mainNav" aria-label="Main navigation"></nav>
+
+  <div class="container" id="adminContent" style="display:none">
+
+    <nav class="admin-subnav">
+      <a href="admin.html">📋 Overview</a>
+      <a href="admin-games.html">⚾ Games</a>
+      <a href="admin-scheduler.html">📅 Scheduler</a>
+      <a href="admin-teams.html">👕 Teams</a>
+      <a href="admin-tournament.html">🏆 Tournaments</a>
+      <a href="admin-payroll.html">💵 Payroll</a>
+      <a href="admin-ledger.html" class="admin-subnav-active">📒 Ledger</a>
+      <a href="admin-facilities.html">📍 Facilities</a>
+      <a href="admin-sponsors.html">🤝 Sponsors</a>
+      <a href="admin-callup.html">📣 Call-Ups</a>
+      <a href="admin-incidents.html">⚠️ Incidents</a>
+      <a href="admin-alerts.html">🔔 Alerts</a>
+      <a href="admin-config.html">⚙️ Config</a>
+      <a href="admin-analytics.html">📊 Analytics</a>
+      <a href="admin-users.html">👤 Users</a>
+    </nav>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <h2 style="margin:0">Ledger</h2>
+      <a href="admin-config.html#ledger" class="btn print-btn" style="font-size:0.82rem;padding:5px 12px">⚙ Configure</a>
+    </div>
+
+    <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
+    <div class="page-actions" style="margin-bottom:12px;flex-wrap:wrap;gap:8px;align-items:flex-end">
+      <div class="form-group form-group--sm" style="flex:0 0 auto">
+        <label for="ledgerSeasonFilter" style="margin-top:0">Season</label>
+        <select id="ledgerSeasonFilter" style="padding:7px 10px;font-size:0.875rem;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px">
+          <option value="">All seasons</option>
+        </select>
+      </div>
+      <div class="form-group form-group--sm" style="flex:0 0 auto">
+        <label for="ledgerTeamFilter" style="margin-top:0">Team / Division</label>
+        <select id="ledgerTeamFilter" style="padding:7px 10px;font-size:0.875rem;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px">
+          <option value="">All teams</option>
+        </select>
+      </div>
+      <button type="button" class="btn print-btn" id="ledgerExportCsvBtn" style="align-self:flex-end;margin-left:auto">⬇ Export CSV</button>
+    </div>
+
+    <!-- ── Section Tabs ───────────────────────────────────────────────────── -->
+    <div class="sched-section-nav" id="ledgerSecNav" style="margin-bottom:20px">
+      <button class="sched-sec-btn active" data-ledger-tab="summary">📊 Summary</button>
+      <button class="sched-sec-btn" data-ledger-tab="coach">👟 Coach Pay</button>
+      <button class="sched-sec-btn" data-ledger-tab="expenses">🧾 Expenses</button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         SUMMARY TAB
+         ════════════════════════════════════════════════════════════════════ -->
+    <div id="ledger-tab-summary">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <p style="margin:0;font-size:0.9rem;color:var(--light-text)">Budget vs. actuals for the selected season, grouped by team and category.</p>
+        <button type="button" class="btn print-btn" id="addBudgetBtn" style="font-size:0.82rem;padding:5px 12px">+ Set Budget</button>
+      </div>
+      <div id="summaryTableWrap">
+        <p style="color:var(--light-text)">Loading…</p>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         COACH PAY TAB
+         ════════════════════════════════════════════════════════════════════ -->
+    <div id="ledger-tab-coach" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <p style="margin:0;font-size:0.9rem;color:var(--light-text)">Seasonal stipends for coaches. One record per coach per season.</p>
+        <button type="button" class="btn print-btn" id="generateCoachPayBtn" style="font-size:0.82rem;padding:5px 12px">⚙ Generate Records</button>
+      </div>
+      <div id="coachPayTableWrap">
+        <p style="color:var(--light-text)">Loading…</p>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         EXPENSES TAB
+         ════════════════════════════════════════════════════════════════════ -->
+    <div id="ledger-tab-expenses" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <p style="margin:0;font-size:0.9rem;color:var(--light-text)">Track organizational expenses by team and category.</p>
+        <button type="button" class="btn" id="addExpenseBtn" style="font-size:0.82rem;padding:5px 12px">+ Add Expense</button>
+      </div>
+      <div id="expenseTableWrap">
+        <p style="color:var(--light-text)">Loading…</p>
+      </div>
+    </div>
+
+  </div><!-- /#adminContent -->
+
+  <!-- Not-admin fallback -->
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <!-- ── Mark Paid / Check Number Modal ────────────────────────────────────── -->
+  <div id="ledgerMarkPaidModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);overflow-y:auto">
+    <div style="background:var(--container);border-radius:10px;padding:24px;max-width:400px;margin:120px auto;position:relative">
+      <h3 style="margin:0 0 6px">Mark as Paid</h3>
+      <p id="ledgerMarkPaidContextLabel" style="color:var(--light-text);font-size:0.85rem;margin:0 0 16px"></p>
+      <div class="form-group" style="margin-bottom:18px">
+        <label for="ledgerMarkPaidCheckNumber">Check Number <span style="font-weight:normal;color:var(--light-text)">(optional)</span></label>
+        <input type="text" id="ledgerMarkPaidCheckNumber" placeholder="e.g. 1042"
+          style="width:100%;padding:9px 12px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:1rem;box-sizing:border-box" />
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button type="button" id="ledgerMarkPaidConfirmBtn" class="btn" style="padding:9px 20px">Mark Paid</button>
+        <button type="button" id="ledgerMarkPaidCancelBtn" class="btn print-btn" style="padding:9px 16px">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Add / Edit Expense Modal ──────────────────────────────────────────── -->
+  <div id="expenseModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);overflow-y:auto">
+    <div style="background:var(--container);border-radius:10px;padding:24px;max-width:500px;margin:60px auto;position:relative">
+      <h3 id="expenseModalTitle" style="margin:0 0 18px">Add Expense</h3>
+      <input type="hidden" id="expenseEditId" />
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="expenseDate">Date</label>
+          <input type="date" id="expenseDate" required />
+        </div>
+        <div class="form-group">
+          <label for="expenseAmount">Amount ($)</label>
+          <input type="number" id="expenseAmount" min="0" step="0.01" placeholder="0.00" required />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="expenseTeam">Team</label>
+          <select id="expenseTeam" style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem">
+            <option value="">Org-Wide</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="expenseCategory">Category</label>
+          <select id="expenseCategory" required style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem">
+            <option value="">— Select —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px">
+        <label for="expenseDescription">Description</label>
+        <input type="text" id="expenseDescription" placeholder="e.g. Game balls × 3 dozen" maxlength="200" />
+      </div>
+
+      <div class="form-group" style="margin-bottom:18px">
+        <label for="expenseNotes">Notes <span style="font-weight:normal;color:var(--light-text)">(optional)</span></label>
+        <textarea id="expenseNotes" rows="2"
+          style="width:100%;padding:8px 10px;background:var(--field);color:#eee;border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.9rem;box-sizing:border-box;resize:vertical"></textarea>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button type="button" id="expenseModalSaveBtn" class="btn" style="padding:9px 20px">Add Expense</button>
+        <button type="button" id="expenseModalCancelBtn" class="btn print-btn" style="padding:9px 16px">Cancel</button>
+        <p id="expenseModalMsg" class="signup-message" style="margin:0;flex:1"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Set Budget Modal ───────────────────────────────────────────────────── -->
+  <div id="budgetModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);overflow-y:auto">
+    <div style="background:var(--container);border-radius:10px;padding:24px;max-width:420px;margin:120px auto;position:relative">
+      <h3 style="margin:0 0 18px">Set Budget</h3>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="budgetTeam">Team</label>
+          <select id="budgetTeam" style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem">
+            <option value="">Org-Wide</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="budgetCategory">Category</label>
+          <select id="budgetCategory" style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:0.9rem">
+            <option value="">— Select —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group form-group--sm">
+          <label for="budgetAmount">Budget ($)</label>
+          <input type="number" id="budgetAmount" min="0" step="1" placeholder="500" />
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+        <button type="button" id="budgetModalSaveBtn" class="btn" style="padding:9px 20px">Save Budget</button>
+        <button type="button" id="budgetModalCancelBtn" class="btn print-btn" style="padding:9px 16px">Cancel</button>
+        <p id="budgetModalMsg" class="signup-message" style="margin:0;flex:1"></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>
+      Questions? Post in <a href="https://join.slack.com/t/trivalleybase-tfa3350/shared_invite/zt-3ww1egxv7-rS61yDq0LX_Jfhyr5TrlUA" target="_blank">Umpire Slack</a>
+      | <span data-org-text="coordinatorName">Jeff Althoff</span>: <span data-org-text="coordinatorPhone">605-380-0229</span>
+    </p>
+  </div>
+
+  <script type="module" src="auth.js?v=28"></script>
+  <script type="module" src="admin-ledger.js?v=4"></script>
+  <script type="module" src="/pwa.js?v=6"></script>
+  <script type="module" src="/tabs.js?v=6"></script>
+  <script type="module" src="nav.js?v=14"></script>
+</body>
+</html>

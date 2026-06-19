@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>8U Tournament Import — One-Time Tool</title>
+  <link rel="stylesheet" href="styles.css?v=18" />
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Tri-Valley Baseball" class="logo" />
+    <h1>Admin Panel</h1>
+  </div>
+
+  <div class="container" id="appContent" style="display:none">
+    <nav class="admin-subnav">
+      <a href="admin.html">📋 Overview</a>
+      <a href="admin-tournament.html">🏆 Tournaments</a>
+    </nav>
+
+    <h2>8U Conference End-of-Year Tournament Import</h2>
+    <div class="document-note" style="border-left-color:#ffd966">
+      <p><strong>⚠ One-time import tool.</strong> This page creates the 2026 8U End-of-Year Tournament
+      (June 20–21, Minndak) with all three brackets as a single tournament in Firestore.
+      Each game gets one Field umpire slot at $25.<br><br>
+      <strong>Delete this file from your project after running.</strong></p>
+    </div>
+
+    <div id="facilitySection" style="margin:20px 0;padding:16px;background:#1a1a1a;border-radius:8px;border:1px solid #444">
+      <p style="margin:0 0 10px;color:var(--light-text);font-size:0.9rem">
+        Select the facility where the tournament is held (optional — you can set this later via admin-games):
+      </p>
+      <select id="facilitySelect"
+        style="width:100%;max-width:400px;padding:8px 10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px">
+        <option value="">— Leave blank (set later) —</option>
+      </select>
+      <p id="facilityStatus" style="color:var(--light-text);font-size:0.82rem;margin:6px 0 0"></p>
+    </div>
+
+    <div style="margin:20px 0">
+      <button id="importBtn" class="btn" style="font-size:1rem;padding:10px 28px">
+        🏆 Import Tournament + All Games
+      </button>
+      <button id="dryRunBtn" class="btn print-btn" style="font-size:1rem;padding:10px 28px;margin-left:12px">
+        Preview (Dry Run)
+      </button>
+    </div>
+
+    <pre id="log"
+      style="background:#111;border:1px solid #333;border-radius:8px;padding:16px;font-size:0.82rem;
+             color:#b8f2c4;white-space:pre-wrap;max-height:500px;overflow-y:auto;min-height:80px">
+Ready. Click "Preview" to review all games, or "Import" to write to Firestore.
+    </pre>
+  </div>
+
+  <div class="container" id="noAccess" style="display:none">
+    <div class="document-note">
+      <p>You do not have administrator access. <a href="index.html">Return to home.</a></p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { db }          from "./firebase.js";
+    import { authReadyPromise, isAdmin } from "./auth.js";
+    import {
+      collection, addDoc, doc, writeBatch, serverTimestamp, getDocs
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    // ── Auth gate ──────────────────────────────────────────────────────────────
+    await authReadyPromise;
+    if (!isAdmin()) {
+      document.getElementById("appContent").style.display = "none";
+      document.getElementById("noAccess").style.display = "";
+    } else {
+      document.getElementById("appContent").style.display = "";
+      init();
+    }
+
+    // ── Tournament data ────────────────────────────────────────────────────────
+
+    const SAT = "2026-06-20";
+    const SUN = "2026-06-21";
+
+    // [date, time24hr, bracket, gameNum, ifNecessary]
+    const GAMES = [
+      // ─ Bracket 1 ─
+      [SAT, "08:00", "Bracket 1", 1, false],
+      [SAT, "09:15", "Bracket 1", 2, false],
+      [SAT, "10:30", "Bracket 1", 3, false],
+      [SAT, "11:45", "Bracket 1", 4, false],
+      [SAT, "13:00", "Bracket 1", 5, false],
+      [SAT, "14:15", "Bracket 1", 6, false],
+      [SAT, "15:30", "Bracket 1", 7, false],
+      [SAT, "16:45", "Bracket 1", 8, false],
+      [SAT, "18:00", "Bracket 1", 9, false],
+      [SUN, "08:00", "Bracket 1", 10, false],
+      [SUN, "09:15", "Bracket 1", 11, false],
+      [SUN, "10:30", "Bracket 1", 12, false],
+      [SUN, "11:45", "Bracket 1", 13, false],
+      [SUN, "13:00", "Bracket 1", 14, false],
+      [SUN, "14:15", "Bracket 1", 15, true],  // if necessary
+      // ─ Bracket 2 ─
+      [SAT, "08:00", "Bracket 2", 1, false],
+      [SAT, "09:15", "Bracket 2", 2, false],
+      [SAT, "10:30", "Bracket 2", 3, false],
+      [SAT, "11:45", "Bracket 2", 4, false],
+      [SAT, "13:00", "Bracket 2", 5, false],
+      [SAT, "14:15", "Bracket 2", 6, false],
+      [SAT, "15:30", "Bracket 2", 7, false],
+      [SAT, "16:45", "Bracket 2", 8, false],
+      [SAT, "18:00", "Bracket 2", 9, false],
+      [SUN, "08:00", "Bracket 2", 10, false],
+      [SUN, "09:15", "Bracket 2", 11, false],
+      [SUN, "10:30", "Bracket 2", 12, false],
+      [SUN, "11:45", "Bracket 2", 13, false],
+      [SUN, "13:00", "Bracket 2", 14, false],
+      [SUN, "14:15", "Bracket 2", 15, true],  // if necessary
+      // ─ Bracket 3 (9-team bracket) ─
+      [SAT, "08:00", "Bracket 3", 1, false],
+      [SAT, "09:15", "Bracket 3", 2, false],
+      [SAT, "10:30", "Bracket 3", 3, false],
+      [SAT, "11:45", "Bracket 3", 4, false],
+      [SAT, "13:00", "Bracket 3", 5, false],
+      [SAT, "14:15", "Bracket 3", 6, false],
+      [SAT, "15:30", "Bracket 3", 7, false],
+      [SAT, "16:45", "Bracket 3", 8, false],
+      [SAT, "18:00", "Bracket 3", 9, false],
+      [SUN, "08:00", "Bracket 3", 10, false],
+      [SUN, "09:15", "Bracket 3", 11, false],
+      [SUN, "10:30", "Bracket 3", 12, false],
+      [SUN, "11:45", "Bracket 3", 13, false],
+      [SUN, "13:00", "Bracket 3", 14, false],
+      [SUN, "14:15", "Bracket 3", 15, false],
+      [SUN, "15:30", "Bracket 3", 16, false],
+      [SUN, "16:45", "Bracket 3", 17, true],  // if necessary
+    ];
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+
+    async function init() {
+      // Load facilities
+      const facSel = document.getElementById("facilitySelect");
+      const facStatus = document.getElementById("facilityStatus");
+      try {
+        const snap = await getDocs(collection(db, "facilities"));
+        snap.forEach(d => {
+          const opt = document.createElement("option");
+          opt.value = d.id;
+          opt.textContent = d.data().name || d.id;
+          facSel.appendChild(opt);
+        });
+        facStatus.textContent = `${snap.size} facilities loaded.`;
+      } catch (err) {
+        facStatus.textContent = "Could not load facilities: " + err.message;
+      }
+
+      document.getElementById("dryRunBtn").addEventListener("click", dryRun);
+      document.getElementById("importBtn").addEventListener("click", runImport);
+    }
+
+    function log(msg, color) {
+      const el = document.getElementById("log");
+      el.textContent += "\n" + msg;
+      if (color) el.style.color = color;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function clearLog() {
+      document.getElementById("log").textContent = "";
+    }
+
+    // ── Dry run ────────────────────────────────────────────────────────────────
+
+    function dryRun() {
+      clearLog();
+      log("=== DRY RUN — nothing will be written ===\n");
+      log(`TOURNAMENT: "2026 8U End-of-Year Tournament"`);
+      log(`  Date: ${SAT}  |  Division: 8U  |  League: Minndak\n`);
+      log(`GAMES (${GAMES.length} total):`);
+
+      let sat = 0, sun = 0, ifNec = 0;
+      for (const [date, time, bracket, gameNum, ifNecessary] of GAMES) {
+        const flag = ifNecessary ? " [IF NECESSARY]" : "";
+        log(`  ${date} ${time}  ${bracket}  Game ${gameNum}  $25 Field${flag}`);
+        if (date === SAT) sat++; else sun++;
+        if (ifNecessary) ifNec++;
+      }
+
+      log(`\nSummary:`);
+      log(`  Saturday games: ${sat}`);
+      log(`  Sunday games:   ${sun}`);
+      log(`  If-necessary:   ${ifNec}`);
+      log(`  Total games:    ${GAMES.length}`);
+      log(`  Umpire slots:   ${GAMES.length} × Field @ $25`);
+      log(`\nAll clear — click "Import Tournament + All Games" to write to Firestore.`);
+    }
+
+    // ── Import ─────────────────────────────────────────────────────────────────
+
+    async function runImport() {
+      const btn = document.getElementById("importBtn");
+      if (!confirm(`This will write 1 tournament + ${GAMES.length} games to Firestore.\n\nProceed?`)) return;
+
+      btn.disabled = true;
+      clearLog();
+      log("Starting import…\n");
+
+      const facilityId = document.getElementById("facilitySelect").value || "";
+
+      try {
+        // 1. Create tournament
+        log("Creating tournament document…");
+        const tournamentRef = await addDoc(collection(db, "tournaments"), {
+          name:             "2026 8U End-of-Year Tournament",
+          date:             SAT,
+          location:         "",
+          division:         "8U",
+          fields:           ["Bracket 1", "Bracket 2", "Bracket 3"],
+          notes:            "Three-bracket double-elimination tournament. June 20–21, 2026.",
+          status:           "scheduled",
+          rainDelayMinutes: 0,
+          originalTimes:    {},
+          createdAt:        serverTimestamp(),
+        });
+        log(`✓ Tournament created: ${tournamentRef.id}`);
+
+        // 2. Create games in batches of 20 (Firestore batch limit is 500 but keep it manageable)
+        const tournamentId = tournamentRef.id;
+        const BATCH_SIZE   = 20;
+        let created        = 0;
+
+        for (let i = 0; i < GAMES.length; i += BATCH_SIZE) {
+          const batch   = writeBatch(db);
+          const chunk   = GAMES.slice(i, i + BATCH_SIZE);
+
+          for (const [date, time, bracket, gameNum, ifNecessary] of chunk) {
+            const gameRef = doc(collection(db, "games"));
+            batch.set(gameRef, {
+              league:       "Minndak",
+              city:         "",
+              division:     "8U",
+              date,
+              time,
+              type:         "tournament",
+              field:        bracket,
+              facilityId,
+              homeTeam:     "",
+              awayTeam:     "",
+              isAway:       false,
+              notes:        ifNecessary
+                              ? `${bracket} - Game ${gameNum} (if necessary)`
+                              : `${bracket} - Game ${gameNum}`,
+              cancelled:    false,
+              tournamentId,
+              needsUmpires: true,
+              umpireSlots:  [{
+                type:         "Field",
+                payRate:      25,
+                assignedUid:  null,
+                assignedName: null,
+                paid:         false,
+                checkedIn:    false,
+                checkedInAt:  null,
+                noShow:       false,
+              }],
+              createdAt:    serverTimestamp(),
+            });
+            created++;
+          }
+
+          await batch.commit();
+          log(`  ✓ Committed ${Math.min(i + BATCH_SIZE, GAMES.length)}/${GAMES.length} games…`);
+        }
+
+        log(`\n✅ Done! Tournament + ${created} games created successfully.`);
+        log(`\nNext steps:`);
+        log(`  1. Go to admin-tournament.html to view and manage the tournament.`);
+        log(`  2. Use admin-games.html to set the correct facility on each game if needed.`);
+        log(`  3. Use admin-scheduler.html to assign umpires.`);
+        log(`  4. Delete this import page (admin-tournament-import.html) from your project.`);
+        document.getElementById("log").style.color = "#b8f2c4";
+
+      } catch (err) {
+        log(`\n❌ Error: ${err.message}`);
+        document.getElementById("log").style.color = "#ffb4b4";
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+  <script type="module" src="auth.js?v=28"></script>
+  <script type="module" src="nav.js?v=14"></script>
+</body>
+</html>

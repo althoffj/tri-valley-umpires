@@ -91,6 +91,7 @@ onAuthStateChanged(auth, async (user) => {
 export function isLoggedIn()   { return currentUser !== null; }
 export function isApproved()   { return (currentProfile?.approved === true && currentProfile?.active !== false) || currentIsAdmin; }
 export function isAdmin()      { return currentIsAdmin; }
+export function hasRole(key)   { return currentIsAdmin && (isSuperAdmin() || (currentAdminDoc?.roles || []).includes(key)); }
 export function isSuperAdmin() {
   if (!currentIsAdmin) return false;
   if (currentAdminDoc?.superAdmin === true)  return true;

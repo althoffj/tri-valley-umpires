@@ -6,8 +6,8 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Admin: Tournaments - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
+  <link rel="stylesheet" href="styles.css?v=18" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com https://docs.google.com; script-src-elem 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com https://cdnjs.cloudflare.com;">
 </head>
 <body>
   <div class="header">
@@ -20,81 +20,113 @@
   <div class="container" id="adminContent" style="display:none">
 
     <nav class="admin-subnav">
-      <a href="admin.html">Overview</a>
-      <a href="admin-games.html">Games</a>
-      <a href="admin-scheduler.html">Scheduler</a>
-      <a href="admin-teams.html">Teams</a>
-      <a href="admin-tournament.html" class="admin-subnav-active">Tournaments</a>
-      <a href="admin-payroll.html">Payroll</a>
-      <a href="admin-facilities.html">Facilities</a>
-      <a href="admin-sponsors.html">Sponsors</a>
-      <a href="admin-callup.html">Call-Ups</a>
-      <a href="admin-incidents.html">Incidents</a>
-      <a href="admin-alerts.html">Alerts</a>
-      <a href="admin-config.html">Config</a>
-      <a href="admin-analytics.html">Analytics</a>
-      <a href="admin-users.html">Users</a>
+      <a href="admin.html">📋 Overview</a>
+      <a href="admin-games.html">⚾ Games</a>
+      <a href="admin-scheduler.html">📅 Scheduler</a>
+      <a href="admin-teams.html">👕 Teams</a>
+      <a href="admin-tournament.html" class="admin-subnav-active">🏆 Tournaments</a>
+      <a href="admin-payroll.html">💵 Payroll</a>
+      <a href="admin-ledger.html">📒 Ledger</a>
+      <a href="admin-facilities.html">📍 Facilities</a>
+      <a href="admin-sponsors.html">🤝 Sponsors</a>
+      <a href="admin-callup.html">📣 Call-Ups</a>
+      <a href="admin-incidents.html">⚠️ Incidents</a>
+      <a href="admin-alerts.html">🔔 Alerts</a>
+      <a href="admin-config.html">⚙️ Config</a>
+      <a href="admin-analytics.html">📊 Analytics</a>
+      <a href="admin-users.html">👤 Users</a>
     </nav>
 
-    <!-- ── Create Tournament ─────────────────────────────────────────────────── -->
-    <h2>Create Tournament</h2>
-    <div class="document-note">
-      <p>Tournaments group related games so you can manage rain delays and umpire field swaps in bulk. Games are linked to a tournament after creation — any existing game can be added.</p>
-    </div>
-    <form id="createTournamentForm" class="signup-form">
-      <div class="form-row">
-        <div class="form-group">
-          <label for="tName">Tournament Name</label>
-          <input type="text" id="tName" placeholder="e.g. Crooks 10U Spring Tournament" required />
-        </div>
-        <div class="form-group">
-          <label for="tDate">Date</label>
-          <input type="date" id="tDate" required />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="tLocation">Location</label>
-          <input type="text" id="tLocation" placeholder="e.g. Crooks, SD — Heikkila Park" />
-        </div>
-        <div class="form-group">
-          <label for="tDivision">Division</label>
-          <select id="tDivision">
-            <option value="">-- All / Multiple --</option>
-            <option value="10U">10U</option>
-            <option value="12U">12U</option>
-            <option value="14U">14U</option>
-            <option value="HS JV">HS JV</option>
-            <option value="HS Varsity">HS Varsity</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="tFields">Fields <span style="color:var(--light-text);font-weight:normal">(comma-separated)</span></label>
-          <input type="text" id="tFields" placeholder="e.g. Field 1, Field 2, Field 3" />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="tNotes">Notes <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
-          <textarea id="tNotes" rows="2"
-            placeholder="e.g. Bring extra baseballs. Parking on north side."
-            style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
-        </div>
-      </div>
-      <div class="page-actions" style="margin-top:12px">
-        <button type="submit" class="btn">Create Tournament</button>
-      </div>
-      <p id="createTournamentMsg" class="signup-message" aria-live="polite"></p>
-    </form>
-
-    <!-- ── Tournament List ───────────────────────────────────────────────────── -->
-    <h2>All Tournaments</h2>
-    <div id="tournamentList">
-      <p style="color:var(--light-text)">Loading…</p>
+    <!-- ── Section tabs ──────────────────────────────────────────────────────── -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;border-bottom:1px solid #333;padding-bottom:12px">
+      <button class="sched-sec-btn" data-tourn="manage">📋 Manage Tournaments</button>
+      <button class="sched-sec-btn" data-tourn="create">➕ Create Tournament</button>
     </div>
 
+    <!-- ── Manage Tournaments tab ────────────────────────────────────────────── -->
+    <div id="tourn-tab-manage">
+      <div id="tournamentList">
+        <p style="color:var(--light-text)">Loading…</p>
+      </div>
+    </div>
+
+    <!-- ── Create Tournament tab ─────────────────────────────────────────────── -->
+    <div id="tourn-tab-create" style="display:none">
+      <h2>Create Tournament</h2>
+      <div class="document-note">
+        <p>Tournaments group related games so you can manage rain delays and umpire field swaps in bulk. Games are linked to a tournament after creation — any existing game can be added.</p>
+      </div>
+      <form id="createTournamentForm" class="signup-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tName">Tournament Name</label>
+            <input type="text" id="tName" placeholder="e.g. Crooks 10U Spring Tournament" required />
+          </div>
+          <div class="form-group">
+            <label for="tDate">Date</label>
+            <input type="date" id="tDate" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tLocation">Location</label>
+            <input type="text" id="tLocation" placeholder="e.g. Crooks, SD — Heikkila Park" />
+          </div>
+          <div class="form-group">
+            <label for="tDivision">Division</label>
+            <select id="tDivision">
+              <option value="">-- All / Multiple --</option>
+              <option value="10U">10U</option>
+              <option value="12U">12U</option>
+              <option value="14U">14U</option>
+              <option value="HS JV">HS JV</option>
+              <option value="HS Varsity">HS Varsity</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tFields">Fields <span style="color:var(--light-text);font-weight:normal">(comma-separated)</span></label>
+            <input type="text" id="tFields" placeholder="e.g. Field 1, Field 2, Field 3" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tNotes">Notes <span style="color:var(--light-text);font-weight:normal">(optional)</span></label>
+            <textarea id="tNotes" rows="2"
+              placeholder="e.g. Bring extra baseballs. Parking on north side."
+              style="width:100%;padding:10px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-family:inherit;font-size:0.95rem;box-sizing:border-box;resize:vertical"></textarea>
+          </div>
+        </div>
+        <div class="page-actions" style="margin-top:12px">
+          <button type="submit" class="btn">Create Tournament</button>
+        </div>
+        <p id="createTournamentMsg" class="signup-message" aria-live="polite"></p>
+      </form>
+    </div>
+
+  </div>
+
+  <!-- Umpire Assign Modal -->
+  <div id="tmAssignModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);
+       z-index:9000;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#1a1a1a;border:1px solid #444;border-radius:10px;width:100%;
+                max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:14px 16px;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:bold;color:white">Assign Umpire</div>
+          <div id="tmAssignLabel" style="font-size:0.82rem;color:var(--light-text);margin-top:2px"></div>
+        </div>
+        <button id="tmAssignCloseBtn" style="background:transparent;border:none;color:#aaa;font-size:1.3rem;cursor:pointer;padding:4px 8px">✕</button>
+      </div>
+      <div style="padding:10px 12px;border-bottom:1px solid #333">
+        <input id="tmAssignSearch" type="text" placeholder="Search umpires…"
+          style="width:100%;padding:8px 10px;background:var(--field);color:var(--text);
+                 border:1px solid #555;border-radius:6px;font-size:0.92rem;box-sizing:border-box" />
+      </div>
+      <div id="tmAssignList" style="overflow-y:auto;flex:1"></div>
+      <p id="tmAssignMsg" class="signup-message" style="margin:6px 12px;min-height:0"></p>
+    </div>
   </div>
 
   <!-- Not-admin fallback -->
@@ -112,10 +144,10 @@
     </p>
   </div>
 
-  <script type="module" src="auth.js?v=27"></script>
-  <script type="module" src="admin-tournament.js?v=4"></script>
+  <script type="module" src="auth.js?v=28"></script>
+  <script type="module" src="admin-tournament.js?v=21"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=6"></script>
-  <script type="module" src="nav.js?v=9"></script>
+  <script type="module" src="nav.js?v=14"></script>
 </body>
 </html>

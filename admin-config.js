@@ -225,8 +225,9 @@ document.querySelectorAll(".sched-sec-btn[data-cfg]").forEach(btn => {
     document.querySelectorAll(".sched-sec-btn[data-cfg]").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     const tab = btn.dataset.cfg;
-    document.getElementById("cfg-tab-org").style.display   = tab === "org"   ? "" : "none";
-    document.getElementById("cfg-tab-comms").style.display = tab === "comms" ? "" : "none";
+    document.getElementById("cfg-tab-org").style.display    = tab === "org"    ? "" : "none";
+    document.getElementById("cfg-tab-comms").style.display  = tab === "comms"  ? "" : "none";
+    document.getElementById("cfg-tab-ledger").style.display = tab === "ledger" ? "" : "none";
   });
 });
 
@@ -313,6 +314,116 @@ document.getElementById("addDivRepBtn")?.addEventListener("click", () => {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+// ── Expense Category Tag Editor ───────────────────────────────────────────────
+
+const DEFAULT_EXPENSE_CATEGORIES = [
+  "Tournament Fees", "Balls", "State Tournament Fees", "Umpire Fees",
+  "Field Use Fees", "Misc Equipment", "Senior Night", "Umpire Gear", "Chalk",
+];
+
+function makeExpenseCategoryTag(label) {
+  const chip = document.createElement("span");
+  chip.dataset.value = label;
+  chip.className = "div-chip";
+  chip.style.cssText = "display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:#1e3a2a;color:#86efac;border:1px solid #2a5a3a;border-radius:20px;font-size:0.88rem;white-space:nowrap";
+  chip.innerHTML = esc(label) + ' <button type="button" title="Remove" style="background:none;border:none;color:#86efac;cursor:pointer;padding:0;font-size:1.1rem;line-height:1;opacity:0.75">×</button>';
+  chip.querySelector("button").addEventListener("click", () => chip.remove());
+  return chip;
+}
+
+function renderExpenseCategoryTags(labels = []) {
+  const list = document.getElementById("expenseCategoryTagList");
+  if (!list) return;
+  list.innerHTML = "";
+  labels.forEach(l => list.appendChild(makeExpenseCategoryTag(l)));
+}
+
+function addExpenseCategoryFromInput() {
+  const input = document.getElementById("newExpenseCategoryInput");
+  const val = input.value.trim();
+  if (!val) return;
+  const existing = [...document.querySelectorAll("#expenseCategoryTagList .div-chip")].map(c => c.dataset.value);
+  if (existing.map(v => v.toLowerCase()).includes(val.toLowerCase())) { input.value = ""; input.focus(); return; }
+  document.getElementById("expenseCategoryTagList").appendChild(makeExpenseCategoryTag(val));
+  input.value = "";
+  input.focus();
+}
+
+async function loadExpenseCategories() {
+  try {
+    const snap = await getDoc(doc(db, "config", "expenseConfig"));
+    if (snap.exists() && Array.isArray(snap.data().categories)) {
+      renderExpenseCategoryTags(snap.data().categories.map(c => c.label));
+    } else {
+      renderExpenseCategoryTags(DEFAULT_EXPENSE_CATEGORIES);
+    }
+  } catch (_) {
+    renderExpenseCategoryTags(DEFAULT_EXPENSE_CATEGORIES);
+  }
+}
+
+async function saveExpenseCategories() {
+  const btn = document.getElementById("saveExpenseCategoriesBtn");
+  btn.disabled = true;
+  setMsg("expenseCategoriesMsg", "Saving…", "info");
+  try {
+    const labels = [...document.querySelectorAll("#expenseCategoryTagList .div-chip")].map(c => c.dataset.value);
+    const categories = labels.map(label => ({
+      id: label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""),
+      label,
+    }));
+    await setDoc(doc(db, "config", "expenseConfig"), { categories });
+    setMsg("expenseCategoriesMsg", "Saved.", "success");
+  } catch (err) {
+    setMsg("expenseCategoriesMsg", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("addExpenseCategoryBtn")?.addEventListener("click", addExpenseCategoryFromInput);
+document.getElementById("newExpenseCategoryInput")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); addExpenseCategoryFromInput(); }
+});
+document.getElementById("saveExpenseCategoriesBtn")?.addEventListener("click", saveExpenseCategories);
+
+// ── Coach Pay Rates ───────────────────────────────────────────────────────────
+
+async function loadCoachPayRates() {
+  try {
+    const snap = await getDoc(doc(db, "config", "coachPayRates"));
+    const r = snap.exists() ? snap.data() : {};
+    document.getElementById("coachRateHeadBase").value     = r.head?.base     ?? "";
+    document.getElementById("coachRateHeadPerYear").value  = r.head?.perYear  ?? "";
+    document.getElementById("coachRateAsstBase").value     = r.assistant?.base    ?? "";
+    document.getElementById("coachRateAsstPerYear").value  = r.assistant?.perYear ?? "";
+  } catch (_) {}
+}
+
+async function saveCoachPayRates() {
+  const btn = document.getElementById("saveCoachPayRatesBtn");
+  btn.disabled = true;
+  setMsg("coachPayRatesMsg", "Saving…", "info");
+  try {
+    const data = {
+      head:      { base: parseFloat(document.getElementById("coachRateHeadBase").value)    || 0,
+                   perYear: parseFloat(document.getElementById("coachRateHeadPerYear").value) || 0 },
+      assistant: { base: parseFloat(document.getElementById("coachRateAsstBase").value)    || 0,
+                   perYear: parseFloat(document.getElementById("coachRateAsstPerYear").value) || 0 },
+    };
+    await setDoc(doc(db, "config", "coachPayRates"), data);
+    setMsg("coachPayRatesMsg", "Saved.", "success");
+  } catch (err) {
+    setMsg("coachPayRatesMsg", err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("saveCoachPayRatesBtn")?.addEventListener("click", saveCoachPayRates);
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 authReadyPromise.then(() => {
   if (!isAdmin()) {
     document.getElementById("adminContent").style.display = "none";
@@ -323,6 +434,8 @@ authReadyPromise.then(() => {
   document.getElementById("noAccess").style.display = "none";
 
   loadOrgSettings();
+  loadCoachPayRates();
+  loadExpenseCategories();
 
   // Slack webhook config is restricted to super admins
   if (isSuperAdmin()) {

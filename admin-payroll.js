@@ -24,6 +24,9 @@ let payrollUmpireFilter = "";  // uid of selected umpire, "" = all
 let manualPayEntries  = [];
 let divisionPayRates  = {};   // { "10U": 40, "12U": 45, ... }
 let umpireList        = [];   // [{ uid, name }] for the umpire dropdown
+let selectedRowKeys   = new Set(); // "gameId|slotType|uid" keys for bulk print
+let activePayrollTab  = "detail"; // "detail" | "checks"
+let checkRegisterFilter = "all";  // "all" | "outstanding" | "cleared"
 
 // ── Load ──────────────────────────────────────────────────────────────────────
 
@@ -73,6 +76,7 @@ async function loadPayroll() {
           noShow:       slot.noShow       === true,
           checkNumber:  slot.checkNumber  || "",
           checkCleared: slot.checkCleared === true,
+          paidDate:     slot.paidDate     || "",
         });
       });
     });
@@ -156,9 +160,9 @@ function renderSummary() {
           </div>
           <div style="display:flex;flex-direction:column;gap:6px">
             ${!allPaid ? `
-              <button class="btn mark-all-paid-btn" data-uid="${esc(uid)}"
+              <button class="btn cut-payment-btn" data-uid="${esc(uid)}"
                 style="font-size:0.78rem;padding:4px 12px;width:100%">
-                Mark All Paid (${unpaidCount})
+                ✂ Cut Payment
               </button>` : ""}
             <button class="btn print-btn pay-stub-btn" data-uid="${esc(uid)}"
               style="font-size:0.78rem;padding:4px 12px;width:100%">
@@ -183,8 +187,8 @@ function renderSummary() {
       renderAll();
     });
   });
-  el.querySelectorAll(".mark-all-paid-btn").forEach(btn => {
-    btn.addEventListener("click", () => openPayAllModal(btn.dataset.uid));
+  el.querySelectorAll(".cut-payment-btn").forEach(btn => {
+    btn.addEventListener("click", () => openCutPaymentModal(btn.dataset.uid));
   });
   el.querySelectorAll(".pay-stub-btn").forEach(btn => {
     btn.addEventListener("click", () => generatePayStub(btn.dataset.uid));
@@ -284,7 +288,7 @@ async function markAllPaid(uid, checkNumber = "") {
       const slots = (snap.data().umpireSlots ?? []).map(s => {
         const match = gameRows.find(r => r.slotType === s.type && r.uid === s.assignedUid);
         if (!match) return s;
-        const updated = { ...s, paid: true };
+        const updated = { ...s, paid: true, paidDate: todayISO() };
         if (checkNumber) updated.checkNumber = checkNumber; else delete updated.checkNumber;
         return updated;
       });
@@ -293,7 +297,7 @@ async function markAllPaid(uid, checkNumber = "") {
     await batch.commit();
 
     // Update local state
-    rows.forEach(r => { r.paid = true; r.checkNumber = checkNumber; });
+    rows.forEach(r => { r.paid = true; r.checkNumber = checkNumber; r.paidDate = todayISO(); });
     renderAll();
   } catch (err) {
     console.error(err);
@@ -346,12 +350,20 @@ function renderDetailTable() {
   }
 
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="color:var(--light-text);text-align:center">No payroll records for this period.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="color:var(--light-text);text-align:center">No payroll records for this period.</td></tr>';
+    updateBulkPrintBtn();
     return;
   }
 
-  // Update header column count
+  // Ensure thead has checkbox + check-in columns (idempotent)
   const thead = document.querySelector("#payrollTable thead tr");
+  if (thead && !thead.querySelector("th[data-cb-col]")) {
+    const cbTh = document.createElement("th");
+    cbTh.setAttribute("data-cb-col", "1");
+    cbTh.style.width = "32px";
+    cbTh.innerHTML = `<input type="checkbox" id="payrollSelectAll" title="Select all" style="cursor:pointer" />`;
+    thead.prepend(cbTh);
+  }
   if (thead && !thead.querySelector("th[data-checkin-col]")) {
     const slotTh = [...thead.querySelectorAll("th")].find(th => th.textContent === "Slot");
     if (slotTh) {
@@ -362,9 +374,17 @@ function renderDetailTable() {
     }
   }
 
+  // Prune selectedRowKeys to only keys still visible
+  const visibleKeys = new Set(
+    rows.filter(r => !r.noShow).map(r => `${r.gameId}|${r.slotType}|${r.uid}`)
+  );
+  for (const k of [...selectedRowKeys]) { if (!visibleKeys.has(k)) selectedRowKeys.delete(k); }
+
   tbody.innerHTML = rows.map(r => {
+    const rowKey = `${r.gameId}|${r.slotType}|${r.uid}`;
     if (r.noShow) {
       return `<tr style="opacity:0.5">
+        <td></td>
         <td>${esc(r.umpireName)}</td>
         <td>${esc(fmtDate(r.date))}</td>
         <td>${esc(r.city)}<br><span style="font-size:0.82rem;color:var(--light-text)">${esc(r.division)}</span></td>
@@ -375,6 +395,7 @@ function renderDetailTable() {
         <td><span class="badge" style="background:#3a1010;color:#ffb4b4">No Show</span></td>
       </tr>`;
     }
+    const isChecked = selectedRowKeys.has(rowKey);
     const checkedInCell = r.checkedIn
       ? `<span style="color:#6fcf97;font-size:0.88rem">✅</span>`
       : `<span style="color:var(--light-text);font-size:0.88rem">—</span>`;
@@ -398,7 +419,10 @@ function renderDetailTable() {
           ${r.checkCleared ? "Unmark Cleared" : "Mark Cleared"}
         </button>`
       : "";
-    return `<tr>
+    return `<tr class="${isChecked ? "payroll-row-selected" : ""}">
+      <td style="text-align:center;padding:4px 8px">
+        <input type="checkbox" class="payroll-row-cb" data-key="${esc(rowKey)}"${isChecked ? " checked" : ""} style="cursor:pointer" />
+      </td>
       <td>${esc(r.umpireName)}</td>
       <td>${esc(fmtDate(r.date))}</td>
       <td>${esc(r.city)}<br><span style="font-size:0.82rem;color:var(--light-text)">${esc(r.division)}</span></td>
@@ -420,7 +444,6 @@ function renderDetailTable() {
       const row = payrollRows.find(r =>
         r.gameId === btn.dataset.gameId && r.slotType === btn.dataset.slotType && r.uid === btn.dataset.uid
       );
-      // Unmarking goes direct; marking paid opens the check number modal
       if (row?.paid) {
         togglePaid(btn.dataset.gameId, btn.dataset.slotType, btn.dataset.uid);
       } else {
@@ -428,6 +451,53 @@ function renderDetailTable() {
       }
     });
   });
+
+  // ── Checkboxes ──
+  tbody.querySelectorAll(".payroll-row-cb").forEach(cb => {
+    cb.addEventListener("change", () => {
+      if (cb.checked) selectedRowKeys.add(cb.dataset.key);
+      else selectedRowKeys.delete(cb.dataset.key);
+      cb.closest("tr")?.classList.toggle("payroll-row-selected", cb.checked);
+      syncSelectAllCheckbox();
+      updateBulkPrintBtn();
+    });
+  });
+
+  // Select-All checkbox
+  const selectAll = document.getElementById("payrollSelectAll");
+  if (selectAll) {
+    selectAll.addEventListener("change", () => {
+      const cbs = tbody.querySelectorAll(".payroll-row-cb");
+      cbs.forEach(cb => {
+        cb.checked = selectAll.checked;
+        if (selectAll.checked) selectedRowKeys.add(cb.dataset.key);
+        else selectedRowKeys.delete(cb.dataset.key);
+        cb.closest("tr")?.classList.toggle("payroll-row-selected", selectAll.checked);
+      });
+      updateBulkPrintBtn();
+    });
+  }
+  syncSelectAllCheckbox();
+  updateBulkPrintBtn();
+}
+
+function syncSelectAllCheckbox() {
+  const selectAll = document.getElementById("payrollSelectAll");
+  if (!selectAll) return;
+  const cbs = [...document.querySelectorAll("#payrollBody .payroll-row-cb")];
+  if (!cbs.length) { selectAll.checked = false; selectAll.indeterminate = false; return; }
+  const checkedCount = cbs.filter(c => c.checked).length;
+  selectAll.checked       = checkedCount === cbs.length;
+  selectAll.indeterminate = checkedCount > 0 && checkedCount < cbs.length;
+}
+
+function updateBulkPrintBtn() {
+  const btn = document.getElementById("bulkPrintSelectedBtn");
+  if (!btn) return;
+  const n = selectedRowKeys.size;
+  btn.textContent = n > 0 ? `🖨 Print Selected (${n})` : "🖨 Print Selected";
+  btn.disabled    = n === 0;
+  btn.style.opacity = n === 0 ? "0.45" : "";
 }
 
 async function togglePaid(gameId, slotType, uid, checkNumber = "") {
@@ -442,10 +512,12 @@ async function togglePaid(gameId, slotType, uid, checkNumber = "") {
           newPaid = !s.paid;
           const updated = { ...s, paid: newPaid };
           if (newPaid) {
+            updated.paidDate = todayISO();
             if (checkNumber) updated.checkNumber = checkNumber; else delete updated.checkNumber;
           } else {
-            delete updated.checkNumber;  // clear check tracking on unmark
+            delete updated.checkNumber;
             delete updated.checkCleared;
+            delete updated.paidDate;
           }
           return updated;
         }
@@ -455,7 +527,7 @@ async function togglePaid(gameId, slotType, uid, checkNumber = "") {
     });
     if (newPaid !== undefined) {
       const row = payrollRows.find(r => r.gameId === gameId && r.slotType === slotType && r.uid === uid);
-      if (row) { row.paid = newPaid; row.checkNumber = newPaid ? checkNumber : ""; if (!newPaid) row.checkCleared = false; }
+      if (row) { row.paid = newPaid; row.checkNumber = newPaid ? checkNumber : ""; row.paidDate = newPaid ? todayISO() : ""; if (!newPaid) row.checkCleared = false; }
       renderAll();
     }
   } catch (err) {
@@ -493,26 +565,225 @@ async function toggleCleared(gameId, slotType, uid) {
   }
 }
 
+// ── Cut Payment modal ─────────────────────────────────────────────────────────
+
+let _cpUid      = "";
+let _cpRows     = [];       // all unpaid non-noShow rows for this umpire
+let _cpSelected = new Set();// rowKeys selected for this payment
+
+function openCutPaymentModal(uid) {
+  _cpUid  = uid;
+  _cpRows = filteredRows().filter(r => r.uid === uid && !r.noShow && !r.paid);
+
+  if (!_cpRows.length) { showToast("No unpaid games for this umpire in the current date range."); return; }
+
+  // Pre-select checked-in games
+  _cpSelected = new Set(_cpRows.filter(r => r.checkedIn).map(cpRowKey));
+
+  const modal   = document.getElementById("cutPaymentModal");
+  const nameEl  = document.getElementById("cpUmpireName");
+  const checkEl = document.getElementById("cpCheckNumber");
+  const msgEl   = document.getElementById("cpMsg");
+  if (!modal) return;
+
+  nameEl.textContent = _cpRows[0]?.umpireName || "";
+  checkEl.value      = "";
+  if (msgEl) { msgEl.textContent = ""; msgEl.className = "signup-message"; }
+
+  renderCutPayList();
+  modal.style.display = "";
+  checkEl.focus();
+}
+
+function cpRowKey(r) { return `${r.gameId}|${r.slotType}|${r.uid}`; }
+
+function renderCutPayList() {
+  const wrap    = document.getElementById("cpGameList");
+  const totalEl = document.getElementById("cpSelectedTotal");
+  if (!wrap) return;
+
+  const sorted = _cpRows.slice().sort((a, b) => a.date < b.date ? -1 : 1);
+
+  wrap.innerHTML = sorted.map(r => {
+    const key       = cpRowKey(r);
+    const checked   = _cpSelected.has(key);
+    const statusTag = r.checkedIn
+      ? `<span style="color:#6fcf97;font-size:0.8rem">✅ Checked In</span>`
+      : `<span style="color:#aaa;font-size:0.8rem">Assigned</span>`;
+    return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:6px;cursor:pointer;
+              background:${checked ? "rgba(96,25,41,0.18)" : "transparent"};
+              border:1px solid ${checked ? "rgba(96,25,41,0.4)" : "#333"};margin-bottom:6px">
+      <input type="checkbox" class="cp-game-cb" data-key="${esc(key)}"${checked ? " checked" : ""}
+        style="flex-shrink:0;width:16px;height:16px;cursor:pointer" />
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.88rem;font-weight:600">${esc(fmtDate(r.date))}
+          <span class="badge badge-${(r.slotType||"").toLowerCase()}" style="font-size:0.7rem;margin-left:4px">${esc(r.slotType)}</span>
+        </div>
+        <div style="font-size:0.78rem;color:var(--light-text)">${esc(r.city || "—")} · ${esc(r.division || "—")}${r.field ? " · " + esc(r.field) : ""}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-weight:600;font-size:0.9rem">$${r.pay.toFixed(2)}</div>
+        <div>${statusTag}</div>
+      </div>
+    </label>`;
+  }).join("");
+
+  wrap.querySelectorAll(".cp-game-cb").forEach(cb => {
+    cb.addEventListener("change", () => {
+      if (cb.checked) _cpSelected.add(cb.dataset.key);
+      else _cpSelected.delete(cb.dataset.key);
+      // Update row background
+      cb.closest("label").style.background = cb.checked ? "rgba(96,25,41,0.18)" : "transparent";
+      cb.closest("label").style.border     = `1px solid ${cb.checked ? "rgba(96,25,41,0.4)" : "#333"}`;
+      updateCpTotal();
+    });
+  });
+
+  updateCpTotal();
+}
+
+function updateCpTotal() {
+  const totalEl = document.getElementById("cpSelectedTotal");
+  const saveBtn = document.getElementById("cpSaveBtn");
+  const selectedRows = _cpRows.filter(r => _cpSelected.has(cpRowKey(r)));
+  const total = selectedRows.reduce((s, r) => s + r.pay, 0);
+  const n     = selectedRows.length;
+  if (totalEl) totalEl.textContent = n === 0
+    ? "No games selected"
+    : `${n} game${n !== 1 ? "s" : ""} selected · $${total.toFixed(2)}`;
+  if (saveBtn) saveBtn.disabled = n === 0;
+}
+
+function closeCutPaymentModal() {
+  document.getElementById("cutPaymentModal").style.display = "none";
+  _cpUid = ""; _cpRows = []; _cpSelected = new Set();
+}
+
+async function saveCutPayment() {
+  const checkNumber = (document.getElementById("cpCheckNumber")?.value || "").trim();
+  const toMark      = _cpRows.filter(r => _cpSelected.has(cpRowKey(r)));
+  if (!toMark.length) return;
+
+  const saveBtn = document.getElementById("cpSaveBtn");
+  const msgEl   = document.getElementById("cpMsg");
+  saveBtn.disabled = true;
+  if (msgEl) { msgEl.textContent = "Saving…"; msgEl.className = "signup-message info"; }
+
+  try {
+    // Mark each selected slot as paid in a single batch
+    const batch = writeBatch(db);
+    for (const r of toMark) {
+      const gameRef  = doc(db, "games", r.gameId);
+      const gameSnap = await getDoc(gameRef);
+      if (!gameSnap.exists()) continue;
+      const slots = (gameSnap.data().umpireSlots || []).map(s => {
+        if (s.type === r.slotType && s.assignedUid === r.uid) {
+          const u = { ...s, paid: true, paidDate: todayISO() };
+          if (checkNumber) u.checkNumber = checkNumber; else delete u.checkNumber;
+          return u;
+        }
+        return s;
+      });
+      batch.update(gameRef, { umpireSlots: slots });
+      // Update local cache
+      r.paid = true;
+      r.checkNumber = checkNumber;
+      r.paidDate = todayISO();
+    }
+    await batch.commit();
+
+    // Re-render the summary/table
+    renderAll();
+
+    // Print the stub immediately
+    const org = await getOrgSettings();
+    const allUmpireRows = filteredRows().filter(r2 => r2.uid === _cpUid && !r2.noShow);
+    closeCutPaymentModal();
+    openStubWindow([{ name: allUmpireRows[0]?.umpireName || "", rows: allUmpireRows }], org);
+  } catch (err) {
+    if (msgEl) { msgEl.textContent = "Error: " + err.message; msgEl.className = "signup-message error"; }
+    saveBtn.disabled = false;
+  }
+}
+
+function wireCutPaymentModal() {
+  document.getElementById("cpSaveBtn")?.addEventListener("click", saveCutPayment);
+  document.getElementById("cpCancelBtn")?.addEventListener("click", closeCutPaymentModal);
+  document.getElementById("cpCheckNumber")?.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); saveCutPayment(); }
+    if (e.key === "Escape") { e.preventDefault(); closeCutPaymentModal(); }
+  });
+  document.getElementById("cutPaymentModal")?.addEventListener("click", e => {
+    if (e.target === e.currentTarget) closeCutPaymentModal();
+  });
+}
+
 // ── Pay stub ──────────────────────────────────────────────────────────────────
 
-async function generatePayStub(uid) {
-  const rows     = filteredRows().filter(r => r.uid === uid && !r.noShow);
-  if (!rows.length) return;
+/** Shared CSS for stub pages (brand colour injected). */
+function stubStyles(brand) {
+  return `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px; color: #111; background: #fff;
+      padding: 32px 40px; max-width: 760px; margin: 0 auto;
+    }
+    .stub-page { page-break-after: always; padding-bottom: 32px; margin-bottom: 32px; border-bottom: 2px dashed #ccc; }
+    .stub-page:last-child { page-break-after: auto; border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .stub-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      border-bottom: 3px solid ${brand}; padding-bottom: 14px; margin-bottom: 20px;
+    }
+    .org-name { font-size: 20px; font-weight: 700; color: ${brand}; line-height: 1.2; }
+    .org-sub  { font-size: 12px; color: #555; margin-top: 3px; }
+    .stub-meta { text-align: right; font-size: 12px; color: #555; }
+    .stub-meta strong { color: #111; }
+    .stub-info {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px;
+      background: #f7f0f1; border: 1px solid #d9b8bb; border-radius: 6px;
+      padding: 14px 18px; margin-bottom: 20px;
+    }
+    .stub-info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: ${brand}; margin-bottom: 3px; }
+    .stub-info-value { font-size: 14px; font-weight: 600; color: #111; }
+    .rate-note { font-size: 11px; color: #555; margin-bottom: 16px; }
+    .rate-note strong { color: #111; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12.5px; }
+    thead th { background: ${brand}; color: #fff; text-align: left; padding: 7px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    thead th.money { text-align: right; }
+    tbody tr:nth-child(even) { background: #faf5f6; }
+    tbody td { padding: 7px 10px; border-bottom: 1px solid #e8dde0; vertical-align: middle; }
+    td.money  { text-align: right; font-variant-numeric: tabular-nums; }
+    td.paid   { color: #1a6b30; font-weight: 600; }
+    td.unpaid { color: #8a4a00; font-weight: 600; }
+    .totals { width: 260px; margin-left: auto; border: 1px solid #d9b8bb; border-radius: 6px; overflow: hidden; margin-bottom: 24px; }
+    .totals-row { display: flex; justify-content: space-between; padding: 7px 14px; font-size: 13px; border-bottom: 1px solid #ead8da; }
+    .totals-row:last-child { border-bottom: none; }
+    .totals-row.total-owed { background: #f7f0f1; }
+    .totals-row.total-paid { background: #f0f7f2; color: #1a6b30; }
+    .totals-label  { font-weight: 500; }
+    .totals-amount { font-variant-numeric: tabular-nums; }
+    .stub-footer { border-top: 1px solid #ddd; padding-top: 12px; font-size: 11px; color: #777; line-height: 1.5; }
+    .print-bar { text-align: center; margin-bottom: 24px; }
+    .print-bar button {
+      background: ${brand}; color: #fff; border: none; border-radius: 6px;
+      padding: 9px 24px; font-size: 14px; cursor: pointer; font-family: inherit;
+    }
+    .print-bar button:hover { filter: brightness(0.85); }
+    @media print {
+      body { padding: 16px; }
+      .print-bar { display: none; }
+      .stub-page { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+      @page { margin: 1.5cm; }
+    }`;
+}
 
-  const org  = await getOrgSettings();
-  const name      = rows[0].umpireName;
-  const owed      = rows.reduce((s, r) => s + r.pay, 0);
-  const paid      = rows.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
-  const balance   = owed - paid;
-  const today     = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  const periodFrom = payrollFromFilter ? new Date(payrollFromFilter + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "All time";
-  const periodTo   = payrollToFilter   ? new Date(payrollToFilter   + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : today;
-
-  const rateTable = [
-    payRates.plate ? `Plate Umpire: $${payRates.plate.toFixed(2)}` : null,
-    payRates.field ? `Field Umpire: $${payRates.field.toFixed(2)}` : null,
-    payRates.extra ? `Extra: $${payRates.extra.toFixed(2)}` : null,
-  ].filter(Boolean).join(" &nbsp;·&nbsp; ");
+/** Build the inner HTML fragment for one umpire's stub (no html/head/body tags). */
+function buildStubFragment(name, rows, org, periodFrom, periodTo, rateTable) {
+  const today   = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const owed    = rows.reduce((s, r) => s + r.pay, 0);
+  const paid    = rows.filter(r => r.paid).reduce((s, r) => s + r.pay, 0);
+  const balance = owed - paid;
 
   const gameRows = rows
     .slice()
@@ -528,165 +799,10 @@ async function generatePayStub(uid) {
         <td class="${r.paid ? "paid" : "unpaid"}">${r.paid ? (r.checkCleared ? "✓ Cleared" : "Paid") : "Unpaid"}${r.paid && r.checkNumber ? `<br><span style="font-size:0.75em;font-weight:normal">#${esc(r.checkNumber)}</span>` : ""}</td>
       </tr>`).join("");
 
-  const brand = org.accentColor || "#601929";
+  const balColor = balance > 0 ? "#8a4a00" : "#1a6b30";
+  const balBg    = balance > 0 ? "#fff8ee" : "#f0f7f2";
 
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pay Stub — ${esc(name)}</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 13px;
-      color: #111;
-      background: #fff;
-      padding: 32px 40px;
-      max-width: 760px;
-      margin: 0 auto;
-    }
-
-    /* ── Header ── */
-    .stub-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      border-bottom: 3px solid ${brand};
-      padding-bottom: 14px;
-      margin-bottom: 20px;
-    }
-    .org-name {
-      font-size: 20px;
-      font-weight: 700;
-      color: ${brand};
-      line-height: 1.2;
-    }
-    .org-sub {
-      font-size: 12px;
-      color: #555;
-      margin-top: 3px;
-    }
-    .stub-meta {
-      text-align: right;
-      font-size: 12px;
-      color: #555;
-    }
-    .stub-meta strong { color: #111; }
-
-    /* ── To / Period block ── */
-    .stub-info {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px 24px;
-      background: #f7f0f1;
-      border: 1px solid #d9b8bb;
-      border-radius: 6px;
-      padding: 14px 18px;
-      margin-bottom: 20px;
-    }
-    .stub-info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: ${brand}; margin-bottom: 3px; }
-    .stub-info-value { font-size: 14px; font-weight: 600; color: #111; }
-
-    /* ── Rate note ── */
-    .rate-note {
-      font-size: 11px;
-      color: #555;
-      margin-bottom: 16px;
-    }
-    .rate-note strong { color: #111; }
-
-    /* ── Table ── */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 20px;
-      font-size: 12.5px;
-    }
-    thead th {
-      background: ${brand};
-      color: #fff;
-      text-align: left;
-      padding: 7px 10px;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    thead th.money { text-align: right; }
-    tbody tr:nth-child(even) { background: #faf5f6; }
-    tbody td {
-      padding: 7px 10px;
-      border-bottom: 1px solid #e8dde0;
-      vertical-align: middle;
-    }
-    td.money { text-align: right; font-variant-numeric: tabular-nums; }
-    td.paid   { color: #1a6b30; font-weight: 600; }
-    td.unpaid { color: #8a4a00; font-weight: 600; }
-
-    /* ── Totals ── */
-    .totals {
-      width: 260px;
-      margin-left: auto;
-      border: 1px solid #d9b8bb;
-      border-radius: 6px;
-      overflow: hidden;
-      margin-bottom: 24px;
-    }
-    .totals-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 7px 14px;
-      font-size: 13px;
-      border-bottom: 1px solid #ead8da;
-    }
-    .totals-row:last-child { border-bottom: none; }
-    .totals-row.total-owed  { background: #f7f0f1; }
-    .totals-row.total-paid  { background: #f0f7f2; color: #1a6b30; }
-    .totals-row.total-bal   { background: ${balance > 0 ? "#fff8ee" : "#f0f7f2"}; font-weight: 700; color: ${balance > 0 ? "#8a4a00" : "#1a6b30"}; }
-    .totals-label { font-weight: 500; }
-    .totals-amount { font-variant-numeric: tabular-nums; }
-
-    /* ── Footer note ── */
-    .stub-footer {
-      border-top: 1px solid #ddd;
-      padding-top: 12px;
-      font-size: 11px;
-      color: #777;
-      line-height: 1.5;
-    }
-
-    /* ── Print button (screen only) ── */
-    .print-bar {
-      text-align: center;
-      margin-bottom: 24px;
-    }
-    .print-bar button {
-      background: ${brand};
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      padding: 9px 24px;
-      font-size: 14px;
-      cursor: pointer;
-      font-family: inherit;
-    }
-    .print-bar button:hover { filter: brightness(0.85); }
-
-    @media print {
-      body { padding: 16px; }
-      .print-bar { display: none; }
-      @page { margin: 1.5cm; }
-    }
-  </style>
-</head>
-<body>
-
-  <div class="print-bar">
-    <button onclick="window.print()">🖨 Print / Save as PDF</button>
-  </div>
-
-  <!-- Header -->
+  return `
   <div class="stub-header">
     <div>
       <div class="org-name">${esc(org.orgName || "")}</div>
@@ -698,76 +814,114 @@ async function generatePayStub(uid) {
       <div>Generated: ${today}</div>
     </div>
   </div>
-
-  <!-- To / Period info -->
   <div class="stub-info">
-    <div>
-      <div class="stub-info-label">Umpire</div>
-      <div class="stub-info-value">${esc(name)}</div>
-    </div>
-    <div>
-      <div class="stub-info-label">Pay Period</div>
-      <div class="stub-info-value">${periodFrom === periodTo ? periodFrom : periodFrom + " – " + periodTo}</div>
-    </div>
-    <div>
-      <div class="stub-info-label">Games Worked</div>
-      <div class="stub-info-value">${rows.length}</div>
-    </div>
-    <div>
-      <div class="stub-info-label">Statement Date</div>
-      <div class="stub-info-value">${today}</div>
-    </div>
+    <div><div class="stub-info-label">Umpire</div><div class="stub-info-value">${esc(name)}</div></div>
+    <div><div class="stub-info-label">Pay Period</div><div class="stub-info-value">${periodFrom === periodTo ? periodFrom : periodFrom + " – " + periodTo}</div></div>
+    <div><div class="stub-info-label">Games Worked</div><div class="stub-info-value">${rows.length}</div></div>
+    <div><div class="stub-info-label">Statement Date</div><div class="stub-info-value">${today}</div></div>
   </div>
-
   ${rateTable ? `<div class="rate-note"><strong>Pay rates:</strong> ${rateTable}</div>` : ""}
-
-  <!-- Game detail table -->
   <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Division</th>
-        <th>City</th>
-        <th>Field</th>
-        <th>Position</th>
-        <th class="money">Rate</th>
-        <th>Status</th>
-      </tr>
-    </thead>
+    <thead><tr>
+      <th>Date</th><th>Division</th><th>City</th><th>Field</th><th>Position</th>
+      <th class="money">Rate</th><th>Status</th>
+    </tr></thead>
     <tbody>${gameRows}</tbody>
   </table>
-
-  <!-- Totals -->
   <div class="totals">
-    <div class="totals-row total-owed">
-      <span class="totals-label">Total Earned</span>
-      <span class="totals-amount">$${owed.toFixed(2)}</span>
-    </div>
-    <div class="totals-row total-paid">
-      <span class="totals-label">Amount Paid</span>
-      <span class="totals-amount">$${paid.toFixed(2)}</span>
-    </div>
-    <div class="totals-row total-bal">
+    <div class="totals-row total-owed"><span class="totals-label">Total Earned</span><span class="totals-amount">$${owed.toFixed(2)}</span></div>
+    <div class="totals-row total-paid"><span class="totals-label">Amount Paid</span><span class="totals-amount">$${paid.toFixed(2)}</span></div>
+    <div class="totals-row" style="background:${balBg};font-weight:700;color:${balColor}">
       <span class="totals-label">${balance > 0 ? "Balance Due" : "Fully Paid"}</span>
       <span class="totals-amount">$${balance.toFixed(2)}</span>
     </div>
   </div>
-
-  <!-- Footer -->
   <div class="stub-footer">
-    <p>This document is a payment record for officiating services rendered to ${esc(org.assocName || "")}.
-    It is not a tax document. Please retain for your records.</p>
+    <p>This document is a payment record for officiating services rendered to ${esc(org.assocName || "")}. It is not a tax document. Please retain for your records.</p>
     <p style="margin-top:4px">Questions? Contact ${esc(org.coordinatorName || "")} at ${esc(org.coordinatorPhone || "")} or post in the Umpire Slack channel.</p>
-  </div>
+  </div>`;
+}
 
+/** Open a print window with one or more stubs (one per umpire). */
+function openStubWindow(umpireGroups, org) {
+  const brand = org.accentColor || "#601929";
+  const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const periodFrom = payrollFromFilter
+    ? new Date(payrollFromFilter + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+    : "All time";
+  const periodTo = payrollToFilter
+    ? new Date(payrollToFilter + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+    : today;
+  const rateTable = [
+    payRates.plate ? `Plate Umpire: $${payRates.plate.toFixed(2)}` : null,
+    payRates.field ? `Field Umpire: $${payRates.field.toFixed(2)}` : null,
+    payRates.extra ? `Extra: $${payRates.extra.toFixed(2)}` : null,
+  ].filter(Boolean).join(" &nbsp;·&nbsp; ");
+
+  const titleNames = umpireGroups.map(g => g.name).join(", ");
+  const stubs = umpireGroups.map(({ name, rows }) =>
+    `<div class="stub-page">${buildStubFragment(name, rows, org, periodFrom, periodTo, rateTable)}</div>`
+  ).join("\n");
+
+  const count = umpireGroups.length;
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pay Stub${count > 1 ? "s" : ""} — ${esc(titleNames)}</title>
+  <style>${stubStyles(brand)}</style>
+</head>
+<body>
+  <div class="print-bar">
+    <button onclick="window.print()">🖨 Print / Save as PDF${count > 1 ? ` (${count} stubs)` : ""}</button>
+  </div>
+  ${stubs}
 </body>
 </html>`;
 
-  const win = window.open("", "_blank");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-  }
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank");
+  // Blob URLs don't inherit the parent page's CSP, so the inline onclick in the HTML works.
+  // Revoke after a short delay to ensure the browser has loaded the content.
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+async function generatePayStub(uid) {
+  const rows = filteredRows().filter(r => r.uid === uid && !r.noShow);
+  if (!rows.length) return;
+  const org = await getOrgSettings();
+  openStubWindow([{ name: rows[0].umpireName, rows }], org);
+}
+
+/** Print stubs for all umpires visible in the current date filter. */
+async function bulkPrintAll() {
+  const billable = filteredRows(true).filter(r => !r.noShow);
+  if (!billable.length) { showToast("No billable rows in the current date range."); return; }
+  const byUmpire = new Map();
+  billable.forEach(r => {
+    if (!byUmpire.has(r.uid)) byUmpire.set(r.uid, { name: r.umpireName, rows: [] });
+    byUmpire.get(r.uid).rows.push(r);
+  });
+  const groups = [...byUmpire.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const org = await getOrgSettings();
+  openStubWindow(groups, org);
+}
+
+/** Print stubs only for checked rows, grouped by umpire. */
+async function bulkPrintSelected() {
+  if (!selectedRowKeys.size) { showToast("No rows selected."); return; }
+  const selected = filteredRows().filter(r => !r.noShow && selectedRowKeys.has(`${r.gameId}|${r.slotType}|${r.uid}`));
+  if (!selected.length) { showToast("No billable rows among the selection."); return; }
+  const byUmpire = new Map();
+  selected.forEach(r => {
+    if (!byUmpire.has(r.uid)) byUmpire.set(r.uid, { name: r.umpireName, rows: [] });
+    byUmpire.get(r.uid).rows.push(r);
+  });
+  const groups = [...byUmpire.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const org = await getOrgSettings();
+  openStubWindow(groups, org);
 }
 
 // ── Email pay stub ────────────────────────────────────────────────────────────
@@ -794,6 +948,273 @@ async function emailPayStub(btn) {
     btn.disabled    = false;
     btn.textContent = "✉️ Email Stub";
   }
+}
+
+// ── Check Register ────────────────────────────────────────────────────────────
+
+function buildCheckGroups() {
+  let paid = payrollRows.filter(r => r.paid && !r.noShow);
+  if (payrollFromFilter) paid = paid.filter(r => (r.paidDate || r.date) >= payrollFromFilter);
+  if (payrollToFilter)   paid = paid.filter(r => (r.paidDate || r.date) <= payrollToFilter);
+
+  const groups = new Map();
+  paid.forEach(r => {
+    const key = r.checkNumber
+      ? `${r.uid}|check|${r.checkNumber}`
+      : `${r.uid}|cash|${r.paidDate || r.date}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        checkNumber:  r.checkNumber || "",
+        paymentType:  r.checkNumber ? "Check" : "Cash",
+        umpireName:   r.umpireName,
+        uid:          r.uid,
+        paidDate:     r.paidDate || r.date || "",
+        divisions:    new Set(),
+        amount:       0,
+        rows:         [],
+        allCleared:   true,
+      });
+    }
+    const g = groups.get(key);
+    g.amount += r.pay;
+    g.divisions.add(r.division || "—");
+    g.rows.push(r);
+    if (!r.checkCleared) g.allCleared = false;
+  });
+
+  return [...groups.values()].sort((a, b) =>
+    (b.paidDate || "").localeCompare(a.paidDate || "") ||
+    a.umpireName.localeCompare(b.umpireName)
+  );
+}
+
+function showPayrollTab(tab) {
+  activePayrollTab = tab;
+  ["detail", "checks"].forEach(t => {
+    const panel = document.getElementById(`payroll-tab-${t}`);
+    if (panel) panel.style.display = t === tab ? "" : "none";
+    document.querySelector(`[data-payroll-tab="${t}"]`)?.classList.toggle("active", t === tab);
+  });
+  if (tab === "checks") renderCheckRegister();
+}
+
+function renderCheckRegister() {
+  const wrap = document.getElementById("checkRegisterWrap");
+  if (!wrap) return;
+
+  let groups = buildCheckGroups();
+
+  if (checkRegisterFilter === "outstanding") groups = groups.filter(g => !g.allCleared && g.paymentType === "Check");
+  if (checkRegisterFilter === "cleared")     groups = groups.filter(g => g.allCleared || g.paymentType === "Cash");
+
+  document.querySelectorAll("[data-check-filter]").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.checkFilter === checkRegisterFilter);
+  });
+
+  if (!groups.length) {
+    wrap.innerHTML = `<p style="color:var(--light-text)">No payments for the selected period.</p>`;
+    return;
+  }
+
+  const totalAmount  = groups.reduce((s, g) => s + g.amount, 0);
+  const checkCount   = groups.filter(g => g.paymentType === "Check").length;
+  const clearedCount = groups.filter(g => g.allCleared || g.paymentType === "Cash").length;
+
+  const rows = groups.flatMap(g => {
+    const isCash = g.paymentType === "Cash";
+    const statusBadge = isCash
+      ? `<span class="badge" style="background:#17351f;color:#b8f2c4">Cash / Paid</span>`
+      : g.allCleared
+        ? `<span class="badge" style="background:#0d3030;color:#7ef7d8">✓ Cleared</span>`
+        : `<span class="badge" style="background:#4a2c00;color:#ffcc80">Outstanding</span>`;
+    const clearedBtn = !isCash
+      ? `<button class="btn print-btn check-toggle-cleared-btn" data-group-key="${esc(g.key)}"
+          style="font-size:0.78rem;padding:3px 8px;margin-left:4px">
+          ${g.allCleared ? "Unmark" : "Mark Cleared"}
+        </button>`
+      : "";
+
+    // Header row for this check
+    const headerRow = `<tr style="background:rgba(255,255,255,0.04);border-top:2px solid #444">
+      <td style="white-space:nowrap;font-weight:600">${esc(fmtDate(g.paidDate))}</td>
+      <td style="font-weight:600">${g.checkNumber ? `#${esc(g.checkNumber)}` : '<span style="color:var(--light-text);font-weight:normal">Cash</span>'}</td>
+      <td style="font-size:0.85rem">${esc(g.paymentType)}</td>
+      <td style="font-weight:600">${esc(g.umpireName)}</td>
+      <td></td>
+      <td></td>
+      <td style="text-align:right;font-weight:600">$${g.amount.toFixed(2)}</td>
+      <td style="white-space:nowrap">${statusBadge}${clearedBtn}</td>
+    </tr>`;
+
+    // One sub-row per game
+    const gameRows = g.rows
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(r => `<tr style="background:rgba(0,0,0,0.15)">
+        <td style="padding-left:28px;font-size:0.83rem;color:var(--light-text)">${esc(fmtDate(r.date))}</td>
+        <td></td>
+        <td></td>
+        <td style="font-size:0.83rem;color:var(--light-text)">${esc(r.city || "—")}</td>
+        <td style="font-size:0.83rem;color:var(--light-text)">${esc(r.division || "—")}</td>
+        <td style="text-align:center">
+          <span class="badge badge-${(r.slotType||"").toLowerCase()}" style="font-size:0.72rem">${esc(r.slotType)}</span>
+        </td>
+        <td style="text-align:right;font-size:0.83rem">$${r.pay.toFixed(2)}</td>
+        <td></td>
+      </tr>`).join("");
+
+    return headerRow + gameRows;
+  });
+
+  wrap.innerHTML = `
+    <p style="font-size:0.88rem;color:var(--light-text);margin:0 0 12px">
+      ${groups.length} payment${groups.length !== 1 ? "s" : ""} &nbsp;·&nbsp;
+      ${checkCount} check${checkCount !== 1 ? "s" : ""} &nbsp;·&nbsp;
+      Total: <strong style="color:var(--text)">$${totalAmount.toFixed(2)}</strong> &nbsp;·&nbsp;
+      Cleared: <strong style="color:#6fcf97">${clearedCount}</strong> of ${groups.length}
+    </p>
+    <div style="overflow-x:auto">
+      <table class="payroll-table" style="width:100%;min-width:680px">
+        <thead>
+          <tr>
+            <th>Date Cut</th>
+            <th>Check #</th>
+            <th>Type</th>
+            <th>Umpire / City</th>
+            <th>Division</th>
+            <th style="text-align:center">Slot</th>
+            <th style="text-align:right">Amount</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${rows.join("")}</tbody>
+      </table>
+    </div>
+    <p style="font-size:0.78rem;color:var(--light-text);margin-top:8px">Use QuickBooks (.iif) export for QB Desktop; CSV export for QB Online or other accounting software.</p>`;
+
+  wrap.querySelectorAll(".check-toggle-cleared-btn").forEach(btn => {
+    btn.addEventListener("click", () => toggleGroupCleared(btn.dataset.groupKey));
+  });
+}
+
+async function toggleGroupCleared(groupKey) {
+  const groups = buildCheckGroups();
+  const g = groups.find(x => x.key === groupKey);
+  if (!g) return;
+
+  const newCleared = !g.allCleared;
+  const byGame = {};
+  g.rows.forEach(r => {
+    if (!byGame[r.gameId]) byGame[r.gameId] = [];
+    byGame[r.gameId].push(r);
+  });
+
+  try {
+    const gameIds = Object.keys(byGame);
+    const refs    = gameIds.map(id => doc(db, "games", id));
+    const snaps   = await Promise.all(refs.map(ref => getDoc(ref)));
+
+    const batch = writeBatch(db);
+    snaps.forEach((snap, i) => {
+      if (!snap.exists()) return;
+      const gameRows = byGame[gameIds[i]];
+      const slots = (snap.data().umpireSlots ?? []).map(s => {
+        const match = gameRows.find(r => r.slotType === s.type && r.uid === s.assignedUid);
+        if (!match) return s;
+        const updated = { ...s, checkCleared: newCleared };
+        if (!newCleared) delete updated.checkCleared;
+        return updated;
+      });
+      batch.update(refs[i], { umpireSlots: slots });
+    });
+    await batch.commit();
+
+    g.rows.forEach(r => { r.checkCleared = newCleared; });
+    renderAll();
+    renderCheckRegister();
+  } catch (err) {
+    console.error(err);
+    showToast("Error updating cleared status.");
+  }
+}
+
+function iifDate(iso) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${m}/${d}/${y}`;
+}
+
+function exportCheckRegisterCSV() {
+  const groups  = buildCheckGroups();
+  const headers = ["Row Type", "Date Cut", "Check Number", "Payment Type", "Umpire", "Game Date", "City", "Division", "Slot", "Amount", "Cleared"];
+  const lines   = [headers.join(",")];
+
+  groups.forEach(g => {
+    const cleared = (g.allCleared || g.paymentType === "Cash") ? "Yes" : "No";
+    // Summary row for the check
+    lines.push([
+      "Check",
+      g.paidDate ? fmtDate(g.paidDate) : "",
+      csvCell(g.checkNumber || ""),
+      csvCell(g.paymentType),
+      csvCell(g.umpireName),
+      "", "", "", "",
+      g.amount.toFixed(2),
+      cleared,
+    ].join(","));
+    // One detail row per game
+    g.rows.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach(r => {
+      lines.push([
+        "Game",
+        "",
+        csvCell(g.checkNumber || ""),
+        "",
+        csvCell(g.umpireName),
+        fmtDate(r.date),
+        csvCell(r.city || ""),
+        csvCell(r.division || ""),
+        csvCell(r.slotType),
+        r.pay.toFixed(2),
+        "",
+      ].join(","));
+    });
+  });
+  const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = `check-register-${todayISO()}.csv`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+function exportCheckRegisterIIF() {
+  const groups = buildCheckGroups();
+  const lines  = [
+    "!TRNS\tTRNSID\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\tMEMO\tCLEAR\tTOPRINT",
+    "!SPL\tSPLID\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\tMEMO\tCLEAR",
+    "!ENDTRNS",
+  ];
+
+  groups.forEach(g => {
+    const date     = iifDate(g.paidDate || todayISO());
+    const trnsType = g.checkNumber ? "CHECK" : "CASH";
+    const divs     = [...g.divisions].join(", ");
+    const memo     = `Umpire Pay - ${divs} - ${g.rows.length} game${g.rows.length !== 1 ? "s" : ""}`;
+    const cleared  = (g.allCleared || g.paymentType === "Cash") ? "Y" : "N";
+    const docNum   = g.checkNumber || "";
+
+    lines.push(`TRNS\t\t${trnsType}\t${date}\tChecking\t${g.umpireName}\t-${g.amount.toFixed(2)}\t${docNum}\t${memo}\t${cleared}\tN`);
+    lines.push(`SPL\t\t${trnsType}\t${date}\tUmpire Pay\t${g.umpireName}\t${g.amount.toFixed(2)}\t${docNum}\t${memo}\t${cleared}`);
+    lines.push("ENDTRNS");
+  });
+
+  const blob = new Blob([lines.join("\r\n")], { type: "text/plain;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = `umpire-checks-${todayISO()}.iif`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
 // ── CSV export ────────────────────────────────────────────────────────────────
@@ -862,6 +1283,21 @@ function wireFilters() {
     renderAll();
   });
   document.getElementById("exportCsvBtn")?.addEventListener("click", exportCSV);
+  document.getElementById("bulkPrintAllBtn")?.addEventListener("click", bulkPrintAll);
+  document.getElementById("bulkPrintSelectedBtn")?.addEventListener("click", bulkPrintSelected);
+  document.getElementById("exportCheckCsvBtn")?.addEventListener("click", exportCheckRegisterCSV);
+  document.getElementById("exportCheckIIFBtn")?.addEventListener("click", exportCheckRegisterIIF);
+  document.getElementById("payrollTabNav")?.addEventListener("click", e => {
+    const btn = e.target.closest("[data-payroll-tab]");
+    if (btn) showPayrollTab(btn.dataset.payrollTab);
+  });
+  document.getElementById("payroll-tab-checks")?.addEventListener("click", e => {
+    const btn = e.target.closest("[data-check-filter]");
+    if (!btn) return;
+    checkRegisterFilter = btn.dataset.checkFilter;
+    renderCheckRegister();
+  });
+  wireCutPaymentModal();
 }
 
 // ── Manual Pay ────────────────────────────────────────────────────────────────

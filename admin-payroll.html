@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#601929">
   <title>Admin: Payroll - Tri-Valley Baseball Umpires</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=18" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.trivalleyball.com https://img.shields.io; frame-src https://*.firebaseapp.com https://accounts.google.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://fcm.googleapis.com https://*.cloudfunctions.net https://*.run.app https://api.open-meteo.com;">
 </head>
 <body>
@@ -20,20 +20,21 @@
   <div class="container" id="adminContent" style="display:none">
 
     <nav class="admin-subnav">
-      <a href="admin.html">Overview</a>
-      <a href="admin-games.html">Games</a>
-      <a href="admin-scheduler.html">Scheduler</a>
-      <a href="admin-teams.html">Teams</a>
-      <a href="admin-tournament.html">Tournaments</a>
-      <a href="admin-payroll.html" class="admin-subnav-active">Payroll</a>
-      <a href="admin-facilities.html">Facilities</a>
-      <a href="admin-sponsors.html">Sponsors</a>
-      <a href="admin-callup.html">Call-Ups</a>
-      <a href="admin-incidents.html">Incidents</a>
-      <a href="admin-alerts.html">Alerts</a>
-      <a href="admin-config.html">Config</a>
-      <a href="admin-analytics.html">Analytics</a>
-      <a href="admin-users.html">Users</a>
+      <a href="admin.html">📋 Overview</a>
+      <a href="admin-games.html">⚾ Games</a>
+      <a href="admin-scheduler.html">📅 Scheduler</a>
+      <a href="admin-teams.html">👕 Teams</a>
+      <a href="admin-tournament.html">🏆 Tournaments</a>
+      <a href="admin-payroll.html" class="admin-subnav-active">💵 Payroll</a>
+      <a href="admin-ledger.html">📒 Ledger</a>
+      <a href="admin-facilities.html">📍 Facilities</a>
+      <a href="admin-sponsors.html">🤝 Sponsors</a>
+      <a href="admin-callup.html">📣 Call-Ups</a>
+      <a href="admin-incidents.html">⚠️ Incidents</a>
+      <a href="admin-alerts.html">🔔 Alerts</a>
+      <a href="admin-config.html">⚙️ Config</a>
+      <a href="admin-analytics.html">📊 Analytics</a>
+      <a href="admin-users.html">👤 Users</a>
     </nav>
 
     <h2 style="margin-bottom:4px">Payroll</h2>
@@ -56,6 +57,8 @@
       <button type="button" class="btn print-btn" id="payrollLastYearBtn" style="align-self:flex-end">Last Year</button>
       <button type="button" class="btn print-btn" id="payrollResetBtn" style="align-self:flex-end">All Time</button>
       <button type="button" class="btn print-btn" id="exportCsvBtn" style="align-self:flex-end;margin-left:auto">⬇ Export CSV</button>
+      <button type="button" class="btn print-btn" id="bulkPrintAllBtn" style="align-self:flex-end">🖨 Print All Stubs</button>
+      <button type="button" class="btn print-btn" id="bulkPrintSelectedBtn" style="align-self:flex-end;opacity:0.45" disabled>🖨 Print Selected</button>
     </div>
 
     <!-- ── Totals banner ────────────────────────────────────────────────────── -->
@@ -64,11 +67,21 @@
     <!-- ── Per-umpire summary cards ─────────────────────────────────────────── -->
     <div id="payrollSummary"></div>
 
+    <!-- ── Tab nav ───────────────────────────────────────────────────────────── -->
+    <div class="sched-section-nav" id="payrollTabNav" style="margin-bottom:16px">
+      <button class="sched-sec-btn active" data-payroll-tab="detail">📋 Payroll Detail</button>
+      <button class="sched-sec-btn" data-payroll-tab="checks">🏦 Check Register</button>
+    </div>
+
+    <!-- ── Detail tab ────────────────────────────────────────────────────────── -->
+    <div id="payroll-tab-detail">
+
     <!-- ── Detail table ─────────────────────────────────────────────────────── -->
     <div class="schedule-section" style="margin-top:0">
       <table id="payrollTable">
         <thead>
           <tr>
+            <th style="width:32px"></th>
             <th>Umpire</th>
             <th>Date</th>
             <th>City / Div</th>
@@ -79,7 +92,7 @@
           </tr>
         </thead>
         <tbody id="payrollBody">
-          <tr><td colspan="7" style="color:var(--light-text);text-align:center">Loading payroll…</td></tr>
+          <tr><td colspan="9" style="color:var(--light-text);text-align:center">Loading payroll…</td></tr>
         </tbody>
       </table>
     </div>
@@ -112,6 +125,23 @@
         </table>
       </div>
       <p id="manualPayTotals" style="font-size:0.88rem;color:var(--light-text);margin-top:8px"></p>
+    </div>
+
+    </div><!-- /#payroll-tab-detail -->
+
+    <!-- ── Check Register tab ─────────────────────────────────────────────────── -->
+    <div id="payroll-tab-checks" style="display:none">
+      <div class="page-actions" style="margin-bottom:12px;flex-wrap:wrap;gap:8px;align-items:center">
+        <span style="font-size:0.88rem;color:var(--light-text)">Show:</span>
+        <button class="btn print-btn active" data-check-filter="all" style="font-size:0.82rem;padding:4px 12px">All</button>
+        <button class="btn print-btn" data-check-filter="outstanding" style="font-size:0.82rem;padding:4px 12px">Outstanding</button>
+        <button class="btn print-btn" data-check-filter="cleared" style="font-size:0.82rem;padding:4px 12px">Cleared</button>
+        <button class="btn print-btn" id="exportCheckCsvBtn" style="margin-left:auto;font-size:0.82rem">⬇ Export CSV</button>
+        <button class="btn print-btn" id="exportCheckIIFBtn" style="font-size:0.82rem">⬇ QuickBooks (.iif)</button>
+      </div>
+      <div id="checkRegisterWrap">
+        <p style="color:var(--light-text)">Loading…</p>
+      </div>
     </div>
 
     <!-- Add Manual Pay Modal -->
@@ -185,6 +215,35 @@
   </div>
 
   <!-- ── Mark Paid / Check Number Modal ────────────────────────────────────── -->
+  <!-- ── Cut Payment Modal ────────────────────────────────────────────────── -->
+  <div id="cutPaymentModal" style="display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,0.78);overflow-y:auto">
+    <div style="background:var(--container);border-radius:12px;padding:24px 26px;max-width:540px;margin:60px auto 40px;position:relative">
+      <h3 style="margin:0 0 4px">✂ Cut Payment</h3>
+      <p style="color:var(--light-text);font-size:0.85rem;margin:0 0 16px">
+        <strong id="cpUmpireName" style="color:var(--text)"></strong> — select games to include on this check
+      </p>
+
+      <!-- Game checklist -->
+      <div id="cpGameList" style="max-height:340px;overflow-y:auto;margin-bottom:14px"></div>
+
+      <!-- Selected total -->
+      <p id="cpSelectedTotal" style="font-size:0.85rem;font-weight:600;color:var(--light-text);margin:0 0 16px;text-align:right"></p>
+
+      <!-- Check number -->
+      <div class="form-group" style="margin-bottom:18px">
+        <label for="cpCheckNumber">Check Number <span style="font-weight:normal;color:var(--light-text)">(optional)</span></label>
+        <input type="text" id="cpCheckNumber" placeholder="e.g. 1042"
+          style="width:100%;padding:9px 12px;background:var(--field);color:var(--text);border:1px solid #555;border-radius:6px;font-size:1rem;box-sizing:border-box" />
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button type="button" id="cpSaveBtn" class="btn" style="padding:9px 20px">💾 Save &amp; Print Stub</button>
+        <button type="button" id="cpCancelBtn" class="btn print-btn" style="padding:9px 16px">Cancel</button>
+        <p id="cpMsg" class="signup-message" style="margin:0;flex:1"></p>
+      </div>
+    </div>
+  </div>
+
   <div id="markPaidModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);overflow-y:auto">
     <div style="background:var(--container);border-radius:10px;padding:24px;max-width:400px;margin:120px auto;position:relative">
       <h3 style="margin:0 0 6px">Mark as Paid</h3>
@@ -203,10 +262,10 @@
     </div>
   </div>
 
-  <script type="module" src="auth.js?v=27"></script>
-  <script type="module" src="admin-payroll.js?v=26"></script>
+  <script type="module" src="auth.js?v=28"></script>
+  <script type="module" src="admin-payroll.js?v=33"></script>
   <script type="module" src="/pwa.js?v=6"></script>
   <script type="module" src="/tabs.js?v=6"></script>
-  <script type="module" src="nav.js?v=9"></script>
+  <script type="module" src="nav.js?v=14"></script>
 </body>
 </html>

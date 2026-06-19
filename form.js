@@ -94,7 +94,7 @@ if (new URLSearchParams(window.location.search).has("google")) {
     banner.innerHTML = `<p style="margin:0">
       <strong>Continuing with Google</strong> — signed in as
       <strong>${user.email}</strong>. Complete this form to register as an umpire.
-      An administrator will review and approve your account.
+      Your account will be active immediately after you complete this form.
     </p>`;
     const form = document.getElementById("umpireForm");
     if (form) form.prepend(banner);
@@ -333,14 +333,12 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
       emergencyContactName:  firstParent?.name  || "",
       emergencyContactPhone: firstParent?.phone || "",
       teamsPlayed: [...document.querySelectorAll("[name='teamAffiliation']:checked")].map(cb => cb.value),
-      approved:    false,
+      approved:    true,
       submittedAt: serverTimestamp()
     });
 
-    // Sign out — user must be approved before logging in.
     // Registration email notifications are sent server-side via the
     // onUmpireRegistered Cloud Function triggered by the Firestore write above.
-    await signOut(auth);
 
   } catch (err) {
     // Roll back only for email/password path (Google account must not be deleted)
@@ -362,9 +360,10 @@ document.getElementById("umpireForm").addEventListener("submit", async function(
     return;
   }
 
-  msgEl.textContent = `Thank you, ${fullName}! Your acknowledgment has been recorded. You'll receive confirmation once an administrator approves your account — this typically takes 1–2 days.`;
+  msgEl.textContent = `Thank you, ${fullName}! Your acknowledgment has been recorded. Your account is now active — redirecting you to the schedule…`;
   msgEl.className   = "signup-message success";
   this.reset();
   submitBtn.disabled    = false;
   submitBtn.textContent = "Submit Official Acknowledgment";
+  setTimeout(() => { window.location.href = "schedule.html"; }, 2000);
 });

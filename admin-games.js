@@ -158,9 +158,18 @@ function applyGameFilters() {
   // can be retroactively marked as rain-outs or edited after the fact.
   const d14 = new Date(); d14.setDate(d14.getDate() - 14);
   const twoWeeksAgo = `${d14.getFullYear()}-${String(d14.getMonth()+1).padStart(2,"0")}-${String(d14.getDate()).padStart(2,"0")}`;
+  // "This Week" spans Sun–Sat of the current calendar week
+  const nowD = new Date();
+  const weekSun = new Date(nowD); weekSun.setDate(nowD.getDate() - nowD.getDay());
+  const weekSat = new Date(weekSun); weekSat.setDate(weekSun.getDate() + 6);
+  const pad = n => String(n).padStart(2,"0");
+  const isoDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const weekStart = isoDate(weekSun);
+  const weekEnd   = isoDate(weekSat);
   return allGames.filter(g => {
     // Status filter
     if (gameFilter === "today"    && g.date !== today) return false;
+    if (gameFilter === "week"     && (g.date < weekStart || g.date > weekEnd)) return false;
     if (gameFilter === "upcoming" && (g.cancelled || g.date < twoWeeksAgo)) return false;
     // Date range
     if (gfFrom && g.date < gfFrom) return false;
@@ -238,13 +247,19 @@ function renderAdminGames() {
     let locationBadge = "";
     if (hasTeams) {
       if (g.isAway === true) {
-        locationBadge = `<span style="font-size:0.7rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px">AWAY</span>`;
+        locationBadge = `<button class="toggle-isaway-btn" data-id="${esc(g.id)}" data-away="true" title="Click to mark as HOME"
+          style="font-size:0.7rem;background:#2a1a3a;color:#c9a0ff;border:1px solid #6b3fa0;border-radius:4px;padding:1px 5px;margin-right:4px;cursor:pointer">AWAY</button>`;
       } else if (g.isAway === false) {
-        locationBadge = `<span style="font-size:0.7rem;background:rgba(22,101,52,0.4);color:#86efac;border:1px solid #166534;border-radius:4px;padding:1px 5px;margin-right:4px">HOME</span>`;
+        locationBadge = `<button class="toggle-isaway-btn" data-id="${esc(g.id)}" data-away="false" title="Click to mark as AWAY"
+          style="font-size:0.7rem;background:rgba(22,101,52,0.4);color:#86efac;border:1px solid #166534;border-radius:4px;padding:1px 5px;margin-right:4px;cursor:pointer">HOME</button>`;
       }
     }
     const teamsLine = hasTeams
-      ? `<div style="font-size:0.8rem;color:var(--light-text)">${locationBadge}${esc(g.homeTeam||"")}${g.homeTeam && g.awayTeam ? (g.isAway ? " @ " : " vs ") : ""}${esc(g.awayTeam||"")}</div>`
+      ? `<div style="font-size:0.8rem;color:var(--light-text)">${locationBadge}${
+          g.homeTeam && g.awayTeam
+            ? (g.isAway ? `${esc(g.awayTeam)} @ ${esc(g.homeTeam)}` : `${esc(g.homeTeam)} vs ${esc(g.awayTeam)}`)
+            : esc(g.homeTeam || g.awayTeam || "")
+        }</div>`
       : "";
 
     // League + city badge
@@ -478,6 +493,19 @@ async function notifyOpenSlots(gameId) {
   }
 }
 
+async function toggleIsAway(gameId, currentIsAway) {
+  const game = allGames.find(g => g.id === gameId);
+  if (!game) return;
+  const newIsAway = !currentIsAway;
+  try {
+    await updateDoc(doc(db, "games", gameId), { isAway: newIsAway });
+    game.isAway = newIsAway;
+    renderAdminGames();
+  } catch (err) {
+    showToast("Error updating home/away: " + err.message);
+  }
+}
+
 async function deleteGame(gameId) {
   const game = allGames.find(g => g.id === gameId);
   if (!game) return;
@@ -498,7 +526,8 @@ function openEditModal(gameId) {
 
   document.getElementById("editGameId").value        = gameId;
   document.getElementById("editGameLeague").value    = game.league || "";
-  document.getElementById("editGameCity").value      = game.city || "";
+  populateEditCitySelect();
+  setEditCityField(game.city || "");
   document.getElementById("editGameDivision").value  = game.division || "";
   document.getElementById("editGameDate").value      = game.date || "";
   document.getElementById("editGameTime").value      = game.time || "";
@@ -596,7 +625,7 @@ async function saveGameEdit() {
   const date     = document.getElementById("editGameDate").value;
   const division = document.getElementById("editGameDivision").value;
   const league   = document.getElementById("editGameLeague").value.trim();
-  const city     = document.getElementById("editGameCity").value.trim();
+  const city     = getEditCityValue();
 
   if (!date)     { setMsg("editGameMessage", "Date is required.", "error"); return; }
   if (!division) { setMsg("editGameMessage", "Division is required.", "error"); return; }
@@ -851,10 +880,52 @@ function populateLeagueSelects() {
   const sel = document.getElementById("editGameLeague");
   if (sel) {
     const cur = sel.value;
-    sel.innerHTML = `<option value="">— None —</option>${opts}`;
+    sel.innerHTML = `<option value="">— None —</option><option value="Non-League">Non-League</option>${opts}`;
     if (cur) sel.value = cur;
   }
 }
+
+// ── Edit modal — city select + freeform ──────────────────────────────────────
+
+function populateEditCitySelect() {
+  const sel = document.getElementById("editGameCity");
+  if (!sel) return;
+  const cur = sel.value;
+  const cities = [...new Set(allGames.map(g => g.city).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  sel.innerHTML =
+    `<option value="">— None —</option>` +
+    cities.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("") +
+    `<option value="__custom__">Enter custom city…</option>`;
+  if (cur) sel.value = cur;
+}
+
+function getEditCityValue() {
+  const sel = document.getElementById("editGameCity");
+  if (sel?.value === "__custom__") return document.getElementById("editGameCityCustom")?.value.trim() || "";
+  return sel?.value || "";
+}
+
+function setEditCityField(cityName) {
+  const sel = document.getElementById("editGameCity");
+  const inp = document.getElementById("editGameCityCustom");
+  if (!sel || !inp) return;
+  if (!cityName) { sel.value = ""; inp.style.display = "none"; return; }
+  if ([...sel.options].some(o => o.value === cityName)) {
+    sel.value = cityName;
+    inp.style.display = "none";
+  } else {
+    sel.value = "__custom__";
+    inp.value = cityName;
+    inp.style.display = "";
+  }
+}
+
+document.getElementById("editGameCity")?.addEventListener("change", function () {
+  const inp = document.getElementById("editGameCityCustom");
+  if (!inp) return;
+  if (this.value === "__custom__") { inp.style.display = ""; inp.focus(); }
+  else                             { inp.style.display = "none"; inp.value = ""; }
+});
 
 // ── Edit modal wiring ─────────────────────────────────────────────────────────
 
@@ -893,6 +964,9 @@ document.addEventListener("click", e => {
 
   const undoCancelBtn = e.target.closest(".undo-cancel-btn");
   if (undoCancelBtn) { undoCancelGame(undoCancelBtn.dataset.gameId); return; }
+
+  const toggleAwayBtn = e.target.closest(".toggle-isaway-btn");
+  if (toggleAwayBtn) { toggleIsAway(toggleAwayBtn.dataset.id, toggleAwayBtn.dataset.away === "true"); return; }
 
   const filterBtn = e.target.closest(".filter-btn");
   if (filterBtn) {

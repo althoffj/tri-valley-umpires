@@ -642,6 +642,9 @@ th {
 .badge-field { background: #0d3320; color: #7ef7a0; }
 .badge-extra { background: #333;    color: #ccc; }
 
+/* Payroll bulk-print selected row highlight */
+tr.payroll-row-selected td { background: rgba(96,25,41,0.18) !important; }
+
 /* My games pay summary */
 .pay-summary {
   font-size: 0.9rem;
@@ -895,6 +898,11 @@ th {
   font-size: 0.88rem;
   border: 1px solid var(--border);
   transition: background 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.4;
+  box-sizing: border-box;
 }
 
 .admin-subnav a:hover { background: var(--field); color: var(--text); }
