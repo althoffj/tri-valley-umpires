@@ -472,6 +472,94 @@ async function loadAllAvailability() {
   } catch (err) { console.error("loadAllAvailability:", err); }
 }
 
+function printPaySummary(t, linked) {
+  const tName = t.name || "Tournament";
+
+  // Build per-umpire summary: uid → { name, games: [{ label, type, payRate, date }], total }
+  const byUid = {};
+  linked.forEach(g => {
+    if (g.cancelled) return;
+    const noteMatch = (g.notes || "").match(/Game\s+(\d+)/i);
+    const gameLabel = noteMatch ? `Game ${noteMatch[1]}` : `${fmtDate(g.date)} ${fmtTime(g.time)}`;
+    (g.umpireSlots || []).forEach(s => {
+      if (!s.assignedUid || !s.assignedName) return;
+      if (!byUid[s.assignedUid]) byUid[s.assignedUid] = { name: s.assignedName, games: [], total: 0 };
+      const pay = s.payRate ?? 0;
+      byUid[s.assignedUid].games.push({
+        label: gameLabel,
+        bracket: g.field || "",
+        type: s.type,
+        payRate: pay
+      });
+      byUid[s.assignedUid].total += pay;
+    });
+  });
+
+  const umpires = Object.values(byUid).sort((a, b) => a.name.localeCompare(b.name));
+  const grandTotal = umpires.reduce((sum, u) => sum + u.total, 0);
+
+  const fmtMoney = n => `$${Number(n).toFixed(2)}`;
+
+  const rows = umpires.map(u => {
+    const gameRows = u.games.map(g =>
+      `<tr>
+        <td style="padding:3px 10px;color:#555;font-size:11px">${g.bracket ? `[${g.bracket}] ` : ""}${g.label}</td>
+        <td style="padding:3px 10px;font-size:11px;color:#444">${g.type}</td>
+        <td style="padding:3px 10px;font-size:11px;text-align:right">${fmtMoney(g.payRate)}</td>
+      </tr>`
+    ).join("");
+    return `
+      <tr style="background:#f5f5f5;border-top:2px solid #ccc">
+        <td colspan="2" style="padding:6px 10px;font-weight:bold;font-size:13px">${u.name}</td>
+        <td style="padding:6px 10px;font-weight:bold;font-size:13px;text-align:right;color:#1a5c1a">${fmtMoney(u.total)}</td>
+      </tr>
+      ${gameRows}`;
+  }).join("");
+
+  const html = `<!doctype html>
+<html><head><meta charset="UTF-8"><title>${tName} — Umpire Pay Summary</title>
+<style>
+  @page { size: portrait; margin: 0.5in; }
+  * { box-sizing: border-box; }
+  body { background: white; color: #111; font-family: system-ui, sans-serif; margin: 0; padding: 0;
+         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  .meta { font-size: 10px; color: #555; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { vertical-align: top; }
+  th { text-align: left; padding: 5px 10px; font-size: 10px; color: #444;
+       text-transform: uppercase; border-bottom: 2px solid #333; }
+  th:last-child { text-align: right; }
+  .grand-total td { border-top: 3px solid #222; font-weight: bold; font-size: 14px; padding: 8px 10px; }
+  .grand-total td:last-child { text-align: right; color: #1a5c1a; }
+</style></head>
+<body>
+  <h1>${tName} — Umpire Pay Summary</h1>
+  <div class="meta">Printed ${new Date().toLocaleDateString()} · ${umpires.length} umpire${umpires.length !== 1 ? "s" : ""} · Grand total: ${fmtMoney(grandTotal)}</div>
+  ${umpires.length ? `
+  <table>
+    <thead><tr>
+      <th>Umpire / Game</th>
+      <th>Slot</th>
+      <th style="text-align:right">Pay</th>
+    </tr></thead>
+    <tbody>
+      ${rows}
+      <tr class="grand-total">
+        <td colspan="2">Grand Total</td>
+        <td>${fmtMoney(grandTotal)}</td>
+      </tr>
+    </tbody>
+  </table>` : `<p style="color:#555">No umpires assigned to this tournament.</p>`}
+  <script>window.onload = () => { window.print(); }<\/script>
+</body></html>`;
+
+  const win = window.open("", "_blank");
+  if (!win) { alert("Pop-up blocked — please allow pop-ups for this site."); return; }
+  win.document.write(html);
+  win.document.close();
+}
+
 function renderUmpireManagement(t, linked) {
   if (!linked.length) return "";
 
@@ -558,9 +646,13 @@ function renderUmpireManagement(t, linked) {
         <div style="color:#86efac;font-size:0.82rem;text-transform:uppercase;letter-spacing:0.05em">
           🧑‍⚖️ Umpire Assignments
         </div>
-        <span style="font-size:0.82rem;color:var(--light-text)">
-          ${totalSlots - openTotal} / ${totalSlots} slots filled
-        </span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:0.82rem;color:var(--light-text)">
+            ${totalSlots - openTotal} / ${totalSlots} slots filled
+          </span>
+          <button class="btn print-btn tm-pay-summary-btn" data-tid="${esc(t.id)}"
+            style="font-size:0.78rem;padding:3px 10px">💰 Pay Summary</button>
+        </div>
       </div>
       <div>${gameRows || `<p style="padding:14px;color:var(--light-text);margin:0">No games linked yet.</p>`}</div>
       <p id="tmUmpireMsg_${esc(t.id)}" class="signup-message" style="margin:6px 14px;min-height:0"></p>
@@ -2636,6 +2728,15 @@ document.addEventListener("click", async (e) => {
   const tmUnassignBtn = e.target.closest(".tm-unassign-btn");
   if (tmUnassignBtn) {
     await doTmUnassign(tmUnassignBtn.dataset.gid, tmUnassignBtn.dataset.slot, tmUnassignBtn.dataset.uid);
+    return;
+  }
+
+  const paySummaryBtn = e.target.closest(".tm-pay-summary-btn");
+  if (paySummaryBtn) {
+    const tid = paySummaryBtn.dataset.tid;
+    const t   = allTournaments.find(x => x.id === tid);
+    const linked = allGames.filter(g => g.tournamentId === tid);
+    if (t) printPaySummary(t, linked);
     return;
   }
 

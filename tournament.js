@@ -1,14 +1,16 @@
 // tournament.js — Public-facing tournament bracket viewer with live scores
 import { db } from "./firebase.js";
 import { authReadyPromise, isApproved, isAdmin, isLoggedIn } from "./auth.js";
-import { esc, fmtDate, fmtTime } from "./utils.js";
+import { esc, fmtDate, fmtTime, todayISO } from "./utils.js";
+import { getFacilities } from "./facilities.js";
 import {
-  collection, getDocs, query, orderBy, where
+  collection, doc, getDocs, getDoc, query, orderBy, where
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let allTournaments    = [];
+let allFacilities     = [];
 let currentGames      = [];
 let selectedTid       = null;
 let activeBracket     = null;   // null = "All"
@@ -17,6 +19,7 @@ let _refreshTimer     = null;
 let displayOpts       = { scores: true, time: true, routing: true, seeds: true, umpires: false };
 let viewStyle         = "bracket";  // "bracket" | "list" | "teams"
 let selectedTeam      = null;       // team name currently highlighted in bracket view
+let umpirePhones      = {};         // uid → phone, loaded when umpires opt is used
 
 // ── Bracket position maps (from spreadsheet row/col) ─────────────────────────
 // Each entry: game number → { col, row } using the spreadsheet's coordinate system.
@@ -216,8 +219,15 @@ function renderBracketSVG(bracket, bGames, bAdvRules, today, opts, participants)
     const homeScoreColor = homeWin ? "#4ade80" : "#999";
     const awayScoreColor = awayWin ? "#4ade80" : "#999";
 
-    const timeStr    = g.date === today ? `Today ${fmtTime(g.time)}` :
-                       `${fmtDate(g.date).slice(0,6)} ${fmtTime(g.time)}`;
+    const shortDate  = (() => {
+      if (!g.date) return "";
+      const [y, m, d] = g.date.split("-").map(Number);
+      const dt = new Date(y, m - 1, d);
+      const day = dt.toLocaleDateString("en-US", { weekday: "short" });
+      return `${day} ${m}/${d}`;
+    })();
+    const timeStr    = (today && g.date === today) ? `Today ${fmtTime(g.time)}` :
+                       `${shortDate} ${fmtTime(g.time)}`;
     const headerLabel = `G${num}${ifNec ? "*" : ""}`;
     // Selection-state overlay
     let selOpacity    = cancelled ? "0.4" : "1";
@@ -277,14 +287,21 @@ function renderBracketSVG(bracket, bGames, bAdvRules, today, opts, participants)
 
         <!-- Umpire row (only when opts.umpires and user is signed in) -->
         ${opts.umpires ? (() => {
-          const names = (g.umpireSlots || [])
-            .filter(s => s.assignedName)
-            .map(s => s.assignedName)
-            .join(" · ");
-          const assigned = !!names;
-          const label    = truncate(names || "Unassigned", 24);
-          const color    = assigned ? "#fbbf24" : "#ef4444";
-          const weight   = assigned ? "normal" : "bold";
+          const phones = opts.umpirePhones || {};
+          const slots  = (g.umpireSlots || []).filter(s => s.assignedName);
+          const assigned = slots.length > 0;
+          let label;
+          if (!assigned) {
+            label = "Unassigned";
+          } else if (slots.length === 1) {
+            const phone = phones[slots[0].assignedUid];
+            label = phone ? `${slots[0].assignedName} · ${phone}` : slots[0].assignedName;
+          } else {
+            label = slots.map(s => s.assignedName).join(" · ");
+          }
+          label = truncate(label, 30);
+          const color  = assigned ? "#fbbf24" : "#ef4444";
+          const weight = assigned ? "normal" : "bold";
           return `
           <line x1="${x}" y1="${y+62}" x2="${x+CARD_W}" y2="${y+62}" stroke="${divColor}"/>
           <text x="${x+7}" y="${y+72}" fill="${color}" font-size="9" font-weight="${weight}"
@@ -336,14 +353,66 @@ async function loadGamesForTournament(tid) {
     .sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.time || "").localeCompare(b.time || ""));
   const t = allTournaments.find(x => x.id === tid);
   bracketAdvancement = t?.bracketAdvancement || {};
+
+  if (isLoggedIn()) {
+    const uids = new Set();
+    currentGames.forEach(g => (g.umpireSlots || []).forEach(s => { if (s.assignedUid) uids.add(s.assignedUid); }));
+    umpirePhones = {};
+    if (uids.size > 0) {
+      try {
+        await Promise.all([...uids].map(async uid => {
+          const d = await getDoc(doc(db, "umpires", uid));
+          if (d.exists() && d.data().phone) umpirePhones[uid] = d.data().phone;
+        }));
+      } catch { umpirePhones = {}; }
+    }
+  }
 }
 
 // ── Print / Save PDF ─────────────────────────────────────────────────────────
 
+// Convert a dark-theme SVG string to a white-background print-friendly version
+function makePrintSvg(svg) {
+  return svg
+    // SVG outer background
+    .replace(/background:#0a0a0a/g, 'background:#f5f5f5')
+    // Card body fills
+    .replace(/fill="#161616"/g, 'fill="#ffffff"')
+    .replace(/fill="#141414"/g, 'fill="#ffffff"')
+    .replace(/fill="#0f1f0f"/g, 'fill="#edfaed"')   // completed game → pale green
+    .replace(/fill="#1a1a00"/g, 'fill="#fefde8"')   // today → pale yellow
+    .replace(/fill="#111111"/g, 'fill="#f2f2f2"')
+    .replace(/fill="#111"/g,    'fill="#f2f2f2"')
+    // Header / footer bars
+    .replace(/fill="#0d0d0d"/g, 'fill="#e4e4e4"')
+    .replace(/fill="#0b0b0b"/g, 'fill="#ebebeb"')
+    // Seed badge background
+    .replace(/fill="#1a1a2a"/g, 'fill="#ededfa"')
+    // Divider line strokes
+    .replace(/stroke="#1e1e1e"/g, 'stroke="#d0d0d0"')
+    .replace(/stroke="#1a1a1a"/g, 'stroke="#d0d0d0"')
+    .replace(/stroke="#1a3a1a"/g, 'stroke="#a8d8a8"')
+    .replace(/stroke="#252500"/g, 'stroke="#d4cc00"')
+    .replace(/stroke="#2a2a2a"/g, 'stroke="#bbbbbb"')
+    // Text fills: dark/dim → readable on white
+    .replace(/fill="#fff"/g,    'fill="#111"')
+    .replace(/fill="#ccc"/g,    'fill="#333"')
+    .replace(/fill="#aaa"/g,    'fill="#666"')
+    .replace(/fill="#999"/g,    'fill="#666"')
+    .replace(/fill="#777"/g,    'fill="#777"')
+    .replace(/fill="#555"/g,    'fill="#888"')
+    .replace(/fill="#666"/g,    'fill="#888"')
+    // Footer note text
+    .replace(/fill="#666" font-size="9"/g, 'fill="#999" font-size="9"')
+    // Umpire row: amber (assigned) → dark gray; red (unassigned) → dark red
+    .replace(/fill="#fbbf24"/g, 'fill="#333"')
+    .replace(/fill="#ef4444"/g, 'fill="#b91c1c"');
+}
+
 function printBrackets() {
   const t       = allTournaments.find(x => x.id === selectedTid);
   const tName   = t?.name || "Tournament Bracket";
-  const today   = new Date().toISOString().slice(0, 10);
+  const today   = todayISO();
 
   const visible = activeBracket
     ? currentGames.filter(g => g.field === activeBracket)
@@ -368,15 +437,24 @@ function printBrackets() {
       .filter(p => p.bracket === bracket)
       .sort((a, b) => (a.seed || 99) - (b.seed || 99));
 
-    // Produce a print-friendly SVG (override min-width so it can scale)
-    const svgRaw = renderBracketSVG(bracket, bGames, bAdvRules, today, displayOpts, bPartic);
-    const svgScaled = svgRaw.replace(/style="min-width:[^"]*"/, 'style="width:100%;height:auto;display:block"');
+    // Collect unique dates for this bracket's games to show as subtitle
+    const bracketDates = [...new Set(bGames.map(g => g.date).filter(Boolean))].sort();
+    const dateLine = bracketDates.map(iso => {
+      const [y, m, d] = iso.split("-").map(Number);
+      const dt = new Date(y, m - 1, d);
+      return dt.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    }).join(" · ");
+
+    // Produce a print-friendly SVG (override min-width so it can scale, then lighten colors)
+    // Pass null as today so game cards never substitute "Today" for the actual date
+    const svgRaw    = renderBracketSVG(bracket, bGames, bAdvRules, null, { ...displayOpts, umpirePhones }, bPartic);
+    const svgScaled = makePrintSvg(svgRaw.replace(/style="min-width:[^"]*"/, 'style="width:100%;height:auto;display:block"'));
 
     const seedsHtml = bPartic.length
       ? `<div style="margin:6px 0 10px;display:flex;flex-wrap:wrap;gap:4px">
            ${bPartic.map(p =>
-             `<span style="padding:2px 8px;background:#1a1a2a;border:1px solid #333;border-radius:4px;font-size:11px">
-               <b style="color:#c4b5fd">#${p.seed}</b> ${p.teamName || ""}
+             `<span style="padding:2px 8px;background:#ededfa;border:1px solid #bbb;border-radius:4px;font-size:11px;color:#222">
+               <b style="color:#7c5cbf">#${p.seed}</b> ${p.teamName || ""}
              </span>`).join("")}
          </div>`
       : "";
@@ -386,7 +464,8 @@ function printBrackets() {
       : "";
 
     return `<div ${pageBreak}>
-      <h2 style="margin:0 0 4px;font-size:16px;color:#ddd">${bracket}</h2>
+      <h2 style="margin:0 0 2px;font-size:16px;color:#222">${bracket}</h2>
+      ${dateLine ? `<div style="font-size:12px;color:#555;margin-bottom:6px">${dateLine}</div>` : ""}
       ${seedsHtml}
       ${svgScaled}
     </div>`;
@@ -409,8 +488,8 @@ function printBrackets() {
     @page { size: landscape; margin: 0.4in; }
     * { box-sizing: border-box; }
     body {
-      background: #0d0d0d;
-      color: #ddd;
+      background: white;
+      color: #111;
       font-family: system-ui, sans-serif;
       margin: 0;
       padding: 0;
@@ -418,7 +497,8 @@ function printBrackets() {
       print-color-adjust: exact;
     }
     h1 { font-size: 18px; margin: 0 0 2px; }
-    .meta { font-size: 11px; color: #888; margin-bottom: 14px; }
+    .meta { font-size: 11px; color: #666; margin-bottom: 14px; }
+    h2 { color: #222; }
   </style>
 </head>
 <body>
@@ -483,6 +563,12 @@ function renderBracketTabs() {
   ].join("");
 }
 
+function gameLocation(g) {
+  const fac = allFacilities.find(f => f.id === g.facilityId);
+  const parts = [fac?.name || g.city, g.subField].filter(Boolean);
+  return parts.join(" · ");
+}
+
 // Shared helper: build a game row for the list view (used by render + print)
 function buildListRows(games, opts, today, seedMap) {
   return games.map(g => {
@@ -506,10 +592,13 @@ function buildListRows(games, opts, today, seedMap) {
       ? `<span style="font-size:0.9rem;font-weight:bold;color:#86efac;margin-left:6px">${g.homeScore}–${g.awayScore}</span>`
       : "";
 
-    const dateStr = g.date === today ? "Today" : fmtDate(g.date);
+    const dateStr = fmtDate(g.date);
 
-    const umpireNames = (g.umpireSlots || [])
-      .filter(s => s.assignedName).map(s => s.assignedName).join(", ");
+    const umpireSlots = (g.umpireSlots || []).filter(s => s.assignedName);
+    const umpireNames = umpireSlots.map(s => {
+      const phone = (opts.umpirePhones || {})[s.assignedUid];
+      return phone ? `${s.assignedName} · ${phone}` : s.assignedName;
+    }).join(", ");
     const umpireRow = opts.umpires
       ? `<div style="font-size:0.75rem;color:${umpireNames ? "#fbbf24" : "#ef4444"};font-weight:${umpireNames ? "normal" : "bold"};margin-top:2px">🧑‍⚖️ ${esc(umpireNames || "Unassigned")}</div>`
       : "";
@@ -531,14 +620,14 @@ function buildListRows(games, opts, today, seedMap) {
         ${g.cancelled ? ' <span style="color:#f87171;font-size:0.75rem">(cancelled)</span>' : ""}
         ${umpireRow}
       </td>
-      <td style="font-size:0.8rem;color:var(--light-text)">${esc(g.city || "")}</td>
+      <td style="font-size:0.8rem;color:var(--light-text)">${esc(gameLocation(g))}</td>
     </tr>`;
   }).join("");
 }
 
 function renderListView(container, visible) {
   const t      = allTournaments.find(x => x.id === selectedTid);
-  const today  = new Date().toISOString().slice(0, 10);
+  const today  = todayISO();
   const sorted = [...visible].sort((a, b) =>
     (a.date || "").localeCompare(b.date || "") || (a.time || "").localeCompare(b.time || "")
   );
@@ -547,7 +636,7 @@ function renderListView(container, visible) {
   const seedMap = {};
   (t?.participants || []).forEach(p => { if (p.teamName) seedMap[p.teamName] = p.seed; });
 
-  const rows = buildListRows(sorted, displayOpts, today, seedMap);
+  const rows = buildListRows(sorted, { ...displayOpts, umpirePhones }, today, seedMap);
   const colCount = displayOpts.time ? 4 : 3;
 
   const listOpts = [
@@ -652,7 +741,7 @@ function renderTeamsView(container) {
 function printListView() {
   const t      = allTournaments.find(x => x.id === selectedTid);
   const tName  = t?.name || "Tournament Games";
-  const today  = new Date().toISOString().slice(0, 10);
+  const today  = todayISO();
 
   const visible = activeBracket
     ? currentGames.filter(g => g.field === activeBracket)
@@ -678,7 +767,11 @@ function printListView() {
     const homeSeed  = printOpts.seeds && seedMap[g.homeTeam] ? `#${seedMap[g.homeTeam]} ` : "";
     const awaySeed  = printOpts.seeds && seedMap[g.awayTeam] ? `#${seedMap[g.awayTeam]} ` : "";
     const scoreStr  = printOpts.scores && hasScore ? `  ${g.homeScore}–${g.awayScore}` : "";
-    const umpireNames = (g.umpireSlots || []).filter(s => s.assignedName).map(s => s.assignedName).join(", ");
+    const umpireSlotsPrint = (g.umpireSlots || []).filter(s => s.assignedName);
+    const umpireNames = umpireSlotsPrint.map(s => {
+      const phone = umpirePhones[s.assignedUid];
+      return phone ? `${s.assignedName} · ${phone}` : s.assignedName;
+    }).join(", ");
     const umpireStr = printOpts.umpires ? (umpireNames || "Unassigned") : "";
     const umpireColor = umpireNames ? "#fbbf24" : "#ef4444";
     const umpireWeight = umpireNames ? "normal" : "bold";
@@ -697,7 +790,7 @@ function printListView() {
         ${g.cancelled ? ' <span style="color:#f87171">(cancelled)</span>' : ""}
         ${umpireStr ? `<div style="font-size:10px;color:${umpireColor};font-weight:${umpireWeight};margin-top:1px">🧑‍⚖️ ${umpireStr}</div>` : ""}
       </td>
-      <td style="font-size:11px;color:#999">${g.city || ""}</td>
+      <td style="font-size:11px;color:#999">${gameLocation(g)}</td>
     </tr>`;
   }).join("");
 
@@ -761,20 +854,20 @@ function printTeamsView() {
     const teams = byBracket[bracket];
     const rows = teams.map(p => `
       <tr>
-        <td style="font-weight:bold;color:#c4b5fd;white-space:nowrap">#${p.seed || "?"}</td>
-        <td style="font-weight:bold">${p.teamName || "—"}</td>
-        <td>${p.coachName || "—"}</td>
-        <td>${[p.coachPhone, p.coachEmail].filter(Boolean).join("  ·  ") || "—"}</td>
+        <td style="font-weight:bold;color:#5b21b6;white-space:nowrap">#${p.seed || "?"}</td>
+        <td style="font-weight:bold;color:#111">${p.teamName || "—"}</td>
+        <td style="color:#222">${p.coachName || "—"}</td>
+        <td style="color:#222">${[p.coachPhone, p.coachEmail].filter(Boolean).join("  ·  ") || "—"}</td>
       </tr>`).join("");
     const pb = i < bracketOrder.length - 1 ? 'style="page-break-after:always"' : "";
     return `<div ${pb}>
-      <h2 style="font-size:14px;margin:0 0 6px;color:#ddd">${bracket}</h2>
+      <h2 style="font-size:14px;margin:0 0 6px;color:#111">${bracket}</h2>
       <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-        <thead><tr style="border-bottom:1px solid #444">
-          <th style="text-align:left;padding:4px 8px;font-size:10px;color:#888;text-transform:uppercase">#</th>
-          <th style="text-align:left;padding:4px 8px;font-size:10px;color:#888;text-transform:uppercase">Team</th>
-          <th style="text-align:left;padding:4px 8px;font-size:10px;color:#888;text-transform:uppercase">Coach</th>
-          <th style="text-align:left;padding:4px 8px;font-size:10px;color:#888;text-transform:uppercase">Contact</th>
+        <thead><tr style="border-bottom:2px solid #333">
+          <th style="text-align:left;padding:4px 8px;font-size:10px;color:#444;text-transform:uppercase">#</th>
+          <th style="text-align:left;padding:4px 8px;font-size:10px;color:#444;text-transform:uppercase">Team</th>
+          <th style="text-align:left;padding:4px 8px;font-size:10px;color:#444;text-transform:uppercase">Coach</th>
+          <th style="text-align:left;padding:4px 8px;font-size:10px;color:#444;text-transform:uppercase">Contact</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -786,16 +879,16 @@ function printTeamsView() {
 <style>
   @page { size: portrait; margin: 0.5in; }
   * { box-sizing: border-box; }
-  body { background:#0d0d0d;color:#ddd;font-family:system-ui,sans-serif;margin:0;padding:0;
+  body { background:white;color:#111;font-family:system-ui,sans-serif;margin:0;padding:0;
          -webkit-print-color-adjust:exact;print-color-adjust:exact; }
-  h1 { font-size:17px;margin:0 0 2px }
-  .meta { font-size:10px;color:#888;margin-bottom:16px }
-  td { padding:5px 8px;border-bottom:1px solid #1a1a1a;font-size:12px;vertical-align:top }
+  h1 { font-size:17px;margin:0 0 2px;color:#111 }
+  .meta { font-size:10px;color:#555;margin-bottom:16px }
+  td { padding:5px 8px;border-bottom:1px solid #ddd;font-size:12px;vertical-align:top }
 </style></head>
 <body>
   <h1>${tName} — Teams &amp; Coach Contacts</h1>
   <div class="meta">Printed ${new Date().toLocaleDateString()}</div>
-  ${sections || "<p style='color:#888'>No teams registered.</p>"}
+  ${sections || "<p style='color:#555'>No teams registered.</p>"}
   <script>window.onload = () => { window.print(); }<\/script>
 </body></html>`;
 
@@ -807,7 +900,7 @@ function printTeamsView() {
 
 function renderContent() {
   const container = document.getElementById("tournamentContent");
-  const today     = new Date().toISOString().slice(0, 10);
+  const today     = todayISO();
 
   if (!currentGames.length) {
     container.innerHTML = `<div class="document-note"><p style="margin:0;color:var(--light-text)">No games found for this tournament.</p></div>`;
@@ -873,7 +966,7 @@ function renderContent() {
       </div>` : "";
 
     // SVG bracket (pass display opts + participants for seed lookup)
-    const svgHtml = renderBracketSVG(bracket, bGames, bAdvRules, today, { ...displayOpts, selectedTeam }, bPartic);
+    const svgHtml = renderBracketSVG(bracket, bGames, bAdvRules, today, { ...displayOpts, selectedTeam, umpirePhones }, bPartic);
 
     return `
       <div class="schedule-section" style="margin-bottom:32px">
@@ -964,7 +1057,7 @@ function startAutoRefresh() {
   const t = allTournaments.find(x => x.id === selectedTid);
   if (!t) return;
   // Refresh every 90s when tournament is active or today is within tournament dates
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   if (t.status === "active" || t.date === today || t.date <= today) {
     _refreshTimer = setInterval(async () => {
       await loadGamesForTournament(selectedTid);
@@ -1060,7 +1153,8 @@ document.getElementById("tournamentSelect").addEventListener("change", async fun
 
 async function init() {
   try {
-    await loadTournaments();
+    const [, facilities] = await Promise.all([loadTournaments(), getFacilities()]);
+    allFacilities = facilities || [];
     renderTournamentSelector();
 
     if (!allTournaments.length) {
